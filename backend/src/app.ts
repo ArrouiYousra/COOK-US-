@@ -6,6 +6,7 @@ import { swaggerSpec } from '@config/swagger';
 import authRoutes from '@domain/auth/auth.routes';
 import profileRoutes from '@domain/profiles/profile.routes';
 import bookingRoutes from '@domain/bookings/booking.routes';
+import messageRoutes from '@domain/messages/message.routes';
 
 // Load environment variables
 dotenv.config();
@@ -37,6 +38,7 @@ app.get('/health', (_req: Request, res: Response) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/profiles', profileRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/messages', messageRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
