@@ -177,52 +177,43 @@ export interface CreateBookingDTO {
   can_do_dishes?: boolean;
 }
 
-// Message/Conversation tables
+// Message/Conversation tables (according to SQL schema)
 export interface Conversation {
   id: string;
-  participant1_id: string; // User ID
-  participant2_id: string; // User ID
-  last_message_id: string | null;
+  booking_id: string | null; // Optional, links to booking
   last_message_at: string | null;
-  participant1_unread_count: number;
-  participant2_unread_count: number;
-  participant1_archived: boolean;
-  participant2_archived: boolean;
-  participant1_deleted_at: string | null;
-  participant2_deleted_at: string | null;
-  participant1_pinned: boolean;
-  participant2_pinned: boolean;
-  participant1_blocked: boolean;
-  participant2_blocked: boolean;
   created_at: string;
   updated_at: string;
 }
 
-export type MessageStatus = 'SENT' | 'DELIVERED' | 'READ';
+export interface ConversationParticipant {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  last_read_at: string | null;
+  unread_count: number;
+}
+
+export type MessageType = 'TEXT' | 'IMAGE' | 'SYSTEM';
 
 export interface Message {
   id: string;
   conversation_id: string;
   sender_id: string;
-  content: string;
-  message_type: 'TEXT' | 'IMAGE' | 'FILE' | 'SYSTEM';
-  status: MessageStatus;
+  type: MessageType;
+  content: string | null;
+  attachment_url: string | null;
   is_read: boolean;
   read_at: string | null;
-  delivered_at: string | null;
-  archived: boolean;
-  pinned: boolean;
-  deleted_at: string | null;
-  deleted_by: string | null; // User ID who deleted it
-  edited_at: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 // DTOs for creating messages
 export interface CreateMessageDTO {
   recipient_id: string;
   content: string;
-  message_type?: 'TEXT' | 'IMAGE' | 'FILE';
+  message_type?: MessageType;
+  attachment_url?: string;
+  booking_id?: string; // Optional, to link conversation to booking
 }
 

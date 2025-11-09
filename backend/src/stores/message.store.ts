@@ -1,9 +1,9 @@
 import { supabaseAdmin } from '@config/supabaseClient';
 import type {
   Conversation,
+  ConversationParticipant,
   Message,
   CreateMessageDTO,
-  MessageStatus,
 } from '../types/database.types';
 
 export class MessageStore {
@@ -12,45 +12,40 @@ export class MessageStore {
    */
   static async getOrCreateConversation(
     userId1: string,
-    userId2: string
+    userId2: string,
+    bookingId?: string
   ): Promise<Conversation> {
-    // Try to find existing conversation (check both directions)
-    const { data: existing1 } = await supabaseAdmin
-      .from('conversations')
-      .select('*')
-      .eq('participant1_id', userId1)
-      .eq('participant2_id', userId2)
-      .maybeSingle();
+    // Find existing conversation by checking conversation_participants
+    const { data: participants } = await supabaseAdmin
+      .from('conversation_participants')
+      .select('conversation_id')
+      .in('user_id', [userId1, userId2]);
 
-    if (existing1) {
-      return existing1 as Conversation;
-    }
+    if (participants && participants.length > 0) {
+      // Group by conversation_id to find conversations with both users
+      const conversationIds = [...new Set(participants.map((p) => p.conversation_id))];
+      
+      for (const convId of conversationIds) {
+        const { data: convParticipants } = await supabaseAdmin
+          .from('conversation_participants')
+          .select('user_id')
+          .eq('conversation_id', convId);
 
-    const { data: existing2 } = await supabaseAdmin
-      .from('conversations')
-      .select('*')
-      .eq('participant1_id', userId2)
-      .eq('participant2_id', userId1)
-      .maybeSingle();
-
-    if (existing2) {
-      return existing2 as Conversation;
+        const participantIds = (convParticipants || []).map((p) => p.user_id);
+        if (participantIds.includes(userId1) && participantIds.includes(userId2)) {
+          const conversation = await this.getConversationById(convId);
+          if (conversation) {
+            return conversation;
+          }
+        }
+      }
     }
 
     // Create new conversation
     const { data: newConversation, error: createError } = await supabaseAdmin
       .from('conversations')
       .insert({
-        participant1_id: userId1,
-        participant2_id: userId2,
-        participant1_unread_count: 0,
-        participant2_unread_count: 0,
-        participant1_archived: false,
-        participant2_archived: false,
-        participant1_pinned: false,
-        participant2_pinned: false,
-        participant1_blocked: false,
-        participant2_blocked: false,
+        booking_id: bookingId || null,
       })
       .select()
       .single();
@@ -58,6 +53,20 @@ export class MessageStore {
     if (createError) {
       throw new Error(`Failed to create conversation: ${createError.message}`);
     }
+
+    // Create participants
+    await supabaseAdmin.from('conversation_participants').insert([
+      {
+        conversation_id: newConversation.id,
+        user_id: userId1,
+        unread_count: 0,
+      },
+      {
+        conversation_id: newConversation.id,
+        user_id: userId2,
+        unread_count: 0,
+      },
+    ]);
 
     return newConversation as Conversation;
   }
@@ -83,64 +92,75 @@ export class MessageStore {
   }
 
   /**
-   * Get all conversations for a user (excluding deleted and archived if needed)
+   * Get conversation participant
+   */
+  static async getConversationParticipant(
+    conversationId: string,
+    userId: string
+  ): Promise<ConversationParticipant | null> {
+    const { data, error } = await supabaseAdmin
+      .from('conversation_participants')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      throw new Error(`Failed to get conversation participant: ${error.message}`);
+    }
+
+    return data as ConversationParticipant;
+  }
+
+  /**
+   * Get all conversations for a user
    */
   static async getConversationsForUser(
     userId: string,
-    includeArchived: boolean = false,
     limit?: number,
     offset?: number
   ): Promise<{ conversations: Conversation[]; count: number }> {
-    // Get conversations where user is participant1
-    const { data: data1 } = await supabaseAdmin
-      .from('conversations')
-      .select('*')
-      .eq('participant1_id', userId)
-      .is('participant1_deleted_at', null);
+    // Get all conversation IDs where user is a participant
+    const { data: participants } = await supabaseAdmin
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', userId);
 
-    // Get conversations where user is participant2
-    const { data: data2 } = await supabaseAdmin
-      .from('conversations')
-      .select('*')
-      .eq('participant2_id', userId)
-      .is('participant2_deleted_at', null);
-
-    // Combine and deduplicate
-    let allConversations = [
-      ...(data1 || []),
-      ...(data2 || []),
-    ] as Conversation[];
-
-    // Filter archived if needed
-    if (!includeArchived) {
-      allConversations = allConversations.filter((conv) => {
-        const isParticipant1 = conv.participant1_id === userId;
-        return isParticipant1 ? !conv.participant1_archived : !conv.participant2_archived;
-      });
+    if (!participants || participants.length === 0) {
+      return { conversations: [], count: 0 };
     }
 
-    // Sort by pinned first, then by last_message_at
-    allConversations.sort((a, b) => {
-      const aPinned = a.participant1_id === userId ? a.participant1_pinned : a.participant2_pinned;
-      const bPinned = b.participant1_id === userId ? b.participant1_pinned : b.participant2_pinned;
-      
-      if (aPinned && !bPinned) return -1;
-      if (!aPinned && bPinned) return 1;
-      
-      if (!a.last_message_at && !b.last_message_at) return 0;
-      if (!a.last_message_at) return 1;
-      if (!b.last_message_at) return -1;
-      return new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime();
-    });
+    const conversationIds = participants.map((p) => p.conversation_id);
 
-    // Apply pagination
-    const start = offset || 0;
-    const end = start + (limit || 10);
-    const paginatedConversations = allConversations.slice(start, end);
+    let query = supabaseAdmin
+      .from('conversations')
+      .select('*', { count: 'exact' })
+      .in('id', conversationIds);
+
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    if (offset) {
+      query = query.range(offset, offset + (limit || 10) - 1);
+    }
+
+    // Order by last_message_at desc
+    query = query.order('last_message_at', { ascending: false, nullsFirst: false });
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw new Error(`Failed to get conversations: ${error.message}`);
+    }
 
     return {
-      conversations: paginatedConversations,
-      count: allConversations.length,
+      conversations: (data as Conversation[]) || [],
+      count: count || 0,
     };
   }
 
@@ -152,16 +172,11 @@ export class MessageStore {
     messageData: CreateMessageDTO
   ): Promise<Message> {
     // Get or create conversation
-    const conversation = await this.getOrCreateConversation(senderId, messageData.recipient_id);
-
-    // Check if blocked
-    const isParticipant1 = conversation.participant1_id === senderId;
-    if (isParticipant1 && conversation.participant2_blocked) {
-      throw new Error('You are blocked by this user');
-    }
-    if (!isParticipant1 && conversation.participant1_blocked) {
-      throw new Error('You are blocked by this user');
-    }
+    const conversation = await this.getOrCreateConversation(
+      senderId,
+      messageData.recipient_id,
+      messageData.booking_id
+    );
 
     // Create message
     const { data: message, error: messageError } = await supabaseAdmin
@@ -169,12 +184,10 @@ export class MessageStore {
       .insert({
         conversation_id: conversation.id,
         sender_id: senderId,
-        content: messageData.content,
-        message_type: messageData.message_type || 'TEXT',
-        status: 'SENT',
+        type: messageData.message_type || 'TEXT',
+        content: messageData.content || null,
+        attachment_url: messageData.attachment_url || null,
         is_read: false,
-        archived: false,
-        pinned: false,
       })
       .select()
       .single();
@@ -183,102 +196,35 @@ export class MessageStore {
       throw new Error(`Failed to create message: ${messageError.message}`);
     }
 
-    // Update conversation
-    const updates: Partial<Conversation> = {
-      last_message_id: message.id,
-      last_message_at: new Date().toISOString(),
-    };
-
-    // Increment unread count for recipient
-    if (isParticipant1) {
-      updates.participant2_unread_count = conversation.participant2_unread_count + 1;
-    } else {
-      updates.participant1_unread_count = conversation.participant1_unread_count + 1;
-    }
-
+    // Update conversation last_message_at
     await supabaseAdmin
       .from('conversations')
-      .update(updates)
+      .update({
+        last_message_at: new Date().toISOString(),
+      })
       .eq('id', conversation.id);
 
-    // Mark as delivered
-    await this.updateMessageStatus(message.id, 'DELIVERED');
+    // Increment unread count for recipient
+    const recipientParticipant = await this.getConversationParticipant(
+      conversation.id,
+      messageData.recipient_id
+    );
+
+    if (recipientParticipant) {
+      await supabaseAdmin
+        .from('conversation_participants')
+        .update({
+          unread_count: recipientParticipant.unread_count + 1,
+        })
+        .eq('conversation_id', conversation.id)
+        .eq('user_id', messageData.recipient_id);
+    }
 
     return message as Message;
   }
 
   /**
-   * Update message status
-   */
-  static async updateMessageStatus(
-    messageId: string,
-    status: MessageStatus
-  ): Promise<Message> {
-    const updates: Partial<Message> = { status };
-    
-    if (status === 'DELIVERED') {
-      updates.delivered_at = new Date().toISOString();
-    } else if (status === 'READ') {
-      updates.is_read = true;
-      updates.read_at = new Date().toISOString();
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('messages')
-      .update(updates)
-      .eq('id', messageId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to update message status: ${error.message}`);
-    }
-
-    return data as Message;
-  }
-
-  /**
-   * Update message content
-   */
-  static async updateMessage(
-    messageId: string,
-    userId: string,
-    content: string
-  ): Promise<Message> {
-    // Get message to verify ownership
-    const { data: message, error: getError } = await supabaseAdmin
-      .from('messages')
-      .select('*')
-      .eq('id', messageId)
-      .single();
-
-    if (getError || !message) {
-      throw new Error('Message not found');
-    }
-
-    if ((message as Message).sender_id !== userId) {
-      throw new Error('Unauthorized: Can only edit your own messages');
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('messages')
-      .update({
-        content,
-        edited_at: new Date().toISOString(),
-      })
-      .eq('id', messageId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to update message: ${error.message}`);
-    }
-
-    return data as Message;
-  }
-
-  /**
-   * Get messages for a conversation (excluding deleted for the user)
+   * Get messages for a conversation
    */
   static async getMessagesForConversation(
     conversationId: string,
@@ -287,20 +233,15 @@ export class MessageStore {
     offset?: number
   ): Promise<{ messages: Message[]; count: number }> {
     // Verify user is part of the conversation
-    const conversation = await this.getConversationById(conversationId);
-    if (!conversation) {
-      throw new Error('Conversation not found');
-    }
-
-    if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
+    const participant = await this.getConversationParticipant(conversationId, userId);
+    if (!participant) {
       throw new Error('Unauthorized: Not a participant of this conversation');
     }
 
     let query = supabaseAdmin
       .from('messages')
       .select('*', { count: 'exact' })
-      .eq('conversation_id', conversationId)
-      .or(`deleted_by.is.null,deleted_by.neq.${userId}`); // Exclude messages deleted by this user
+      .eq('conversation_id', conversationId);
 
     if (limit) {
       query = query.limit(limit);
@@ -310,24 +251,18 @@ export class MessageStore {
       query = query.range(offset, offset + (limit || 20) - 1);
     }
 
-    // Order by pinned first, then by created_at desc
-    query = query.order('pinned', { ascending: false });
+    // Order by created_at desc (most recent first)
     query = query.order('created_at', { ascending: false });
 
-    const { data, error } = await query;
+    const { data, error, count } = await query;
 
     if (error) {
       throw new Error(`Failed to get messages: ${error.message}`);
     }
 
-    // Filter out messages deleted by this user
-    const filteredMessages = ((data as Message[]) || []).filter(
-      (msg) => !msg.deleted_by || msg.deleted_by !== userId
-    );
-
     return {
-      messages: filteredMessages,
-      count: filteredMessages.length,
+      messages: (data as Message[]) || [],
+      count: count || 0,
     };
   }
 
@@ -339,22 +274,17 @@ export class MessageStore {
     userId: string
   ): Promise<void> {
     // Verify user is part of the conversation
-    const conversation = await this.getConversationById(conversationId);
-    if (!conversation) {
-      throw new Error('Conversation not found');
-    }
-
-    if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
+    const participant = await this.getConversationParticipant(conversationId, userId);
+    if (!participant) {
       throw new Error('Unauthorized: Not a participant of this conversation');
     }
 
-    // Mark all unread messages as read and update status
+    // Mark all unread messages as read
     const { error: updateError } = await supabaseAdmin
       .from('messages')
       .update({
         is_read: true,
         read_at: new Date().toISOString(),
-        status: 'READ',
       })
       .eq('conversation_id', conversationId)
       .eq('is_read', false)
@@ -364,114 +294,33 @@ export class MessageStore {
       throw new Error(`Failed to mark messages as read: ${updateError.message}`);
     }
 
-    // Reset unread count
-    const isParticipant1 = conversation.participant1_id === userId;
-    const updates: Partial<Conversation> = {};
-    if (isParticipant1) {
-      updates.participant1_unread_count = 0;
-    } else {
-      updates.participant2_unread_count = 0;
-    }
-
+    // Update participant last_read_at and reset unread count
     await supabaseAdmin
-      .from('conversations')
-      .update(updates)
-      .eq('id', conversationId);
-  }
-
-  /**
-   * Delete a message (soft delete - only for the user)
-   */
-  static async deleteMessage(messageId: string, userId: string): Promise<void> {
-    // Get message
-    const { data: message, error: getError } = await supabaseAdmin
-      .from('messages')
-      .select('*')
-      .eq('id', messageId)
-      .single();
-
-    if (getError || !message) {
-      throw new Error('Message not found');
-    }
-
-    // Soft delete - mark as deleted by this user
-    const { error: updateError } = await supabaseAdmin
-      .from('messages')
+      .from('conversation_participants')
       .update({
-        deleted_at: new Date().toISOString(),
-        deleted_by: userId,
+        last_read_at: new Date().toISOString(),
+        unread_count: 0,
       })
-      .eq('id', messageId);
-
-    if (updateError) {
-      throw new Error(`Failed to delete message: ${updateError.message}`);
-    }
+      .eq('conversation_id', conversationId)
+      .eq('user_id', userId);
   }
 
   /**
-   * Archive a message
+   * Get conversation participants
    */
-  static async archiveMessage(messageId: string, userId: string, archived: boolean): Promise<Message> {
-    // Get message to verify access
-    const message = await this.getMessageById(messageId);
-    if (!message) {
-      throw new Error('Message not found');
-    }
-
-    const conversation = await this.getConversationById(message.conversation_id);
-    if (!conversation) {
-      throw new Error('Conversation not found');
-    }
-
-    if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
-      throw new Error('Unauthorized: Not a participant of this conversation');
-    }
-
+  static async getConversationParticipants(
+    conversationId: string
+  ): Promise<ConversationParticipant[]> {
     const { data, error } = await supabaseAdmin
-      .from('messages')
-      .update({ archived })
-      .eq('id', messageId)
-      .select()
-      .single();
+      .from('conversation_participants')
+      .select('*')
+      .eq('conversation_id', conversationId);
 
     if (error) {
-      throw new Error(`Failed to archive message: ${error.message}`);
+      throw new Error(`Failed to get conversation participants: ${error.message}`);
     }
 
-    return data as Message;
-  }
-
-  /**
-   * Pin/unpin a message
-   */
-  static async pinMessage(messageId: string, userId: string, pinned: boolean): Promise<Message> {
-    // Get message to verify access
-    const message = await this.getMessageById(messageId);
-    if (!message) {
-      throw new Error('Message not found');
-    }
-
-    const conversation = await this.getConversationById(message.conversation_id);
-    if (!conversation) {
-      throw new Error('Conversation not found');
-    }
-
-    if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
-      throw new Error('Unauthorized: Not a participant of this conversation');
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('messages')
-      .update({ pinned })
-      .eq('id', messageId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to pin message: ${error.message}`);
-    }
-
-    return data as Message;
+    return (data as ConversationParticipant[]) || [];
   }
 
   /**
@@ -495,231 +344,58 @@ export class MessageStore {
   }
 
   /**
-   * Search messages
+   * Update message content
    */
-  static async searchMessages(
+  static async updateMessage(
+    messageId: string,
     userId: string,
-    searchQuery: string,
-    conversationId?: string,
-    limit?: number,
-    offset?: number
-  ): Promise<{ messages: Message[]; count: number }> {
-    let query = supabaseAdmin
-      .from('messages')
-      .select('*')
-      .ilike('content', `%${searchQuery}%`);
-
-    // Filter by conversation if provided
-    if (conversationId) {
-      query = query.eq('conversation_id', conversationId);
-      
-      // Verify user has access
-      const conversation = await this.getConversationById(conversationId);
-      if (!conversation) {
-        throw new Error('Conversation not found');
-      }
-      if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
-        throw new Error('Unauthorized: Not a participant of this conversation');
-      }
-    } else {
-      // Only search in user's conversations
-      const { data: userConversations } = await supabaseAdmin
-        .from('conversations')
-        .select('id')
-        .or(`participant1_id.eq.${userId},participant2_id.eq.${userId}`);
-
-      const conversationIds = (userConversations || []).map((c) => c.id);
-      if (conversationIds.length > 0) {
-        query = query.in('conversation_id', conversationIds);
-      } else {
-        return { messages: [], count: 0 };
-      }
+    content: string
+  ): Promise<Message> {
+    // Get message to verify ownership
+    const message = await this.getMessageById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
     }
 
-    if (limit) {
-      query = query.limit(limit);
-    }
-
-    if (offset) {
-      query = query.range(offset, offset + (limit || 20) - 1);
-    }
-
-    query = query.order('created_at', { ascending: false });
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw new Error(`Failed to search messages: ${error.message}`);
-    }
-
-    // Filter out messages deleted by this user
-    const filteredMessages = ((data as Message[]) || []).filter(
-      (msg) => !msg.deleted_by || msg.deleted_by !== userId
-    );
-
-    // Apply pagination after filtering
-    const start = offset || 0;
-    const end = start + (limit || 20);
-    const paginatedMessages = filteredMessages.slice(start, end);
-
-    return {
-      messages: paginatedMessages,
-      count: filteredMessages.length,
-    };
-  }
-
-  /**
-   * Archive/unarchive a conversation
-   */
-  static async archiveConversation(
-    conversationId: string,
-    userId: string,
-    archived: boolean
-  ): Promise<Conversation> {
-    const conversation = await this.getConversationById(conversationId);
-    if (!conversation) {
-      throw new Error('Conversation not found');
-    }
-
-    if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
-      throw new Error('Unauthorized: Not a participant of this conversation');
-    }
-
-    const isParticipant1 = conversation.participant1_id === userId;
-    const updates: Partial<Conversation> = {};
-    
-    if (isParticipant1) {
-      updates.participant1_archived = archived;
-    } else {
-      updates.participant2_archived = archived;
+    if (message.sender_id !== userId) {
+      throw new Error('Unauthorized: Can only edit your own messages');
     }
 
     const { data, error } = await supabaseAdmin
-      .from('conversations')
-      .update(updates)
-      .eq('id', conversationId)
+      .from('messages')
+      .update({ content })
+      .eq('id', messageId)
       .select()
       .single();
 
     if (error) {
-      throw new Error(`Failed to archive conversation: ${error.message}`);
+      throw new Error(`Failed to update message: ${error.message}`);
     }
 
-    return data as Conversation;
+    return data as Message;
   }
 
   /**
-   * Delete a conversation (soft delete - only for the user)
+   * Delete a message (hard delete)
    */
-  static async deleteConversation(
-    conversationId: string,
-    userId: string
-  ): Promise<void> {
-    const conversation = await this.getConversationById(conversationId);
-    if (!conversation) {
-      throw new Error('Conversation not found');
+  static async deleteMessage(messageId: string, userId: string): Promise<void> {
+    // Get message to verify ownership
+    const message = await this.getMessageById(messageId);
+    if (!message) {
+      throw new Error('Message not found');
     }
 
-    if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
-      throw new Error('Unauthorized: Not a participant of this conversation');
-    }
-
-    const isParticipant1 = conversation.participant1_id === userId;
-    const updates: Partial<Conversation> = {};
-    
-    if (isParticipant1) {
-      updates.participant1_deleted_at = new Date().toISOString();
-    } else {
-      updates.participant2_deleted_at = new Date().toISOString();
+    if (message.sender_id !== userId) {
+      throw new Error('Unauthorized: Can only delete your own messages');
     }
 
     const { error } = await supabaseAdmin
-      .from('conversations')
-      .update(updates)
-      .eq('id', conversationId);
+      .from('messages')
+      .delete()
+      .eq('id', messageId);
 
     if (error) {
-      throw new Error(`Failed to delete conversation: ${error.message}`);
+      throw new Error(`Failed to delete message: ${error.message}`);
     }
-  }
-
-  /**
-   * Pin/unpin a conversation
-   */
-  static async pinConversation(
-    conversationId: string,
-    userId: string,
-    pinned: boolean
-  ): Promise<Conversation> {
-    const conversation = await this.getConversationById(conversationId);
-    if (!conversation) {
-      throw new Error('Conversation not found');
-    }
-
-    if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
-      throw new Error('Unauthorized: Not a participant of this conversation');
-    }
-
-    const isParticipant1 = conversation.participant1_id === userId;
-    const updates: Partial<Conversation> = {};
-    
-    if (isParticipant1) {
-      updates.participant1_pinned = pinned;
-    } else {
-      updates.participant2_pinned = pinned;
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('conversations')
-      .update(updates)
-      .eq('id', conversationId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to pin conversation: ${error.message}`);
-    }
-
-    return data as Conversation;
-  }
-
-  /**
-   * Block/unblock a user in a conversation
-   */
-  static async blockUser(
-    conversationId: string,
-    userId: string,
-    blocked: boolean
-  ): Promise<Conversation> {
-    const conversation = await this.getConversationById(conversationId);
-    if (!conversation) {
-      throw new Error('Conversation not found');
-    }
-
-    if (conversation.participant1_id !== userId && conversation.participant2_id !== userId) {
-      throw new Error('Unauthorized: Not a participant of this conversation');
-    }
-
-    const isParticipant1 = conversation.participant1_id === userId;
-    const updates: Partial<Conversation> = {};
-    
-    if (isParticipant1) {
-      updates.participant1_blocked = blocked;
-    } else {
-      updates.participant2_blocked = blocked;
-    }
-
-    const { data, error } = await supabaseAdmin
-      .from('conversations')
-      .update(updates)
-      .eq('id', conversationId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to block user: ${error.message}`);
-    }
-
-    return data as Conversation;
   }
 }

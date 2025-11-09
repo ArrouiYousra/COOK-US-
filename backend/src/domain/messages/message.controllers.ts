@@ -13,7 +13,7 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { recipient_id, content, message_type } = req.body;
+    const { recipient_id, content, message_type, attachment_url, booking_id } = req.body;
 
     if (!recipient_id || !content) {
       res.status(400).json({
@@ -46,6 +46,8 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<void
       recipient_id,
       content,
       message_type: message_type || 'TEXT',
+      attachment_url,
+      booking_id,
     });
 
     res.status(201).json({
@@ -55,69 +57,6 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<void
   } catch (error) {
     console.error('Send message error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
-    
-    if (errorMessage.includes('blocked')) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: errorMessage,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: errorMessage,
-    });
-  }
-};
-
-export const updateMessage = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { messageId } = req.params;
-    const { content } = req.body;
-
-    if (!messageId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Message ID is required',
-      });
-      return;
-    }
-
-    if (!content) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Content is required',
-      });
-      return;
-    }
-
-    const updatedMessage = await MessageStore.updateMessage(messageId, req.user.id, content);
-
-    res.status(200).json({
-      message: 'Message updated successfully',
-      data: updatedMessage,
-    });
-  } catch (error) {
-    console.error('Update message error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to update message';
-    
-    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: errorMessage,
-      });
-      return;
-    }
-
     res.status(500).json({
       error: 'Internal Server Error',
       message: errorMessage,
@@ -135,38 +74,28 @@ export const getConversations = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const { limit, offset, include_archived } = req.query;
+    const { limit, offset } = req.query;
 
     const result = await MessageStore.getConversationsForUser(
       req.user.id,
-      include_archived === 'true',
       limit ? parseInt(limit as string, 10) : undefined,
       offset ? parseInt(offset as string, 10) : undefined
     );
 
-    // Get user info for each participant
+    // Get user info and participant data for each conversation
     const conversationsWithUsers = await Promise.all(
       result.conversations.map(async (conversation) => {
-        const otherUserId =
-          conversation.participant1_id === req.user!.id
-            ? conversation.participant2_id
-            : conversation.participant1_id;
+        // Get all participants
+        const participants = await MessageStore.getConversationParticipants(conversation.id);
+        
+        // Find the other user (not the current user)
+        const otherParticipant = participants.find((p) => p.user_id !== req.user!.id);
+        if (!otherParticipant) {
+          return null;
+        }
 
-        const otherUser = await UserStore.getUserById(otherUserId);
-        const unreadCount =
-          conversation.participant1_id === req.user!.id
-            ? conversation.participant1_unread_count
-            : conversation.participant2_unread_count;
-
-        const isPinned =
-          conversation.participant1_id === req.user!.id
-            ? conversation.participant1_pinned
-            : conversation.participant2_pinned;
-
-        const isArchived =
-          conversation.participant1_id === req.user!.id
-            ? conversation.participant1_archived
-            : conversation.participant2_archived;
+        const otherUser = await UserStore.getUserById(otherParticipant.user_id);
+        const currentParticipant = participants.find((p) => p.user_id === req.user!.id);
 
         return {
           ...conversation,
@@ -179,15 +108,17 @@ export const getConversations = async (req: AuthRequest, res: Response): Promise
                 role: otherUser.role,
               }
             : null,
-          unread_count: unreadCount,
-          pinned: isPinned,
-          archived: isArchived,
+          unread_count: currentParticipant?.unread_count || 0,
+          last_read_at: currentParticipant?.last_read_at || null,
         };
       })
     );
 
+    // Filter out null values
+    const validConversations = conversationsWithUsers.filter((c) => c !== null);
+
     res.status(200).json({
-      conversations: conversationsWithUsers,
+      conversations: validConversations,
       count: result.count,
       limit: limit ? parseInt(limit as string, 10) : 10,
       offset: offset ? parseInt(offset as string, 10) : 0,
@@ -300,6 +231,60 @@ export const markAsRead = async (req: AuthRequest, res: Response): Promise<void>
   }
 };
 
+export const updateMessage = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not authenticated',
+      });
+      return;
+    }
+
+    const { messageId } = req.params;
+    const { content } = req.body;
+
+    if (!messageId) {
+      res.status(400).json({
+        error: 'Bad Request',
+        message: 'Message ID is required',
+      });
+      return;
+    }
+
+    if (!content) {
+      res.status(400).json({
+        error: 'Bad Request',
+        message: 'Content is required',
+      });
+      return;
+    }
+
+    const updatedMessage = await MessageStore.updateMessage(messageId, req.user.id, content);
+
+    res.status(200).json({
+      message: 'Message updated successfully',
+      data: updatedMessage,
+    });
+  } catch (error) {
+    console.error('Update message error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to update message';
+    
+    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: errorMessage,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: errorMessage,
+    });
+  }
+};
+
 export const deleteMessage = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
@@ -327,384 +312,6 @@ export const deleteMessage = async (req: AuthRequest, res: Response): Promise<vo
   } catch (error) {
     console.error('Delete message error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete message';
-    
-    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: errorMessage,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: errorMessage,
-    });
-  }
-};
-
-export const archiveMessage = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { messageId } = req.params;
-    const { archived } = req.body;
-
-    if (!messageId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Message ID is required',
-      });
-      return;
-    }
-
-    if (typeof archived !== 'boolean') {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'archived must be a boolean',
-      });
-      return;
-    }
-
-    const message = await MessageStore.archiveMessage(messageId, req.user.id, archived);
-
-    res.status(200).json({
-      message: archived ? 'Message archived successfully' : 'Message unarchived successfully',
-      data: message,
-    });
-  } catch (error) {
-    console.error('Archive message error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to archive message';
-    
-    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: errorMessage,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: errorMessage,
-    });
-  }
-};
-
-export const pinMessage = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { messageId } = req.params;
-    const { pinned } = req.body;
-
-    if (!messageId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Message ID is required',
-      });
-      return;
-    }
-
-    if (typeof pinned !== 'boolean') {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'pinned must be a boolean',
-      });
-      return;
-    }
-
-    const message = await MessageStore.pinMessage(messageId, req.user.id, pinned);
-
-    res.status(200).json({
-      message: pinned ? 'Message pinned successfully' : 'Message unpinned successfully',
-      data: message,
-    });
-  } catch (error) {
-    console.error('Pin message error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to pin message';
-    
-    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: errorMessage,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: errorMessage,
-    });
-  }
-};
-
-export const searchMessages = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { q, conversation_id, limit, offset } = req.query;
-
-    if (!q) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Search query (q) is required',
-      });
-      return;
-    }
-
-    const result = await MessageStore.searchMessages(
-      req.user.id,
-      q as string,
-      conversation_id ? (conversation_id as string) : undefined,
-      limit ? parseInt(limit as string, 10) : undefined,
-      offset ? parseInt(offset as string, 10) : undefined
-    );
-
-    res.status(200).json({
-      messages: result.messages,
-      count: result.count,
-      limit: limit ? parseInt(limit as string, 10) : 20,
-      offset: offset ? parseInt(offset as string, 10) : 0,
-    });
-  } catch (error) {
-    console.error('Search messages error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to search messages';
-    
-    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: errorMessage,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: errorMessage,
-    });
-  }
-};
-
-export const archiveConversation = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { conversationId } = req.params;
-    const { archived } = req.body;
-
-    if (!conversationId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Conversation ID is required',
-      });
-      return;
-    }
-
-    if (typeof archived !== 'boolean') {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'archived must be a boolean',
-      });
-      return;
-    }
-
-    const conversation = await MessageStore.archiveConversation(
-      conversationId,
-      req.user.id,
-      archived
-    );
-
-    res.status(200).json({
-      message: archived ? 'Conversation archived successfully' : 'Conversation unarchived successfully',
-      data: conversation,
-    });
-  } catch (error) {
-    console.error('Archive conversation error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to archive conversation';
-    
-    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: errorMessage,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: errorMessage,
-    });
-  }
-};
-
-export const deleteConversation = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { conversationId } = req.params;
-    if (!conversationId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Conversation ID is required',
-      });
-      return;
-    }
-
-    await MessageStore.deleteConversation(conversationId, req.user.id);
-
-    res.status(200).json({
-      message: 'Conversation deleted successfully',
-    });
-  } catch (error) {
-    console.error('Delete conversation error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to delete conversation';
-    
-    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: errorMessage,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: errorMessage,
-    });
-  }
-};
-
-export const pinConversation = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { conversationId } = req.params;
-    const { pinned } = req.body;
-
-    if (!conversationId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Conversation ID is required',
-      });
-      return;
-    }
-
-    if (typeof pinned !== 'boolean') {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'pinned must be a boolean',
-      });
-      return;
-    }
-
-    const conversation = await MessageStore.pinConversation(
-      conversationId,
-      req.user.id,
-      pinned
-    );
-
-    res.status(200).json({
-      message: pinned ? 'Conversation pinned successfully' : 'Conversation unpinned successfully',
-      data: conversation,
-    });
-  } catch (error) {
-    console.error('Pin conversation error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to pin conversation';
-    
-    if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: errorMessage,
-      });
-      return;
-    }
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: errorMessage,
-    });
-  }
-};
-
-export const blockUser = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { conversationId } = req.params;
-    const { blocked } = req.body;
-
-    if (!conversationId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Conversation ID is required',
-      });
-      return;
-    }
-
-    if (typeof blocked !== 'boolean') {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'blocked must be a boolean',
-      });
-      return;
-    }
-
-    const conversation = await MessageStore.blockUser(
-      conversationId,
-      req.user.id,
-      blocked
-    );
-
-    res.status(200).json({
-      message: blocked ? 'User blocked successfully' : 'User unblocked successfully',
-      data: conversation,
-    });
-  } catch (error) {
-    console.error('Block user error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to block user';
     
     if (errorMessage.includes('Unauthorized') || errorMessage.includes('not found')) {
       res.status(404).json({
