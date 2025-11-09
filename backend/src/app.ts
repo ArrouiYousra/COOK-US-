@@ -13,6 +13,8 @@ import addressRoutes from '@domain/addresses/address.routes';
 import favoriteRoutes from '@domain/favorites/favorite.routes';
 import notificationRoutes from '@domain/notifications/notification.routes';
 import messageRoutes from '@domain/messages/message.routes';
+import portfolioRoutes from '@domain/portfolio/portfolio.routes';
+import certificationRoutes from '@domain/certifications/certification.routes';
 
 // Load environment variables
 dotenv.config();
@@ -53,6 +55,8 @@ app.use('/api/bookings', addressRoutes); // For booking address route
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/portfolio', portfolioRoutes);
+app.use('/api/certifications', certificationRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

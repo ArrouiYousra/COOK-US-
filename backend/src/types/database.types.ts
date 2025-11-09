@@ -381,3 +381,69 @@ export interface CreateAddressDTO {
   is_default?: boolean;
 }
 
+// Cook Portfolio table
+export interface CookPortfolioItem {
+  id: string;
+  cook_profile_id: string;
+  title: string;
+  description: string | null;
+  image_url: string;
+  category: string | null; // e.g., 'APPETIZER', 'MAIN_COURSE', 'DESSERT', 'BREAKFAST', etc.
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+// DTOs for creating portfolio items
+export interface CreatePortfolioItemDTO {
+  title: string;
+  description?: string;
+  image_url: string;
+  category?: string;
+  display_order?: number;
+}
+
+export interface UpdatePortfolioItemDTO {
+  title?: string;
+  description?: string;
+  image_url?: string;
+  category?: string;
+  display_order?: number;
+}
+
+// Cook Certification table
+export interface CookCertification {
+  id: string;
+  cook_profile_id: string;
+  name: string;
+  issuing_organization: string;
+  issue_date: string | null; // DATE
+  expiry_date: string | null; // DATE (null if no expiry)
+  certificate_url: string | null; // URL to certificate document/image
+  verification_status: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  verified_at: string | null;
+  verified_by: string | null; // Admin user_id
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// DTOs for creating certifications
+export interface CreateCertificationDTO {
+  name: string;
+  issuing_organization: string;
+  issue_date?: string; // DATE format YYYY-MM-DD
+  expiry_date?: string; // DATE format YYYY-MM-DD
+  certificate_url?: string;
+  notes?: string;
+}
+
+export interface UpdateCertificationDTO {
+  name?: string;
+  issuing_organization?: string;
+  issue_date?: string;
+  expiry_date?: string;
+  certificate_url?: string;
+  notes?: string;
+}
+
