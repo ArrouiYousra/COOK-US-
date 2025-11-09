@@ -1,6 +1,7 @@
 import { type Request, type Response } from 'express';
 import { StripeService } from '@core/services/stripe.service';
 import { BookingStore } from '@stores/booking.store';
+import { TransactionStore } from '@stores/transaction.store';
 import { supabaseAdmin } from '@config/supabaseClient';
 
 /**
@@ -93,6 +94,47 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
       status: booking.status === 'PENDING' ? 'CONFIRMED' : booking.status,
     })
     .eq('id', bookingId);
+
+  // Create transaction record: Client pays to platform (not directly to cook)
+  try {
+    const clientUserId = paymentIntent.metadata?.client_id;
+    
+    // Transaction: Client → Platform
+    await TransactionStore.createTransaction({
+      type: 'BOOKING_PAYMENT',
+      booking_id: bookingId,
+      from_user_id: clientUserId || undefined,
+      to_user_id: undefined, // Platform receives payment, no to_user_id
+      amount: paymentIntent.amount / 100, // Convert from cents
+      currency: paymentIntent.currency.toUpperCase(),
+      stripe_payment_id: paymentIntent.id,
+      description: `Payment for booking ${bookingId}`,
+      metadata: {
+        booking_id: bookingId,
+        payment_intent_id: paymentIntent.id,
+      },
+    });
+    
+    // Create platform fee transaction if applicable
+    if (booking.platform_fee && booking.platform_fee > 0) {
+      await TransactionStore.createTransaction({
+        type: 'PLATFORM_FEE',
+        booking_id: bookingId,
+        from_user_id: clientUserId || undefined,
+        to_user_id: undefined, // Platform fee
+        amount: booking.platform_fee,
+        currency: paymentIntent.currency.toUpperCase(),
+        stripe_payment_id: paymentIntent.id,
+        description: `Platform fee for booking ${bookingId}`,
+        metadata: {
+          booking_id: bookingId,
+        },
+      });
+    }
+  } catch (transactionError) {
+    console.error('Failed to create transaction record:', transactionError);
+    // Continue even if transaction creation fails
+  }
 
   // Create notification for client
   await supabaseAdmin.from('notifications').insert({
@@ -219,6 +261,32 @@ async function handleChargeRefunded(charge: any): Promise<void> {
       refunded_at: new Date().toISOString(),
     })
     .eq('id', bookingId);
+
+  // Create transaction record for refund
+  try {
+    const clientUserId = paymentIntent.metadata?.client_id;
+    const cookUserId = paymentIntent.metadata?.cook_id;
+    
+    await TransactionStore.createTransaction({
+      type: 'REFUND',
+      booking_id: bookingId,
+      from_user_id: cookUserId || undefined,
+      to_user_id: clientUserId || undefined,
+      amount: refundAmount,
+      currency: paymentIntent.currency.toUpperCase(),
+      stripe_payment_id: paymentIntent.id,
+      stripe_refund_id: charge.id,
+      description: `Refund for booking ${bookingId}`,
+      metadata: {
+        booking_id: bookingId,
+        refund_amount: refundAmount,
+        charge_id: charge.id,
+      },
+    });
+  } catch (transactionError) {
+    console.error('Failed to create refund transaction record:', transactionError);
+    // Continue even if transaction creation fails
+  }
 
   // Create notification for client
   await supabaseAdmin.from('notifications').insert({

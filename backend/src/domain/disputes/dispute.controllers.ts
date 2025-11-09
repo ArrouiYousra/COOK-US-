@@ -5,6 +5,8 @@ import { BookingStore } from '@stores/booking.store';
 import { UserStore } from '@stores/user.store';
 import { ProfileStore } from '@stores/profile.store';
 import { StripeService } from '@core/services/stripe.service';
+import { TransactionStore } from '@stores/transaction.store';
+import { supabaseAdmin } from '@config/supabaseClient';
 import type {
   CreateDisputeDTO,
   UpdateDisputeDTO,
@@ -303,19 +305,52 @@ export const resolveDispute = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    // Handle refunds if resolution requires it
+    // Handle refunds if resolution mentions refund
+    // Note: resolution is TEXT, so we check if it contains refund keywords
+    const resolutionLower = resolutionData.resolution.toLowerCase();
     if (
-      (resolutionData.resolution === 'REFUND_FULL' || resolutionData.resolution === 'REFUND_PARTIAL') &&
+      (resolutionLower.includes('refund') || resolutionLower.includes('remboursement')) &&
       booking.payment_intent_id &&
       booking.payment_status === 'succeeded'
     ) {
       try {
-        const refundAmount =
-          resolutionData.resolution === 'REFUND_FULL'
-            ? undefined // Full refund
-            : resolutionData.refund_amount; // Partial refund amount
-
-        await StripeService.createRefund(booking.payment_intent_id, refundAmount, 'requested_by_customer');
+        const refundAmount = resolutionData.refund_amount; // Optional partial refund amount
+        const refund = await StripeService.createRefund(booking.payment_intent_id, refundAmount, 'requested_by_customer');
+        
+        // Create transaction record for refund
+        try {
+          const { data: clientProfile } = await supabaseAdmin
+            .from('client_profiles')
+            .select('user_id')
+            .eq('id', booking.client_profile_id)
+            .single();
+          
+          const { data: cookProfile } = await supabaseAdmin
+            .from('cook_profiles')
+            .select('user_id')
+            .eq('id', booking.cook_profile_id)
+            .single();
+          
+          await TransactionStore.createTransaction({
+            type: 'REFUND',
+            booking_id: dispute.booking_id,
+            from_user_id: cookProfile?.user_id || undefined,
+            to_user_id: clientProfile?.user_id || undefined,
+            amount: refundAmount || booking.total_price || 0,
+            currency: 'EUR',
+            stripe_payment_id: booking.payment_intent_id,
+            stripe_refund_id: refund.id,
+            description: `Refund from dispute resolution: ${resolutionData.resolution}`,
+            metadata: {
+              dispute_id: disputeId,
+              booking_id: dispute.booking_id,
+              refund_amount: refundAmount,
+            },
+          });
+        } catch (transactionError) {
+          console.error('Failed to create refund transaction record:', transactionError);
+          // Continue even if transaction creation fails
+        }
       } catch (refundError) {
         console.error('Failed to create refund:', refundError);
         // Continue with dispute resolution even if refund fails

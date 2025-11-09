@@ -197,6 +197,12 @@ export class BookingStore {
     bookingId: string,
     updates: Partial<Booking>
   ): Promise<Booking> {
+    // Get current booking to check if status is changing to COMPLETED
+    const currentBooking = await this.getBookingById(bookingId);
+    const isCompleting = currentBooking && 
+                         currentBooking.status !== 'COMPLETED' && 
+                         updates.status === 'COMPLETED';
+
     const { data, error } = await supabaseAdmin
       .from('bookings')
       .update(updates)
@@ -208,7 +214,67 @@ export class BookingStore {
       throw new Error(`Failed to update booking: ${error.message}`);
     }
 
-    return data as Booking;
+    const updatedBooking = data as Booking;
+
+    // If booking is being completed, create payout transaction to cook
+    if (isCompleting && updatedBooking.cook_earnings && updatedBooking.cook_earnings > 0) {
+      try {
+        // Get cook user_id
+        const { data: cookProfile } = await supabaseAdmin
+          .from('cook_profiles')
+          .select('user_id')
+          .eq('id', updatedBooking.cook_profile_id)
+          .single();
+
+        if (cookProfile) {
+          // Import TransactionStore dynamically to avoid circular dependency
+          const { TransactionStore } = await import('./transaction.store');
+          
+          await TransactionStore.createTransaction({
+            type: 'PAYOUT',
+            booking_id: bookingId,
+            from_user_id: undefined, // Platform pays out
+            to_user_id: cookProfile.user_id,
+            amount: updatedBooking.cook_earnings,
+            currency: 'EUR',
+            description: `Payout to cook for completed booking ${bookingId}`,
+            metadata: {
+              booking_id: bookingId,
+              cook_profile_id: updatedBooking.cook_profile_id,
+            },
+          });
+
+          // Update cook's total_earnings
+          try {
+            await supabaseAdmin.rpc('increment_cook_earnings', {
+              cook_profile_id: updatedBooking.cook_profile_id,
+              amount: updatedBooking.cook_earnings,
+            });
+          } catch (rpcError) {
+            // If RPC doesn't exist, update manually
+            const { data: currentCook } = await supabaseAdmin
+              .from('cook_profiles')
+              .select('total_earnings')
+              .eq('id', updatedBooking.cook_profile_id)
+              .single();
+            
+            if (currentCook) {
+              await supabaseAdmin
+                .from('cook_profiles')
+                .update({
+                  total_earnings: (currentCook.total_earnings || 0) + updatedBooking.cook_earnings,
+                })
+                .eq('id', updatedBooking.cook_profile_id);
+            }
+          }
+        }
+      } catch (payoutError) {
+        console.error('Failed to create payout transaction:', payoutError);
+        // Continue even if payout transaction creation fails
+      }
+    }
+
+    return updatedBooking;
   }
 
   /**
