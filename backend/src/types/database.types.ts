@@ -7,6 +7,19 @@ export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'CONFIRMED' | 'IN_PROGRESS'
 export type CancellationReason = 'CLIENT_REQUEST' | 'COOK_UNAVAILABLE' | 'EMERGENCY' | 'WEATHER' | 'OTHER';
 export type DayOfWeek = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'BRUNCH';
+export type NotificationType = 
+  | 'BOOKING_REQUEST'
+  | 'BOOKING_ACCEPTED'
+  | 'BOOKING_CONFIRMED'
+  | 'BOOKING_CANCELLED'
+  | 'BOOKING_REMINDER'
+  | 'REVIEW_RECEIVED'
+  | 'MESSAGE_RECEIVED'
+  | 'PAYMENT_RECEIVED'
+  | 'DISPUTE_OPENED'
+  | 'PROFILE_APPROVED'
+  | 'PROFILE_REJECTED'
+  | 'SYSTEM';
 export type AddressType = 'HOME' | 'VACATION_RENTAL' | 'WORK' | 'OTHER';
 export type DietaryRestriction = 'VEGETARIAN' | 'VEGAN' | 'GLUTEN_FREE' | 'LACTOSE_FREE' | 'HALAL' | 'KOSHER' | 'LOW_CARB' | 'KETO' | 'PALEO' | 'DIABETIC';
 export type Allergy = 'PEANUTS' | 'TREE_NUTS' | 'MILK' | 'EGGS' | 'FISH' | 'SHELLFISH' | 'SOY' | 'WHEAT' | 'SESAME' | 'MUSTARD' | 'CELERY' | 'LUPIN' | 'SULFITES';
@@ -297,6 +310,30 @@ export interface FavoriteCook {
   client_profile_id: string;
   cook_profile_id: string;
   created_at: string;
+}
+
+// Notifications table
+export interface Notification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string | null;
+  message: string | null;
+  action_url: string | null;
+  metadata: Record<string, any> | null; // JSONB
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+// DTOs for creating notifications
+export interface CreateNotificationDTO {
+  user_id: string;
+  type: NotificationType;
+  title?: string;
+  message?: string;
+  action_url?: string;
+  metadata?: Record<string, any>;
 }
 
 // Addresses table

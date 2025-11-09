@@ -11,6 +11,7 @@ import reviewRoutes from '@domain/reviews/review.routes';
 import availabilityRoutes from '@domain/availabilities/availability.routes';
 import addressRoutes from '@domain/addresses/address.routes';
 import favoriteRoutes from '@domain/favorites/favorite.routes';
+import notificationRoutes from '@domain/notifications/notification.routes';
 import messageRoutes from '@domain/messages/message.routes';
 
 // Load environment variables
@@ -50,6 +51,7 @@ app.use('/api/availabilities', availabilityRoutes);
 app.use('/api/addresses', addressRoutes);
 app.use('/api/bookings', addressRoutes); // For booking address route
 app.use('/api/favorites', favoriteRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
 
 // 404 handler

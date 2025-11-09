@@ -60,6 +60,10 @@ const swaggerDefinition: SwaggerDefinition = {
       description: 'Client favorite cooks management',
     },
     {
+      name: 'Notifications',
+      description: 'User notifications system',
+    },
+    {
       name: 'Messages',
       description: 'Messaging system',
     },
