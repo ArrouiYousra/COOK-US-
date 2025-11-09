@@ -1,0 +1,164 @@
+/* Import Cera Pro font (si disponible localement ou via CDN) */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* Fallback pour Cera Pro - utiliser Trebuchet MS si Cera Pro n'est pas disponible */
+@font-face {
+  font-family: "Cera Pro";
+  font-style: normal;
+  font-weight: 700;
+  src: local("Trebuchet MS Bold"), local("TrebuchetMS-Bold");
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode - Fond blanc élégant */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    /* Cartes avec fond blanc pur */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    /* Primary en bleu élégant pour light mode */
+    --primary: 217 91% 50%;
+    --primary-foreground: 0 0% 100%;
+    /* Secondary avec teinte bleue subtile */
+    --secondary: 217 20% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Muted avec teinte bleue légère */
+    --muted: 217 15% 95%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Accent en bleu élégant */
+    --accent: 217 30% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    /* Bordures avec teinte bleue subtile */
+    --border: 217 20% 90%;
+    --input: 217 15% 95%;
+    --ring: 217 91% 50%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Fond noir élégant #0E1012 */
+    --background: 210 20% 5%;
+    --foreground: 210 40% 98%;
+    /* Cartes avec fond légèrement plus clair mais toujours sombre */
+    --card: 210 18% 8%;
+    --card-foreground: 210 40% 98%;
+    --popover: 210 18% 8%;
+    --popover-foreground: 210 40% 98%;
+    /* Primary en bleu élégant */
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    /* Secondary avec teinte bleue subtile */
+    --secondary: 217 25% 12%;
+    --secondary-foreground: 210 40% 98%;
+    /* Muted avec teinte bleue */
+    --muted: 217 20% 15%;
+    --muted-foreground: 215 20% 65%;
+    /* Accent en bleu élégant */
+    --accent: 217 30% 18%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 210 40% 98%;
+    /* Bordures avec teinte bleue subtile */
+    --border: 217 25% 20%;
+    --input: 217 20% 15%;
+    --ring: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  
+  /* Body par défaut - s'adapte au thème */
+body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: "Cera Pro", sans-serif;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  /* Grands titres en Trebuchet MS */
+  h1,
+  .font-trebuchet {
+    font-family: "Trebuchet MS", sans-serif;
+  }
+
+  /* Petits textes et titres en Cera Pro */
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  span,
+  a,
+  button,
+  input,
+  textarea,
+  select,
+  label {
+    font-family: "Cera Pro", sans-serif;
+  }
+
+  /* Couleurs spécifiques COOK US pour dark mode - Thème bleu élégant */
+  .dark {
+    --cookus-bg: #0e1012;
+    --cookus-text: rgb(255, 255, 255);
+    --cookus-header-bg: rgba(14, 16, 18, 0.95);
+    --cookus-gradient-from: #0e1012;
+    --cookus-gradient-via: #0e1012;
+    --cookus-gradient-to: rgba(14, 16, 18, 0.95);
+    /* Accents bleus élégants */
+    --cookus-blue: #3b82f6;
+    --cookus-blue-light: #60a5fa;
+    --cookus-blue-dark: #2563eb;
+  }
+
+  /* Couleurs spécifiques COOK US pour light mode - Thème bleu élégant */
+  .light {
+    --cookus-bg: hsl(var(--background));
+    --cookus-text: hsl(var(--foreground));
+    --cookus-header-bg: rgba(255, 255, 255, 0.95);
+    --cookus-gradient-from: hsl(var(--background));
+    --cookus-gradient-via: hsl(var(--background));
+    --cookus-gradient-to: rgba(255, 255, 255, 0.95);
+    /* Accents bleus élégants pour light mode */
+    --cookus-blue: #2563eb;
+    --cookus-blue-light: #3b82f6;
+    --cookus-blue-dark: #1d4ed8;
+  }
+
+      /* Scrollbar hide utility */
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* Supprimer les rectangles de fond dans les icônes Lucide-react */
+      #how-it-works svg rect[fill]:not([fill="none"]),
+      #how-it-works svg path[fill]:not([fill="none"]):not([fill="transparent"]),
+      #how-it-works svg circle[fill]:not([fill="none"]):not([fill="transparent"]) {
+        fill: none !important;
+      }
+      
+      /* S'assurer que les icônes sont visibles */
+      #how-it-works svg {
+        display: block;
+        visibility: visible;
+      }
+}

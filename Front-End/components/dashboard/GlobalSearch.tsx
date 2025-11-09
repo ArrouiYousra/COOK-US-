@@ -1,0 +1,187 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Search,
+  ChefHat,
+  FileText,
+  MessageSquare,
+  Calendar,
+  X,
+  Loader2,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { mockCooks } from "@/mockData";
+
+interface SearchResult {
+  id: string;
+  type: "cook" | "request" | "message" | "booking";
+  title: string;
+  subtitle?: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+/**
+ * Recherche globale dans le dashboard
+ * Recherche dans : cuisiniers, demandes, messages, réservations
+ */
+export function GlobalSearch() {
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  // Fermer le dropdown si on clique en dehors
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Recherche en temps réel
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setResults([]);
+      setIsOpen(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setIsOpen(true);
+
+    // Simuler un délai de recherche
+    const timeoutId = setTimeout(() => {
+      const query = searchQuery.toLowerCase().trim();
+      const foundResults: SearchResult[] = [];
+
+      // Recherche dans les cuisiniers
+      mockCooks
+        .filter(
+          (cook) =>
+            cook.name.toLowerCase().includes(query) ||
+            cook.specialties.some((s) => s.toLowerCase().includes(query)) ||
+            cook.location.toLowerCase().includes(query)
+        )
+        .slice(0, 3)
+        .forEach((cook) => {
+          foundResults.push({
+            id: cook.id,
+            type: "cook",
+            title: cook.name,
+            subtitle: cook.specialties.join(", "),
+            href: `/dashboard/client/cooks/${cook.id}`,
+            icon: ChefHat,
+          });
+        });
+
+      // TODO: Recherche dans les demandes (à implémenter avec l'API)
+      // TODO: Recherche dans les messages (à implémenter avec l'API)
+      // TODO: Recherche dans les réservations (à implémenter avec l'API)
+
+      setResults(foundResults);
+      setIsLoading(false);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  const handleSelectResult = (result: SearchResult) => {
+    router.push(result.href);
+    setSearchQuery("");
+    setIsOpen(false);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery("");
+    setIsOpen(false);
+  };
+
+  return (
+    <div ref={searchRef} className="flex-1 max-w-md mr-4 relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+        <Input
+          type="text"
+          placeholder="Rechercher un cuisinier, une demande..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onFocus={() => searchQuery.trim() && setIsOpen(true)}
+          className="pl-10 pr-10 bg-background"
+        />
+        {searchQuery && (
+          <button
+            onClick={clearSearch}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Dropdown de résultats */}
+      <AnimatePresence>
+        {isOpen && (searchQuery.trim() || results.length > 0) && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto"
+          >
+            {isLoading ? (
+              <div className="p-4 flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : results.length > 0 ? (
+              <div className="p-2">
+                {results.map((result) => {
+                  const Icon = result.icon;
+                  return (
+                    <button
+                      key={`${result.type}-${result.id}`}
+                      onClick={() => handleSelectResult(result)}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-3 rounded-lg hover:bg-accent transition-colors text-left",
+                        "group"
+                      )}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500/10 dark:group-hover:bg-blue-500/20 transition-colors">
+                        <Icon className="w-5 h-5 text-muted-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground truncate">
+                          {result.title}
+                        </p>
+                        {result.subtitle && (
+                          <p className="text-sm text-muted-foreground truncate">
+                            {result.subtitle}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-4 text-center text-muted-foreground text-sm">
+                Aucun résultat trouvé
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
