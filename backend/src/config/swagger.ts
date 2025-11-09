@@ -56,6 +56,10 @@ const swaggerDefinition: SwaggerDefinition = {
       description: 'Client addresses management with PostGIS geolocation',
     },
     {
+      name: 'Favorites',
+      description: 'Client favorite cooks management',
+    },
+    {
       name: 'Messages',
       description: 'Messaging system',
     },

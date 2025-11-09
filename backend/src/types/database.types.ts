@@ -291,6 +291,14 @@ export interface CreateBlockedDateDTO {
   reason?: string;
 }
 
+// Favorite cooks table
+export interface FavoriteCook {
+  id: string;
+  client_profile_id: string;
+  cook_profile_id: string;
+  created_at: string;
+}
+
 // Addresses table
 export interface Address {
   id: string;
