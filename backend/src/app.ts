@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import authRoutes from '@domain/auth/auth.routes';
 
 // Load environment variables
 dotenv.config();
@@ -25,8 +26,8 @@ app.get('/health', (_req: Request, res: Response) => {
   });
 });
 
-// API routes (will be added later)
-// app.use('/api', routes);
+// API routes
+app.use('/api/auth', authRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
