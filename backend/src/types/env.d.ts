@@ -12,6 +12,11 @@ declare namespace NodeJS {
     // JWT
     JWT_SECRET: string;
     JWT_EXPIRES_IN: string;
+
+    // Stripe
+    STRIPE_SECRET_KEY: string;
+    STRIPE_PUBLISHABLE_KEY: string;
+    STRIPE_WEBHOOK_SECRET: string;
   }
 }
 

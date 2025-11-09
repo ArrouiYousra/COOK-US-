@@ -4,6 +4,7 @@ import { DisputeStore } from '@stores/dispute.store';
 import { BookingStore } from '@stores/booking.store';
 import { UserStore } from '@stores/user.store';
 import { ProfileStore } from '@stores/profile.store';
+import { StripeService } from '@core/services/stripe.service';
 import type {
   CreateDisputeDTO,
   UpdateDisputeDTO,
@@ -284,11 +285,50 @@ export const resolveDispute = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const dispute = await DisputeStore.resolveDispute(disputeId, req.user.id, resolutionData);
+    // Get dispute and booking
+    const dispute = await DisputeStore.getDisputeById(disputeId);
+    if (!dispute) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Dispute not found',
+      });
+      return;
+    }
+
+    const booking = await BookingStore.getBookingById(dispute.booking_id);
+    if (!booking) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Booking not found',
+      });
+      return;
+    }
+
+    // Handle refunds if resolution requires it
+    if (
+      (resolutionData.resolution === 'REFUND_FULL' || resolutionData.resolution === 'REFUND_PARTIAL') &&
+      booking.payment_intent_id &&
+      booking.payment_status === 'succeeded'
+    ) {
+      try {
+        const refundAmount =
+          resolutionData.resolution === 'REFUND_FULL'
+            ? undefined // Full refund
+            : resolutionData.refund_amount; // Partial refund amount
+
+        await StripeService.createRefund(booking.payment_intent_id, refundAmount, 'requested_by_customer');
+      } catch (refundError) {
+        console.error('Failed to create refund:', refundError);
+        // Continue with dispute resolution even if refund fails
+        // The refund can be created manually later
+      }
+    }
+
+    const resolvedDispute = await DisputeStore.resolveDispute(disputeId, req.user.id, resolutionData);
 
     res.status(200).json({
       message: 'Dispute resolved successfully',
-      dispute,
+      dispute: resolvedDispute,
     });
   } catch (error) {
     console.error('Resolve dispute error:', error);

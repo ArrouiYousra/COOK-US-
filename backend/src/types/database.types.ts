@@ -511,6 +511,7 @@ export interface UpdateDisputeDTO {
 export interface ResolveDisputeDTO {
   resolution: DisputeResolution;
   resolution_notes: string;
+  refund_amount?: number; // Required for REFUND_PARTIAL, ignored for others
 }
 
 export interface CreateDisputeMessageDTO {

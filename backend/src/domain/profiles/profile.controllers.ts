@@ -83,6 +83,9 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       siret_number,
       insurance_number,
       insurance_expiry_date,
+      id_card_url,
+      insurance_cert_url,
+      kbis_url,
       is_available,
       availability_note,
       // Client profile fields
@@ -147,6 +150,9 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       if (insurance_number !== undefined) cookProfileUpdates.insurance_number = insurance_number;
       if (insurance_expiry_date !== undefined)
         cookProfileUpdates.insurance_expiry_date = insurance_expiry_date;
+      if (id_card_url !== undefined) cookProfileUpdates.id_card_url = id_card_url;
+      if (insurance_cert_url !== undefined) cookProfileUpdates.insurance_cert_url = insurance_cert_url;
+      if (kbis_url !== undefined) cookProfileUpdates.kbis_url = kbis_url;
       if (is_available !== undefined) cookProfileUpdates.is_available = is_available;
       if (availability_note !== undefined) cookProfileUpdates.availability_note = availability_note;
 

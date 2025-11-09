@@ -16,6 +16,7 @@ import messageRoutes from '@domain/messages/message.routes';
 import portfolioRoutes from '@domain/portfolio/portfolio.routes';
 import certificationRoutes from '@domain/certifications/certification.routes';
 import disputeRoutes from '@domain/disputes/dispute.routes';
+import paymentRoutes from '@domain/payments/payment.routes';
 
 // Load environment variables
 dotenv.config();
@@ -28,6 +29,12 @@ const app: Express = express();
 
 // Middleware
 app.use(cors());
+
+// IMPORTANT: Stripe webhook needs raw body for signature verification
+// Configure raw body parser for webhook endpoint only
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+
+// JSON parsing for all other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -59,6 +66,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/certifications', certificationRoutes);
 app.use('/api/disputes', disputeRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

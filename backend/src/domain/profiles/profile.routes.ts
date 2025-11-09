@@ -82,11 +82,70 @@ router.get('/me', authGuard, getMyProfile);
  *               bio:
  *                 type: string
  *                 description: For cook profiles
+ *               experience:
+ *                 type: string
+ *                 description: For cook profiles
+ *               video_intro_url:
+ *                 type: string
+ *                 description: For cook profiles
+ *               service_radius:
+ *                 type: number
+ *                 description: For cook profiles
  *               hourly_rate:
  *                 type: number
  *                 description: For cook profiles
+ *               minimum_booking_hours:
+ *                 type: number
+ *                 description: For cook profiles
+ *               can_do_groceries:
+ *                 type: boolean
+ *                 description: For cook profiles
+ *               can_set_table:
+ *                 type: boolean
+ *                 description: For cook profiles
+ *               can_do_dishes:
+ *                 type: boolean
+ *                 description: For cook profiles
+ *               max_guests:
+ *                 type: number
+ *                 description: For cook profiles
+ *               employment_status:
+ *                 type: string
+ *                 enum: [AUTO_ENTREPRENEUR, PORTAGE_SALARIAL, MICRO_ENTREPRISE, ASSOCIATION]
+ *                 description: For cook profiles
+ *               siret_number:
+ *                 type: string
+ *                 description: For cook profiles
+ *               insurance_number:
+ *                 type: string
+ *                 description: For cook profiles
+ *               insurance_expiry_date:
+ *                 type: string
+ *                 format: date
+ *                 description: For cook profiles
+ *               id_card_url:
+ *                 type: string
+ *                 description: For cook profiles - URL of ID card document
+ *               insurance_cert_url:
+ *                 type: string
+ *                 description: For cook profiles - URL of insurance certificate document
+ *               kbis_url:
+ *                 type: string
+ *                 description: For cook profiles - URL of KBIS document
+ *               is_available:
+ *                 type: boolean
+ *                 description: For cook profiles
+ *               availability_note:
+ *                 type: string
+ *                 description: For cook profiles
  *               household_size:
  *                 type: number
+ *                 description: For client profiles
+ *               pet_friendly:
+ *                 type: boolean
+ *                 description: For client profiles
+ *               smoking_allowed:
+ *                 type: boolean
  *                 description: For client profiles
  *     responses:
  *       200:
