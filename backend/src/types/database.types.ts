@@ -5,6 +5,7 @@ export type CookStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'PAUSED' | 'SUSPENDED' 
 export type EmploymentStatus = 'AUTO_ENTREPRENEUR' | 'PORTAGE_SALARIAL' | 'MICRO_ENTREPRISE' | 'ASSOCIATION';
 export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED';
 export type CancellationReason = 'CLIENT_REQUEST' | 'COOK_UNAVAILABLE' | 'EMERGENCY' | 'WEATHER' | 'OTHER';
+export type DayOfWeek = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'BRUNCH';
 export type DietaryRestriction = 'VEGETARIAN' | 'VEGAN' | 'GLUTEN_FREE' | 'LACTOSE_FREE' | 'HALAL' | 'KOSHER' | 'LOW_CARB' | 'KETO' | 'PALEO' | 'DIABETIC';
 export type Allergy = 'PEANUTS' | 'TREE_NUTS' | 'MILK' | 'EGGS' | 'FISH' | 'SHELLFISH' | 'SOY' | 'WHEAT' | 'SESAME' | 'MUSTARD' | 'CELERY' | 'LUPIN' | 'SULFITES';
@@ -252,5 +253,39 @@ export interface CreateReviewDTO {
   booking_id: string;
   rating: number; // 0 to 5
   comment?: string;
+}
+
+// Availabilities table
+export interface Availability {
+  id: string;
+  cook_profile_id: string;
+  day_of_week: DayOfWeek;
+  meal_type: MealType;
+  start_time: string; // TIME format HH:MM:SS
+  end_time: string; // TIME format HH:MM:SS
+  is_active: boolean;
+}
+
+// Blocked dates table
+export interface BlockedDate {
+  id: string;
+  cook_profile_id: string;
+  date: string; // DATE format YYYY-MM-DD
+  reason: string | null;
+}
+
+// DTOs for creating availabilities
+export interface CreateAvailabilityDTO {
+  day_of_week: DayOfWeek;
+  meal_type: MealType;
+  start_time: string; // TIME format HH:MM:SS
+  end_time: string; // TIME format HH:MM:SS
+  is_active?: boolean;
+}
+
+// DTOs for creating blocked dates
+export interface CreateBlockedDateDTO {
+  date: string; // DATE format YYYY-MM-DD
+  reason?: string;
 }
 

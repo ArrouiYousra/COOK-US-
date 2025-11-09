@@ -48,6 +48,10 @@ const swaggerDefinition: SwaggerDefinition = {
       description: 'Reviews and ratings system',
     },
     {
+      name: 'Availabilities',
+      description: 'Cook availabilities and blocked dates management',
+    },
+    {
       name: 'Messages',
       description: 'Messaging system',
     },

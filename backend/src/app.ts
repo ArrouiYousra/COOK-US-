@@ -8,6 +8,7 @@ import profileRoutes from '@domain/profiles/profile.routes';
 import bookingRoutes from '@domain/bookings/booking.routes';
 import reservationRoutes from '@domain/reservations/reservation.routes';
 import reviewRoutes from '@domain/reviews/review.routes';
+import availabilityRoutes from '@domain/availabilities/availability.routes';
 import messageRoutes from '@domain/messages/message.routes';
 
 // Load environment variables
@@ -43,6 +44,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/bookings', reservationRoutes);
 app.use('/api/reservations', reservationRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/availabilities', availabilityRoutes);
 app.use('/api/messages', messageRoutes);
 
 // 404 handler
