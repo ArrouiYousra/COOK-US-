@@ -52,6 +52,10 @@ const swaggerDefinition: SwaggerDefinition = {
       description: 'Cook availabilities and blocked dates management',
     },
     {
+      name: 'Addresses',
+      description: 'Client addresses management with PostGIS geolocation',
+    },
+    {
       name: 'Messages',
       description: 'Messaging system',
     },

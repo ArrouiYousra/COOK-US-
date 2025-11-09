@@ -7,6 +7,7 @@ export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'CONFIRMED' | 'IN_PROGRESS'
 export type CancellationReason = 'CLIENT_REQUEST' | 'COOK_UNAVAILABLE' | 'EMERGENCY' | 'WEATHER' | 'OTHER';
 export type DayOfWeek = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
 export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'BRUNCH';
+export type AddressType = 'HOME' | 'VACATION_RENTAL' | 'WORK' | 'OTHER';
 export type DietaryRestriction = 'VEGETARIAN' | 'VEGAN' | 'GLUTEN_FREE' | 'LACTOSE_FREE' | 'HALAL' | 'KOSHER' | 'LOW_CARB' | 'KETO' | 'PALEO' | 'DIABETIC';
 export type Allergy = 'PEANUTS' | 'TREE_NUTS' | 'MILK' | 'EGGS' | 'FISH' | 'SHELLFISH' | 'SOY' | 'WHEAT' | 'SESAME' | 'MUSTARD' | 'CELERY' | 'LUPIN' | 'SULFITES';
 
@@ -154,6 +155,7 @@ export interface Booking {
   payment_intent_id: string | null;
   payment_status: string | null;
   paid_at: string | null;
+  address_id: string | null; // Reference to addresses table
   cancelled_at: string | null;
   cancelled_by: string | null; // UUID
   cancellation_reason: CancellationReason | null;
@@ -287,5 +289,50 @@ export interface CreateAvailabilityDTO {
 export interface CreateBlockedDateDTO {
   date: string; // DATE format YYYY-MM-DD
   reason?: string;
+}
+
+// Addresses table
+export interface Address {
+  id: string;
+  client_profile_id: string;
+  type: AddressType;
+  label: string | null;
+  street: string | null;
+  street_number: string | null;
+  complement: string | null;
+  city: string | null;
+  postal_code: string | null;
+  country: string;
+  location: unknown | null; // PostGIS GEOGRAPHY(POINT,4326)
+  access_code: string | null;
+  access_notes: string | null;
+  parking_info: string | null;
+  has_oven: boolean;
+  has_dishwasher: boolean;
+  kitchen_notes: string | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// DTOs for creating addresses
+export interface CreateAddressDTO {
+  type?: AddressType;
+  label?: string;
+  street: string;
+  street_number: string;
+  complement?: string;
+  city: string;
+  postal_code: string;
+  country?: string;
+  latitude: number; // For PostGIS conversion
+  longitude: number; // For PostGIS conversion
+  access_code?: string;
+  access_notes?: string;
+  parking_info?: string;
+  has_oven?: boolean;
+  has_dishwasher?: boolean;
+  kitchen_notes?: string;
+  is_default?: boolean;
 }
 
