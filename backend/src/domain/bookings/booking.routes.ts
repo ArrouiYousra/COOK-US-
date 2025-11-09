@@ -6,6 +6,7 @@ import {
   acceptBooking,
   rejectBooking,
   cancelBooking,
+  getMyProposals,
 } from './booking.controllers';
 import { authGuard } from '@core/middleware';
 
@@ -80,6 +81,66 @@ const router = Router();
  *         description: Forbidden (only clients can create bookings)
  */
 router.post('/', authGuard, createBooking);
+
+/**
+ * @swagger
+ * /api/bookings/my-proposals:
+ *   get:
+ *     summary: Get client proposals with simplified filters (pending, accepted, rejected)
+ *     description: Returns client's booking proposals with stats. Use filter=pending|accepted|rejected to filter results.
+ *     tags: [Bookings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: filter
+ *         schema:
+ *           type: string
+ *           enum: [pending, accepted, rejected]
+ *           description: Filter proposals by status (pending = PENDING, accepted = ACCEPTED/CONFIRMED, rejected = CANCELLED)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: List of proposals with stats
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 bookings:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Booking'
+ *                 count:
+ *                   type: integer
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     pending:
+ *                       type: integer
+ *                     accepted:
+ *                       type: integer
+ *                     rejected:
+ *                       type: integer
+ *                 filter:
+ *                   type: string
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *       403:
+ *         description: Forbidden (only clients can view their proposals)
+ */
+router.get('/my-proposals', authGuard, getMyProposals);
 
 /**
  * @swagger

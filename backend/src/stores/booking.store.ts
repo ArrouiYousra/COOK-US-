@@ -118,6 +118,85 @@ export class BookingStore {
   }
 
   /**
+   * Get client proposals with simplified filters (pending, accepted, rejected)
+   */
+  static async getClientProposals(
+    userId: string,
+    filter?: 'pending' | 'accepted' | 'rejected',
+    limit?: number,
+    offset?: number
+  ): Promise<{ bookings: Booking[]; count: number; stats: { pending: number; accepted: number; rejected: number } }> {
+    // Get client profile ID
+    const { data: clientProfile } = await supabaseAdmin
+      .from('client_profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+
+    if (!clientProfile) {
+      return { bookings: [], count: 0, stats: { pending: 0, accepted: 0, rejected: 0 } };
+    }
+
+    // Build query based on filter
+    let statusFilter: BookingStatus[] | null = null;
+    if (filter === 'pending') {
+      statusFilter = ['PENDING'];
+    } else if (filter === 'accepted') {
+      statusFilter = ['ACCEPTED', 'CONFIRMED'];
+    } else if (filter === 'rejected') {
+      statusFilter = ['CANCELLED'];
+    }
+
+    // Get filtered bookings
+    let query = supabaseAdmin
+      .from('bookings')
+      .select('*', { count: 'exact' })
+      .eq('client_profile_id', clientProfile.id);
+
+    if (statusFilter && statusFilter.length > 0) {
+      query = query.in('status', statusFilter);
+    }
+
+    // Get stats (all statuses for this client)
+    const { data: allBookings } = await supabaseAdmin
+      .from('bookings')
+      .select('status')
+      .eq('client_profile_id', clientProfile.id);
+
+    const stats = {
+      pending: allBookings?.filter((b) => b.status === 'PENDING').length || 0,
+      accepted: allBookings?.filter((b) => b.status === 'ACCEPTED' || b.status === 'CONFIRMED').length || 0,
+      rejected: allBookings?.filter((b) => b.status === 'CANCELLED').length || 0,
+    };
+
+    // Apply pagination
+    if (limit) {
+      query = query.limit(limit);
+    }
+
+    if (offset !== undefined) {
+      const endRange = offset + (limit || 10) - 1;
+      query = query.range(offset, endRange);
+    }
+
+    // Order by booking_date desc (most recent first)
+    query = query.order('booking_date', { ascending: false });
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw new Error(`Failed to get client proposals: ${error.message}`);
+    }
+
+    return {
+      bookings: (data as Booking[]) || [],
+      count: count || 0,
+      stats,
+    };
+  }
+
+  /**
    * Get bookings for a user (client or cook) via their profile
    */
   static async getBookingsForUser(

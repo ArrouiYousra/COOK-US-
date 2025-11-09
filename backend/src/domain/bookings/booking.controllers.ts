@@ -5,6 +5,66 @@ import { UserStore } from '@stores/user.store';
 import { ProfileStore } from '@stores/profile.store';
 import type { BookingStatus, CancellationReason } from '../../types/database.types';
 
+export const getMyProposals = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not authenticated',
+      });
+      return;
+    }
+
+    const user = await UserStore.getUserById(req.user.id);
+    if (!user) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found',
+      });
+      return;
+    }
+
+    // Only clients can view their proposals
+    if (user.role !== 'CLIENT') {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only clients can view their proposals',
+      });
+      return;
+    }
+
+    const { filter, limit, offset } = req.query;
+
+    const validFilters = ['pending', 'accepted', 'rejected'];
+    const filterValue = filter && validFilters.includes(filter as string) ? (filter as 'pending' | 'accepted' | 'rejected') : undefined;
+
+    const limitNum = limit ? parseInt(limit as string, 10) : undefined;
+    const offsetNum = offset ? parseInt(offset as string, 10) : undefined;
+
+    const result = await BookingStore.getClientProposals(
+      req.user.id,
+      filterValue,
+      limitNum,
+      offsetNum
+    );
+
+    res.status(200).json({
+      bookings: result.bookings,
+      count: result.count,
+      stats: result.stats,
+      filter: filterValue || 'all',
+      limit: limitNum || 10,
+      offset: offsetNum || 0,
+    });
+  } catch (error) {
+    console.error('Get my proposals error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get proposals',
+    });
+  }
+};
+
 export const createBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
