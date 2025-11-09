@@ -4,6 +4,10 @@ export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'DELETED' | 'PENDING_VERIFICAT
 export type CookStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'PAUSED' | 'SUSPENDED' | 'REJECTED';
 export type EmploymentStatus = 'AUTO_ENTREPRENEUR' | 'PORTAGE_SALARIAL' | 'MICRO_ENTREPRISE' | 'ASSOCIATION';
 export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED';
+export type CancellationReason = 'CLIENT_REQUEST' | 'COOK_UNAVAILABLE' | 'EMERGENCY' | 'WEATHER' | 'OTHER';
+export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'BRUNCH';
+export type DietaryRestriction = 'VEGETARIAN' | 'VEGAN' | 'GLUTEN_FREE' | 'LACTOSE_FREE' | 'HALAL' | 'KOSHER' | 'LOW_CARB' | 'KETO' | 'PALEO' | 'DIABETIC';
+export type Allergy = 'PEANUTS' | 'TREE_NUTS' | 'MILK' | 'EGGS' | 'FISH' | 'SHELLFISH' | 'SOY' | 'WHEAT' | 'SESAME' | 'MUSTARD' | 'CELERY' | 'LUPIN' | 'SULFITES';
 
 // User table
 export interface User {
@@ -121,60 +125,74 @@ export interface CreateClientProfileDTO {
   household_size?: number;
 }
 
-// Booking table
+// Booking table (according to SQL schema)
 export interface Booking {
   id: string;
-  client_id: string;
-  cook_id: string;
+  client_profile_id: string;
+  cook_profile_id: string;
+  booking_date: string; // DATE
+  meal_type: MealType | null;
+  start_time: string | null; // TIME
+  end_time: string | null; // TIME
+  number_of_guests: number | null;
   status: BookingStatus;
-  service_date: string; // Date/heure du service
-  service_duration_hours: number;
-  number_of_guests: number;
-  address: string;
-  city: string;
-  postal_code: string;
-  country: string;
-  location: unknown | null; // PostGIS POINT
+  need_groceries: boolean;
+  need_table_setting: boolean;
+  need_dishes: boolean;
+  dietary_restrictions: DietaryRestriction[] | null;
+  allergies: Allergy[] | null;
   special_requests: string | null;
-  dietary_restrictions: string | null;
-  pantry_items: string | null; // Ce que le client a dans son frigo/garde-manger
-  menu_description: string | null;
-  total_price: number;
-  hourly_rate: number;
-  can_do_groceries: boolean;
-  can_set_table: boolean;
-  can_do_dishes: boolean;
-  client_accepted: boolean;
-  cook_accepted: boolean;
-  client_accepted_at: string | null;
-  cook_accepted_at: string | null;
-  cancelled_at: string | null;
-  cancelled_by: string | null; // 'CLIENT' | 'COOK'
-  cancellation_reason: string | null;
-  completed_at: string | null;
-  payment_status: string; // 'PENDING' | 'PAID' | 'REFUNDED'
+  ingredients_available: string | null;
+  hourly_rate: number | null;
+  hours_booked: number | null;
+  extra_services_price: number;
+  subtotal: number | null;
+  platform_fee: number | null;
+  total_price: number | null;
+  cook_earnings: number | null;
   payment_intent_id: string | null;
+  payment_status: string | null;
+  paid_at: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null; // UUID
+  cancellation_reason: CancellationReason | null;
+  cancellation_note: string | null;
+  refund_amount: number | null;
+  refunded_at: string | null;
+  completed_at: string | null;
+  review_deadline: string | null;
   created_at: string;
   updated_at: string;
 }
 
+// Reservation Status ENUM
+export type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+
+// Reservations table (for cooks to apply to public bookings)
+export interface Reservation {
+  id: string;
+  booking_id: string;
+  user_id: string; // Cook user_id
+  status: ReservationStatus;
+  created_at: string;
+}
+
 // DTOs for creating bookings
 export interface CreateBookingDTO {
-  cook_id: string;
-  service_date: string;
-  service_duration_hours: number;
-  number_of_guests: number;
-  address: string;
-  city: string;
-  postal_code: string;
-  country?: string;
+  cook_profile_id?: string | null; // Optional - null for public requests
+  booking_date: string; // DATE format YYYY-MM-DD
+  meal_type?: MealType;
+  start_time?: string; // TIME format HH:MM:SS
+  end_time?: string; // TIME format HH:MM:SS
+  number_of_guests?: number;
+  need_groceries?: boolean;
+  need_table_setting?: boolean;
+  need_dishes?: boolean;
+  dietary_restrictions?: DietaryRestriction[];
+  allergies?: Allergy[];
   special_requests?: string;
-  dietary_restrictions?: string;
-  pantry_items?: string;
-  menu_description?: string;
-  can_do_groceries?: boolean;
-  can_set_table?: boolean;
-  can_do_dishes?: boolean;
+  ingredients_available?: string;
+  address_id?: string; // Reference to addresses table
 }
 
 // Message/Conversation tables (according to SQL schema)

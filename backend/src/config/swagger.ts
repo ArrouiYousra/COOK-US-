@@ -37,7 +37,11 @@ const swaggerDefinition: SwaggerDefinition = {
     },
     {
       name: 'Bookings',
-      description: 'Bookings and reservations',
+      description: 'Bookings management',
+    },
+    {
+      name: 'Reservations',
+      description: 'Reservations management (cooks applying to bookings)',
     },
     {
       name: 'Messages',

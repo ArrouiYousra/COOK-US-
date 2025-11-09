@@ -2,7 +2,8 @@ import { type Response } from 'express';
 import { type AuthRequest } from '@core/middleware';
 import { BookingStore } from '@stores/booking.store';
 import { UserStore } from '@stores/user.store';
-import type { BookingStatus } from '../../types/database.types';
+import { ProfileStore } from '@stores/profile.store';
+import type { BookingStatus, CancellationReason } from '../../types/database.types';
 
 export const createBooking = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -24,67 +25,67 @@ export const createBooking = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    // Get client profile ID
+    const clientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+    if (!clientProfile) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Client profile not found',
+      });
+      return;
+    }
+
     const {
-      cook_id,
-      service_date,
-      service_duration_hours,
+      cook_profile_id,
+      booking_date,
+      meal_type,
+      start_time,
+      end_time,
       number_of_guests,
-      address,
-      city,
-      postal_code,
-      country,
-      special_requests,
+      need_groceries,
+      need_table_setting,
+      need_dishes,
       dietary_restrictions,
-      pantry_items,
-      menu_description,
-      can_do_groceries,
-      can_set_table,
-      can_do_dishes,
+      allergies,
+      special_requests,
+      ingredients_available,
+      address_id,
     } = req.body;
 
     // Validation
-    if (!cook_id || !service_date || !service_duration_hours || !number_of_guests) {
+    if (!cook_profile_id || !booking_date) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'cook_id, service_date, service_duration_hours, and number_of_guests are required',
+        message: 'cook_profile_id and booking_date are required',
       });
       return;
     }
 
-    if (!address || !city || !postal_code) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'address, city, and postal_code are required',
-      });
-      return;
-    }
-
-    // Check if cook exists and is active
-    const cookUser = await UserStore.getUserById(cook_id);
-    if (!cookUser || cookUser.role !== 'COOK') {
+    // Check if cook profile exists
+    const cookProfile = await ProfileStore.getCookProfileById(cook_profile_id);
+    if (!cookProfile) {
       res.status(404).json({
         error: 'Not Found',
-        message: 'Cook not found',
+        message: 'Cook profile not found',
       });
       return;
     }
 
-    const booking = await BookingStore.createBooking(req.user.id, {
-      cook_id,
-      service_date,
-      service_duration_hours,
+    const booking = await BookingStore.createBooking(clientProfile.id, {
+      cook_profile_id,
+      booking_date,
+      meal_type,
+      start_time,
+      end_time,
       number_of_guests,
-      address,
-      city,
-      postal_code,
-      country,
-      special_requests,
+      need_groceries,
+      need_table_setting,
+      need_dishes,
       dietary_restrictions,
-      pantry_items,
-      menu_description,
-      can_do_groceries,
-      can_set_table,
-      can_do_dishes,
+      allergies,
+      special_requests,
+      ingredients_available,
+      address_id,
     });
 
     res.status(201).json({
@@ -116,6 +117,14 @@ export const getBookings = async (req: AuthRequest, res: Response): Promise<void
       res.status(404).json({
         error: 'Not Found',
         message: 'User not found',
+      });
+      return;
+    }
+
+    if (user.role !== 'CLIENT' && user.role !== 'COOK') {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only clients and cooks can view bookings',
       });
       return;
     }
@@ -179,6 +188,7 @@ export const getBookingById = async (req: AuthRequest, res: Response): Promise<v
       });
       return;
     }
+
     const booking = await BookingStore.getBookingById(id);
 
     if (!booking) {
@@ -190,7 +200,26 @@ export const getBookingById = async (req: AuthRequest, res: Response): Promise<v
     }
 
     // Verify user has access (must be client or cook of this booking)
-    if (booking.client_id !== req.user.id && booking.cook_id !== req.user.id) {
+    const user = await UserStore.getUserById(req.user.id);
+    if (!user) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found',
+      });
+      return;
+    }
+
+    // Get profile IDs to verify
+    let hasAccess = false;
+    if (user.role === 'CLIENT') {
+      const clientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+      hasAccess = clientProfile?.id === booking.client_profile_id;
+    } else if (user.role === 'COOK') {
+      const cookProfile = await ProfileStore.getCookProfileByUserId(req.user.id);
+      hasAccess = cookProfile?.id === booking.cook_profile_id;
+    }
+
+    if (!hasAccess) {
       res.status(403).json({
         error: 'Forbidden',
         message: 'You do not have access to this booking',
@@ -228,6 +257,7 @@ export const acceptBooking = async (req: AuthRequest, res: Response): Promise<vo
       });
       return;
     }
+
     const user = await UserStore.getUserById(req.user.id);
     if (!user) {
       res.status(404).json({
@@ -288,6 +318,7 @@ export const rejectBooking = async (req: AuthRequest, res: Response): Promise<vo
       });
       return;
     }
+
     const user = await UserStore.getUserById(req.user.id);
     if (!user) {
       res.status(404).json({
@@ -356,7 +387,8 @@ export const cancelBooking = async (req: AuthRequest, res: Response): Promise<vo
       });
       return;
     }
-    const { reason } = req.body;
+
+    const { reason, cancellation_note } = req.body;
 
     const user = await UserStore.getUserById(req.user.id);
     if (!user) {
@@ -379,7 +411,8 @@ export const cancelBooking = async (req: AuthRequest, res: Response): Promise<vo
       id,
       req.user.id,
       user.role as 'CLIENT' | 'COOK',
-      reason
+      reason as CancellationReason | undefined,
+      cancellation_note
     );
 
     res.status(200).json({
@@ -412,4 +445,3 @@ export const cancelBooking = async (req: AuthRequest, res: Response): Promise<vo
     });
   }
 };
-

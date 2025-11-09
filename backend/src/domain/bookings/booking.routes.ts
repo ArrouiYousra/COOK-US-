@@ -26,45 +26,51 @@ const router = Router();
  *           schema:
  *             type: object
  *             required:
- *               - cook_id
- *               - service_date
- *               - service_duration_hours
- *               - number_of_guests
- *               - address
- *               - city
- *               - postal_code
+ *               - cook_profile_id
+ *               - booking_date
  *             properties:
- *               cook_id:
+ *               cook_profile_id:
  *                 type: string
- *               service_date:
+ *               booking_date:
  *                 type: string
- *                 format: date-time
- *               service_duration_hours:
- *                 type: number
+ *                 format: date
+ *                 example: "2025-01-15"
+ *               meal_type:
+ *                 type: string
+ *                 enum: [BREAKFAST, LUNCH, DINNER, BRUNCH]
+ *               start_time:
+ *                 type: string
+ *                 format: time
+ *                 example: "18:00:00"
+ *               end_time:
+ *                 type: string
+ *                 format: time
+ *                 example: "20:00:00"
  *               number_of_guests:
  *                 type: integer
- *               address:
- *                 type: string
- *               city:
- *                 type: string
- *               postal_code:
- *                 type: string
- *               country:
- *                 type: string
+ *               need_groceries:
+ *                 type: boolean
+ *               need_table_setting:
+ *                 type: boolean
+ *               need_dishes:
+ *                 type: boolean
+ *               dietary_restrictions:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   enum: [VEGETARIAN, VEGAN, GLUTEN_FREE, LACTOSE_FREE, HALAL, KOSHER, LOW_CARB, KETO, PALEO, DIABETIC]
+ *               allergies:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   enum: [PEANUTS, TREE_NUTS, MILK, EGGS, FISH, SHELLFISH, SOY, WHEAT, SESAME, MUSTARD, CELERY, LUPIN, SULFITES]
  *               special_requests:
  *                 type: string
- *               dietary_restrictions:
+ *               ingredients_available:
  *                 type: string
- *               pantry_items:
+ *               address_id:
  *                 type: string
- *               menu_description:
- *                 type: string
- *               can_do_groceries:
- *                 type: boolean
- *               can_set_table:
- *                 type: boolean
- *               can_do_dishes:
- *                 type: boolean
+ *                 description: Reference to addresses table
  *     responses:
  *       201:
  *         description: Booking created successfully
@@ -198,6 +204,9 @@ router.put('/:id/reject', authGuard, rejectBooking);
  *             type: object
  *             properties:
  *               reason:
+ *                 type: string
+ *                 enum: [CLIENT_REQUEST, COOK_UNAVAILABLE, EMERGENCY, WEATHER, OTHER]
+ *               cancellation_note:
  *                 type: string
  *     responses:
  *       200:

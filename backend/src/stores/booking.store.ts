@@ -3,54 +3,88 @@ import type {
   Booking,
   CreateBookingDTO,
   BookingStatus,
+  CancellationReason,
 } from '../types/database.types';
 
 export class BookingStore {
   /**
+   * Calculate hours from start_time and end_time
+   */
+  private static calculateHours(startTime: string | null, endTime: string | null): number | null {
+    if (!startTime || !endTime) return null;
+    
+    const start = new Date(`2000-01-01T${startTime}`);
+    const end = new Date(`2000-01-01T${endTime}`);
+    const diffMs = end.getTime() - start.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+    
+    return Math.round(diffHours * 100) / 100; // Round to 2 decimals
+  }
+
+  /**
    * Create a new booking
    */
   static async createBooking(
-    clientId: string,
+    clientProfileId: string,
     bookingData: CreateBookingDTO
   ): Promise<Booking> {
-    // Get cook profile to get hourly rate
-    const { data: cookProfile, error: cookError } = await supabaseAdmin
-      .from('cook_profiles')
-      .select('hourly_rate')
-      .eq('user_id', bookingData.cook_id)
-      .single();
+    let hourlyRate: number | null = null;
+    let cookProfileId: string | null = bookingData.cook_profile_id || null;
 
-    if (cookError || !cookProfile) {
-      throw new Error('Cook not found');
+    // If cook_profile_id is provided, get hourly rate
+    if (cookProfileId) {
+      const { data: cookProfile, error: cookError } = await supabaseAdmin
+        .from('cook_profiles')
+        .select('hourly_rate')
+        .eq('id', cookProfileId)
+        .single();
+
+      if (cookError || !cookProfile) {
+        throw new Error('Cook profile not found');
+      }
+
+      hourlyRate = cookProfile.hourly_rate;
     }
-
-    const hourlyRate = cookProfile.hourly_rate;
-    const totalPrice = hourlyRate * bookingData.service_duration_hours;
+    
+    // Calculate hours_booked from start_time and end_time
+    const hoursBooked = this.calculateHours(bookingData.start_time || null, bookingData.end_time || null);
+    
+    // Calculate prices (only if cook is assigned)
+    const subtotal = hoursBooked && hourlyRate ? hourlyRate * hoursBooked : null;
+    // Calculate extra services price based on needs
+    const extraServicesPrice = 
+      (bookingData.need_groceries ? 10 : 0) +
+      (bookingData.need_table_setting ? 5 : 0) +
+      (bookingData.need_dishes ? 5 : 0);
+    const platformFee = subtotal ? subtotal * 0.1 : null; // 10% platform fee (example)
+    const totalPrice = subtotal && platformFee ? subtotal + extraServicesPrice + platformFee : null;
+    const cookEarnings = subtotal && platformFee ? subtotal + extraServicesPrice - platformFee : null;
 
     const { data, error } = await supabaseAdmin
       .from('bookings')
       .insert({
-        client_id: clientId,
-        cook_id: bookingData.cook_id,
+        client_profile_id: clientProfileId,
+        cook_profile_id: cookProfileId,
+        booking_date: bookingData.booking_date,
+        meal_type: bookingData.meal_type || null,
+        start_time: bookingData.start_time || null,
+        end_time: bookingData.end_time || null,
+        number_of_guests: bookingData.number_of_guests || null,
         status: 'PENDING',
-        service_date: bookingData.service_date,
-        service_duration_hours: bookingData.service_duration_hours,
-        number_of_guests: bookingData.number_of_guests,
-        address: bookingData.address,
-        city: bookingData.city,
-        postal_code: bookingData.postal_code,
-        country: bookingData.country || 'FR',
-        special_requests: bookingData.special_requests || null,
+        need_groceries: bookingData.need_groceries || false,
+        need_table_setting: bookingData.need_table_setting || false,
+        need_dishes: bookingData.need_dishes || false,
         dietary_restrictions: bookingData.dietary_restrictions || null,
-        pantry_items: bookingData.pantry_items || null,
-        menu_description: bookingData.menu_description || null,
-        total_price: totalPrice,
+        allergies: bookingData.allergies || null,
+        special_requests: bookingData.special_requests || null,
+        ingredients_available: bookingData.ingredients_available || null,
         hourly_rate: hourlyRate,
-        can_do_groceries: bookingData.can_do_groceries || false,
-        can_set_table: bookingData.can_set_table || false,
-        can_do_dishes: bookingData.can_do_dishes || false,
-        client_accepted: false,
-        cook_accepted: false,
+        hours_booked: hoursBooked,
+        extra_services_price: extraServicesPrice,
+        subtotal: subtotal,
+        platform_fee: platformFee,
+        total_price: totalPrice,
+        cook_earnings: cookEarnings,
         payment_status: 'PENDING',
       })
       .select()
@@ -84,7 +118,7 @@ export class BookingStore {
   }
 
   /**
-   * Get bookings for a user (client or cook)
+   * Get bookings for a user (client or cook) via their profile
    */
   static async getBookingsForUser(
     userId: string,
@@ -95,14 +129,37 @@ export class BookingStore {
       offset?: number;
     }
   ): Promise<{ bookings: Booking[]; count: number }> {
+    // First, get the profile ID
+    let profileId: string | null = null;
+    
+    if (role === 'CLIENT') {
+      const { data: clientProfile } = await supabaseAdmin
+        .from('client_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+      profileId = clientProfile?.id || null;
+    } else {
+      const { data: cookProfile } = await supabaseAdmin
+        .from('cook_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+      profileId = cookProfile?.id || null;
+    }
+
+    if (!profileId) {
+      return { bookings: [], count: 0 };
+    }
+
     let query = supabaseAdmin
       .from('bookings')
       .select('*', { count: 'exact' });
 
     if (role === 'CLIENT') {
-      query = query.eq('client_id', userId);
+      query = query.eq('client_profile_id', profileId);
     } else {
-      query = query.eq('cook_id', userId);
+      query = query.eq('cook_profile_id', profileId);
     }
 
     if (filters?.status) {
@@ -117,8 +174,8 @@ export class BookingStore {
       query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
     }
 
-    // Order by service_date desc (most recent first)
-    query = query.order('service_date', { ascending: false });
+    // Order by booking_date desc (most recent first)
+    query = query.order('booking_date', { ascending: false });
     query = query.order('created_at', { ascending: false });
 
     const { data, error, count } = await query;
@@ -155,7 +212,7 @@ export class BookingStore {
   }
 
   /**
-   * Accept booking (by cook or client)
+   * Accept booking (changes status to ACCEPTED or CONFIRMED)
    */
   static async acceptBooking(
     bookingId: string,
@@ -167,40 +224,50 @@ export class BookingStore {
       throw new Error('Booking not found');
     }
 
-    // Verify user has permission
-    if (role === 'CLIENT' && booking.client_id !== userId) {
-      throw new Error('Unauthorized: Not the client of this booking');
-    }
-    if (role === 'COOK' && booking.cook_id !== userId) {
-      throw new Error('Unauthorized: Not the cook of this booking');
-    }
-
-    const updates: Partial<Booking> = {};
-    const now = new Date().toISOString();
-
+    // Get profile ID to verify
+    let profileId: string | null = null;
     if (role === 'CLIENT') {
-      updates.client_accepted = true;
-      updates.client_accepted_at = now;
+      const { data: clientProfile } = await supabaseAdmin
+        .from('client_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+      profileId = clientProfile?.id || null;
+      
+      if (profileId !== booking.client_profile_id) {
+        throw new Error('Unauthorized: Not the client of this booking');
+      }
     } else {
-      updates.cook_accepted = true;
-      updates.cook_accepted_at = now;
+      const { data: cookProfile } = await supabaseAdmin
+        .from('cook_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+      profileId = cookProfile?.id || null;
+      
+      if (profileId !== booking.cook_profile_id) {
+        throw new Error('Unauthorized: Not the cook of this booking');
+      }
     }
 
-    // If both have accepted, status becomes CONFIRMED
-    if (
-      (role === 'CLIENT' && booking.cook_accepted) ||
-      (role === 'COOK' && booking.client_accepted)
-    ) {
-      updates.status = 'CONFIRMED';
+    // If status is PENDING, change to ACCEPTED
+    // If status is ACCEPTED (other party accepted), change to CONFIRMED
+    let newStatus: BookingStatus;
+    if (booking.status === 'PENDING') {
+      newStatus = 'ACCEPTED';
+    } else if (booking.status === 'ACCEPTED') {
+      newStatus = 'CONFIRMED';
     } else {
-      updates.status = 'ACCEPTED';
+      throw new Error('Can only accept bookings with PENDING or ACCEPTED status');
     }
 
-    return await this.updateBooking(bookingId, updates);
+    return await this.updateBooking(bookingId, {
+      status: newStatus,
+    });
   }
 
   /**
-   * Reject booking
+   * Reject booking (only if PENDING)
    */
   static async rejectBooking(
     bookingId: string,
@@ -212,12 +279,30 @@ export class BookingStore {
       throw new Error('Booking not found');
     }
 
-    // Verify user has permission
-    if (role === 'CLIENT' && booking.client_id !== userId) {
-      throw new Error('Unauthorized: Not the client of this booking');
-    }
-    if (role === 'COOK' && booking.cook_id !== userId) {
-      throw new Error('Unauthorized: Not the cook of this booking');
+    // Get profile ID to verify
+    let profileId: string | null = null;
+    if (role === 'CLIENT') {
+      const { data: clientProfile } = await supabaseAdmin
+        .from('client_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+      profileId = clientProfile?.id || null;
+      
+      if (profileId !== booking.client_profile_id) {
+        throw new Error('Unauthorized: Not the client of this booking');
+      }
+    } else {
+      const { data: cookProfile } = await supabaseAdmin
+        .from('cook_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+      profileId = cookProfile?.id || null;
+      
+      if (profileId !== booking.cook_profile_id) {
+        throw new Error('Unauthorized: Not the cook of this booking');
+      }
     }
 
     // Can only reject if status is PENDING
@@ -228,7 +313,7 @@ export class BookingStore {
     return await this.updateBooking(bookingId, {
       status: 'CANCELLED',
       cancelled_at: new Date().toISOString(),
-      cancelled_by: role,
+      cancelled_by: userId,
     });
   }
 
@@ -239,19 +324,38 @@ export class BookingStore {
     bookingId: string,
     userId: string,
     role: 'CLIENT' | 'COOK',
-    reason?: string
+    reason?: CancellationReason,
+    note?: string
   ): Promise<Booking> {
     const booking = await this.getBookingById(bookingId);
     if (!booking) {
       throw new Error('Booking not found');
     }
 
-    // Verify user has permission
-    if (role === 'CLIENT' && booking.client_id !== userId) {
-      throw new Error('Unauthorized: Not the client of this booking');
-    }
-    if (role === 'COOK' && booking.cook_id !== userId) {
-      throw new Error('Unauthorized: Not the cook of this booking');
+    // Get profile ID to verify
+    let profileId: string | null = null;
+    if (role === 'CLIENT') {
+      const { data: clientProfile } = await supabaseAdmin
+        .from('client_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+      profileId = clientProfile?.id || null;
+      
+      if (profileId !== booking.client_profile_id) {
+        throw new Error('Unauthorized: Not the client of this booking');
+      }
+    } else {
+      const { data: cookProfile } = await supabaseAdmin
+        .from('cook_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+      profileId = cookProfile?.id || null;
+      
+      if (profileId !== booking.cook_profile_id) {
+        throw new Error('Unauthorized: Not the cook of this booking');
+      }
     }
 
     // Can cancel if status is PENDING, ACCEPTED, or CONFIRMED
@@ -262,9 +366,9 @@ export class BookingStore {
     return await this.updateBooking(bookingId, {
       status: 'CANCELLED',
       cancelled_at: new Date().toISOString(),
-      cancelled_by: role,
+      cancelled_by: userId,
       cancellation_reason: reason || null,
+      cancellation_note: note || null,
     });
   }
 }
-
