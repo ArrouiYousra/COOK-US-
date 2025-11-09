@@ -44,6 +44,10 @@ const swaggerDefinition: SwaggerDefinition = {
       description: 'Reservations management (cooks applying to bookings)',
     },
     {
+      name: 'Reviews',
+      description: 'Reviews and ratings system',
+    },
+    {
       name: 'Messages',
       description: 'Messaging system',
     },

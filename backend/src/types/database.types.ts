@@ -235,3 +235,22 @@ export interface CreateMessageDTO {
   booking_id?: string; // Optional, to link conversation to booking
 }
 
+// Reviews table
+export interface Review {
+  id: string;
+  booking_id: string;
+  reviewer_id: string; // User who wrote the review
+  reviewee_id: string; // User being reviewed
+  rating: number; // 0 to 5
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// DTOs for creating reviews
+export interface CreateReviewDTO {
+  booking_id: string;
+  rating: number; // 0 to 5
+  comment?: string;
+}
+

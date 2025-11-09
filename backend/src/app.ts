@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type Response, type NextFunction } from 'express';
+import express, { type Express, type Request, type Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
@@ -7,6 +7,7 @@ import authRoutes from '@domain/auth/auth.routes';
 import profileRoutes from '@domain/profiles/profile.routes';
 import bookingRoutes from '@domain/bookings/booking.routes';
 import reservationRoutes from '@domain/reservations/reservation.routes';
+import reviewRoutes from '@domain/reviews/review.routes';
 import messageRoutes from '@domain/messages/message.routes';
 
 // Load environment variables
@@ -41,6 +42,7 @@ app.use('/api/profiles', profileRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/bookings', reservationRoutes);
 app.use('/api/reservations', reservationRoutes);
+app.use('/api/reviews', reviewRoutes);
 app.use('/api/messages', messageRoutes);
 
 // 404 handler
