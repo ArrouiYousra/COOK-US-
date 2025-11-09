@@ -447,3 +447,75 @@ export interface UpdateCertificationDTO {
   notes?: string;
 }
 
+// Dispute types
+export type DisputeStatus = 'OPENED' | 'IN_REVIEW' | 'RESOLVED' | 'CLOSED';
+export type DisputeType = 
+  | 'SERVICE_QUALITY'
+  | 'NO_SHOW'
+  | 'CANCELLATION_ISSUE'
+  | 'PAYMENT_ISSUE'
+  | 'BEHAVIOR'
+  | 'OTHER';
+export type DisputeResolution = 
+  | 'REFUND_FULL'
+  | 'REFUND_PARTIAL'
+  | 'NO_REFUND'
+  | 'RESCHEDULE'
+  | 'WARNING_ISSUED'
+  | 'ACCOUNT_SUSPENDED'
+  | 'OTHER';
+
+// Dispute table
+export interface Dispute {
+  id: string;
+  booking_id: string;
+  opened_by: string; // User ID (client or cook)
+  dispute_type: DisputeType;
+  title: string;
+  description: string;
+  status: DisputeStatus;
+  resolution: DisputeResolution | null;
+  resolution_notes: string | null;
+  resolved_by: string | null; // Admin user_id
+  resolved_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Dispute Message table (for communication within dispute)
+export interface DisputeMessage {
+  id: string;
+  dispute_id: string;
+  sender_id: string; // User ID
+  message: string;
+  attachment_url: string | null;
+  is_internal: boolean; // If true, only visible to admins
+  created_at: string;
+}
+
+// DTOs for creating disputes
+export interface CreateDisputeDTO {
+  booking_id: string;
+  dispute_type: DisputeType;
+  title: string;
+  description: string;
+}
+
+export interface UpdateDisputeDTO {
+  title?: string;
+  description?: string;
+  status?: DisputeStatus;
+}
+
+export interface ResolveDisputeDTO {
+  resolution: DisputeResolution;
+  resolution_notes: string;
+}
+
+export interface CreateDisputeMessageDTO {
+  message: string;
+  attachment_url?: string;
+  is_internal?: boolean;
+}
+
