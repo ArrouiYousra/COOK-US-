@@ -121,3 +121,59 @@ export interface CreateClientProfileDTO {
   household_size?: number;
 }
 
+// Booking table
+export interface Booking {
+  id: string;
+  client_id: string;
+  cook_id: string;
+  status: BookingStatus;
+  service_date: string; // Date/heure du service
+  service_duration_hours: number;
+  number_of_guests: number;
+  address: string;
+  city: string;
+  postal_code: string;
+  country: string;
+  location: unknown | null; // PostGIS POINT
+  special_requests: string | null;
+  dietary_restrictions: string | null;
+  pantry_items: string | null; // Ce que le client a dans son frigo/garde-manger
+  menu_description: string | null;
+  total_price: number;
+  hourly_rate: number;
+  can_do_groceries: boolean;
+  can_set_table: boolean;
+  can_do_dishes: boolean;
+  client_accepted: boolean;
+  cook_accepted: boolean;
+  client_accepted_at: string | null;
+  cook_accepted_at: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null; // 'CLIENT' | 'COOK'
+  cancellation_reason: string | null;
+  completed_at: string | null;
+  payment_status: string; // 'PENDING' | 'PAID' | 'REFUNDED'
+  payment_intent_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// DTOs for creating bookings
+export interface CreateBookingDTO {
+  cook_id: string;
+  service_date: string;
+  service_duration_hours: number;
+  number_of_guests: number;
+  address: string;
+  city: string;
+  postal_code: string;
+  country?: string;
+  special_requests?: string;
+  dietary_restrictions?: string;
+  pantry_items?: string;
+  menu_description?: string;
+  can_do_groceries?: boolean;
+  can_set_table?: boolean;
+  can_do_dishes?: boolean;
+}
+
