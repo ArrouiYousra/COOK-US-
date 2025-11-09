@@ -77,14 +77,10 @@ export const getCookCertifications = async (req: AuthRequest, res: Response): Pr
       cookProfile.id
     );
 
-    // Only show verified certifications publicly
-    const publicCertifications = certifications.filter(
-      (cert) => cert.verification_status === 'VERIFIED'
-    );
-
+    // Show all certifications (no verification_status in SQL)
     res.status(200).json({
-      certifications: publicCertifications,
-      count: publicCertifications.length,
+      certifications,
+      count: certifications.length,
     });
   } catch (error) {
     console.error('Get cook certifications error:', error);
@@ -127,10 +123,10 @@ export const createCertification = async (req: AuthRequest, res: Response): Prom
     const certData: CreateCertificationDTO = req.body;
 
     // Validation
-    if (!certData.name || !certData.issuing_organization) {
+    if (!certData.certification || !certData.issued_by) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'Name and issuing_organization are required',
+        message: 'certification and issued_by are required',
       });
       return;
     }
@@ -267,99 +263,5 @@ export const deleteCertification = async (req: AuthRequest, res: Response): Prom
   }
 };
 
-// Admin only endpoints
-export const verifyCertification = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    // Only admins can verify certifications
-    const user = await UserStore.getUserById(req.user.id);
-    if (!user || user.role !== 'ADMIN') {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only admins can verify certifications',
-      });
-      return;
-    }
-
-    const { certId } = req.params;
-    if (!certId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Certification ID is required',
-      });
-      return;
-    }
-
-    const { status, notes } = req.body;
-    if (!status || (status !== 'VERIFIED' && status !== 'REJECTED')) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Status must be VERIFIED or REJECTED',
-      });
-      return;
-    }
-
-    const certification = await CertificationStore.verifyCertification(
-      certId,
-      req.user.id,
-      status,
-      notes
-    );
-
-    res.status(200).json({
-      message: `Certification ${status.toLowerCase()} successfully`,
-      certification,
-    });
-  } catch (error) {
-    console.error('Verify certification error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to verify certification',
-      details: errorMessage,
-    });
-  }
-};
-
-export const getPendingCertifications = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    // Only admins can view pending certifications
-    const user = await UserStore.getUserById(req.user.id);
-    if (!user || user.role !== 'ADMIN') {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only admins can view pending certifications',
-      });
-      return;
-    }
-
-    const certifications = await CertificationStore.getCertificationsByStatus('PENDING');
-
-    res.status(200).json({
-      certifications,
-      count: certifications.length,
-    });
-  } catch (error) {
-    console.error('Get pending certifications error:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get pending certifications',
-    });
-  }
-};
+// Verification endpoints removed - no verification_status in SQL schema
 

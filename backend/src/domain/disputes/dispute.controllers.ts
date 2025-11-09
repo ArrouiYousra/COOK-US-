@@ -9,7 +9,6 @@ import type {
   CreateDisputeDTO,
   UpdateDisputeDTO,
   ResolveDisputeDTO,
-  CreateDisputeMessageDTO,
 } from '../../types/database.types';
 
 // ============ DISPUTES ============
@@ -27,10 +26,10 @@ export const createDispute = async (req: AuthRequest, res: Response): Promise<vo
     const disputeData: CreateDisputeDTO = req.body;
 
     // Validation
-    if (!disputeData.booking_id || !disputeData.dispute_type || !disputeData.title || !disputeData.description) {
+    if (!disputeData.booking_id || !disputeData.reason || !disputeData.description) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'booking_id, dispute_type, title, and description are required',
+        message: 'booking_id, reason, and description are required',
       });
       return;
     }
@@ -64,7 +63,7 @@ export const createDispute = async (req: AuthRequest, res: Response): Promise<vo
     // Check if booking already has an open dispute
     const existingDisputes = await DisputeStore.getDisputesByBookingId(disputeData.booking_id);
     const hasOpenDispute = existingDisputes.some(
-      (d) => d.status === 'OPENED' || d.status === 'IN_REVIEW'
+      (d) => d.status === 'OPEN' || d.status === 'IN_REVIEW'
     );
 
     if (hasOpenDispute) {
@@ -198,15 +197,15 @@ export const updateDispute = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Only the user who opened the dispute or admin can update
+    // Only the user who raised the dispute or admin can update
     const user = await UserStore.getUserById(req.user.id);
     const isAdmin = user?.role === 'ADMIN';
-    const isOpener = dispute.opened_by === req.user.id;
+    const isRaiser = dispute.raised_by === req.user.id;
 
-    if (!isOpener && !isAdmin) {
+    if (!isRaiser && !isAdmin) {
       res.status(403).json({
         error: 'Forbidden',
-        message: 'You can only update disputes you opened',
+        message: 'You can only update disputes you raised',
       });
       return;
     }
@@ -277,10 +276,10 @@ export const resolveDispute = async (req: AuthRequest, res: Response): Promise<v
     }
 
     const resolutionData: ResolveDisputeDTO = req.body;
-    if (!resolutionData.resolution || !resolutionData.resolution_notes) {
+    if (!resolutionData.resolution) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'resolution and resolution_notes are required',
+        message: 'resolution is required',
       });
       return;
     }
@@ -369,12 +368,12 @@ export const closeDispute = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
-    // Only admins or the user who opened it can close (if resolved)
+    // Only admins or the user who raised it can close (if resolved)
     const user = await UserStore.getUserById(req.user.id);
     const isAdmin = user?.role === 'ADMIN';
-    const isOpener = dispute.opened_by === req.user.id;
+    const isRaiser = dispute.raised_by === req.user.id; // Changed from opened_by
 
-    if (!isAdmin && !isOpener) {
+    if (!isAdmin && !isRaiser) {
       res.status(403).json({
         error: 'Forbidden',
         message: 'You do not have permission to close this dispute',
@@ -446,132 +445,5 @@ export const getAllDisputes = async (req: AuthRequest, res: Response): Promise<v
   }
 };
 
-// ============ DISPUTE MESSAGES ============
-
-export const createDisputeMessage = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { disputeId } = req.params;
-    if (!disputeId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Dispute ID is required',
-      });
-      return;
-    }
-
-    // Check access
-    const hasAccess = await DisputeStore.userHasAccessToDispute(disputeId, req.user.id);
-    const user = await UserStore.getUserById(req.user.id);
-    const isAdmin = user?.role === 'ADMIN';
-
-    if (!hasAccess && !isAdmin) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'You do not have access to this dispute',
-      });
-      return;
-    }
-
-    const messageData: CreateDisputeMessageDTO = req.body;
-    if (!messageData.message) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Message is required',
-      });
-      return;
-    }
-
-    const dispute = await DisputeStore.getDisputeById(disputeId);
-    if (!dispute) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: 'Dispute not found',
-      });
-      return;
-    }
-
-    // Only allow messages if dispute is not closed
-    if (dispute.status === 'CLOSED') {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Cannot add messages to a closed dispute',
-      });
-      return;
-    }
-
-    const message = await DisputeStore.createDisputeMessage(
-      disputeId,
-      req.user.id,
-      messageData
-    );
-
-    res.status(201).json({
-      message: 'Dispute message created successfully',
-      disputeMessage: message,
-    });
-  } catch (error) {
-    console.error('Create dispute message error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to create dispute message',
-      details: errorMessage,
-    });
-  }
-};
-
-export const getDisputeMessages = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    const { disputeId } = req.params;
-    if (!disputeId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Dispute ID is required',
-      });
-      return;
-    }
-
-    // Check access
-    const hasAccess = await DisputeStore.userHasAccessToDispute(disputeId, req.user.id);
-    const user = await UserStore.getUserById(req.user.id);
-    const isAdmin = user?.role === 'ADMIN';
-
-    if (!hasAccess && !isAdmin) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'You do not have access to this dispute',
-      });
-      return;
-    }
-
-    const messages = await DisputeStore.getDisputeMessages(disputeId, req.user.id, isAdmin || false);
-
-    res.status(200).json({
-      messages,
-      count: messages.length,
-    });
-  } catch (error) {
-    console.error('Get dispute messages error:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get dispute messages',
-    });
-  }
-};
+// Dispute messages removed - not in SQL schema
 

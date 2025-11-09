@@ -5,8 +5,6 @@ import {
   createCertification,
   updateCertification,
   deleteCertification,
-  verifyCertification,
-  getPendingCertifications,
 } from './certification.controllers';
 import { authGuard } from '@core/middleware';
 
@@ -25,9 +23,10 @@ const router = Router();
  *         cook_profile_id:
  *           type: string
  *           format: uuid
- *         name:
+ *         certification:
  *           type: string
- *         issuing_organization:
+ *           enum: [HYGIENE_HACCP, FIRST_AID, FOOD_ALLERGY, PROFESSIONAL_CHEF, NUTRITION, PASTRY, WINE_PAIRING, OTHER]
+ *         issued_by:
  *           type: string
  *         issue_date:
  *           type: string
@@ -40,35 +39,19 @@ const router = Router();
  *         certificate_url:
  *           type: string
  *           nullable: true
- *         verification_status:
- *           type: string
- *           enum: [PENDING, VERIFIED, REJECTED]
- *         verified_at:
- *           type: string
- *           format: date-time
- *           nullable: true
- *         verified_by:
- *           type: string
- *           format: uuid
- *           nullable: true
- *         notes:
- *           type: string
- *           nullable: true
  *         created_at:
- *           type: string
- *           format: date-time
- *         updated_at:
  *           type: string
  *           format: date-time
  *     CreateCertification:
  *       type: object
  *       required:
- *         - name
- *         - issuing_organization
+ *         - certification
+ *         - issued_by
  *       properties:
- *         name:
+ *         certification:
  *           type: string
- *         issuing_organization:
+ *           enum: [HYGIENE_HACCP, FIRST_AID, FOOD_ALLERGY, PROFESSIONAL_CHEF, NUTRITION, PASTRY, WINE_PAIRING, OTHER]
+ *         issued_by:
  *           type: string
  *         issue_date:
  *           type: string
@@ -169,9 +152,10 @@ router.post('/', authGuard, createCertification);
  *           schema:
  *             type: object
  *             properties:
- *               name:
+ *               certification:
  *                 type: string
- *               issuing_organization:
+ *                 enum: [HYGIENE_HACCP, FIRST_AID, FOOD_ALLERGY, PROFESSIONAL_CHEF, NUTRITION, PASTRY, WINE_PAIRING, OTHER]
+ *               issued_by:
  *                 type: string
  *               issue_date:
  *                 type: string
@@ -224,66 +208,7 @@ router.put('/:certId', authGuard, updateCertification);
  */
 router.delete('/:certId', authGuard, deleteCertification);
 
-/**
- * @swagger
- * /api/certifications/{certId}/verify:
- *   post:
- *     summary: Verify or reject a certification (admin only)
- *     tags: [Certifications]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: certId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - status
- *             properties:
- *               status:
- *                 type: string
- *                 enum: [VERIFIED, REJECTED]
- *               notes:
- *                 type: string
- *     responses:
- *       200:
- *         description: Certification verified/rejected successfully
- *       400:
- *         description: Bad Request
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Only admins can verify
- *       404:
- *         description: Certification not found
- */
-router.post('/:certId/verify', authGuard, verifyCertification);
-
-/**
- * @swagger
- * /api/certifications/pending:
- *   get:
- *     summary: Get all pending certifications (admin only)
- *     tags: [Certifications]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Pending certifications retrieved successfully
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - Only admins can access
- */
-router.get('/pending', authGuard, getPendingCertifications);
+// Verification routes removed - no verification_status in SQL schema
 
 export default router;
 

@@ -13,26 +13,15 @@ export class PortfolioStore {
     cookProfileId: string,
     itemData: CreatePortfolioItemDTO
   ): Promise<CookPortfolioItem> {
-    // Get the current max display_order for this cook
-    const { data: existingItems } = await supabaseAdmin
-      .from('cook_portfolio_items')
-      .select('display_order')
-      .eq('cook_profile_id', cookProfileId)
-      .order('display_order', { ascending: false })
-      .limit(1)
-      .single();
-
-    const displayOrder = itemData.display_order ?? (existingItems?.display_order ?? 0) + 1;
+    // No display_order in SQL, items ordered by created_at
 
     const { data, error } = await supabaseAdmin
-      .from('cook_portfolio_items')
+      .from('cook_portfolio') // Changed table name to match SQL
       .insert({
         cook_profile_id: cookProfileId,
         title: itemData.title,
         description: itemData.description ?? null,
-        image_url: itemData.image_url,
-        category: itemData.category ?? null,
-        display_order: displayOrder,
+        media_url: itemData.media_url, // Changed from image_url
       })
       .select()
       .single();
@@ -57,10 +46,10 @@ export class PortfolioStore {
     cookProfileId: string
   ): Promise<CookPortfolioItem[]> {
     const { data, error } = await supabaseAdmin
-      .from('cook_portfolio_items')
+      .from('cook_portfolio') // Changed table name
       .select('*')
       .eq('cook_profile_id', cookProfileId)
-      .order('display_order', { ascending: true });
+      .order('created_at', { ascending: true }); // Order by created_at instead of display_order
 
     if (error) {
       throw new Error(`Failed to get portfolio items: ${error.message}`);
@@ -74,7 +63,7 @@ export class PortfolioStore {
    */
   static async getPortfolioItemById(itemId: string): Promise<CookPortfolioItem | null> {
     const { data, error } = await supabaseAdmin
-      .from('cook_portfolio_items')
+      .from('cook_portfolio') // Changed table name
       .select('*')
       .eq('id', itemId)
       .single();
@@ -104,13 +93,11 @@ export class PortfolioStore {
     }
 
     const { data, error } = await supabaseAdmin
-      .from('cook_portfolio_items')
+      .from('cook_portfolio') // Changed table name
       .update({
         ...(updates.title && { title: updates.title }),
         ...(updates.description !== undefined && { description: updates.description ?? null }),
-        ...(updates.image_url && { image_url: updates.image_url }),
-        ...(updates.category !== undefined && { category: updates.category ?? null }),
-        ...(updates.display_order && { display_order: updates.display_order }),
+        ...(updates.media_url && { media_url: updates.media_url }), // Changed from image_url
         updated_at: new Date().toISOString(),
       })
       .eq('id', itemId)
@@ -136,7 +123,7 @@ export class PortfolioStore {
     }
 
     const { error } = await supabaseAdmin
-      .from('cook_portfolio_items')
+      .from('cook_portfolio') // Changed table name
       .delete()
       .eq('id', itemId)
       .eq('cook_profile_id', cookProfileId);
@@ -146,42 +133,5 @@ export class PortfolioStore {
     }
   }
 
-  /**
-   * Reorder portfolio items
-   */
-  static async reorderPortfolioItems(
-    cookProfileId: string,
-    itemIds: string[]
-  ): Promise<CookPortfolioItem[]> {
-    // Verify all items belong to the cook
-    const { data: items } = await supabaseAdmin
-      .from('cook_portfolio_items')
-      .select('id')
-      .eq('cook_profile_id', cookProfileId)
-      .in('id', itemIds);
-
-    if (!items || items.length !== itemIds.length) {
-      throw new Error('Some portfolio items not found or access denied');
-    }
-
-    // Update display_order for each item
-    const updates = itemIds.map((id, index) => ({
-      id,
-      display_order: index + 1,
-    }));
-
-    const promises = updates.map((update) =>
-      supabaseAdmin
-        .from('cook_portfolio_items')
-        .update({ display_order: update.display_order })
-        .eq('id', update.id)
-        .eq('cook_profile_id', cookProfileId)
-    );
-
-    await Promise.all(promises);
-
-    // Return updated items
-    return this.getPortfolioItemsByCookProfileId(cookProfileId);
-  }
 }
 

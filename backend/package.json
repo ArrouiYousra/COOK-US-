@@ -34,6 +34,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@mapbox/mapbox-sdk": "^0.16.2",
     "@supabase/supabase-js": "^2.80.0",
     "@types/swagger-ui-express": "^4.1.8",
     "bcryptjs": "^3.0.3",

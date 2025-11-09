@@ -381,15 +381,13 @@ export interface CreateAddressDTO {
   is_default?: boolean;
 }
 
-// Cook Portfolio table
+// Cook Portfolio table (matches SQL: cook_portfolio)
 export interface CookPortfolioItem {
   id: string;
   cook_profile_id: string;
   title: string;
   description: string | null;
-  image_url: string;
-  category: string | null; // e.g., 'APPETIZER', 'MAIN_COURSE', 'DESSERT', 'BREAKFAST', etc.
-  display_order: number;
+  media_url: string; // Changed from image_url to match SQL
   created_at: string;
   updated_at: string;
 }
@@ -398,125 +396,172 @@ export interface CookPortfolioItem {
 export interface CreatePortfolioItemDTO {
   title: string;
   description?: string;
-  image_url: string;
-  category?: string;
-  display_order?: number;
+  media_url: string; // Changed from image_url
 }
 
 export interface UpdatePortfolioItemDTO {
   title?: string;
   description?: string;
-  image_url?: string;
-  category?: string;
-  display_order?: number;
+  media_url?: string;
 }
 
-// Cook Certification table
+// Cook Certification table (matches SQL: cook_certifications)
+export type CertificationType = 
+  | 'HYGIENE_HACCP'
+  | 'FIRST_AID'
+  | 'FOOD_ALLERGY'
+  | 'PROFESSIONAL_CHEF'
+  | 'NUTRITION'
+  | 'PASTRY'
+  | 'WINE_PAIRING'
+  | 'OTHER';
+
 export interface CookCertification {
   id: string;
   cook_profile_id: string;
-  name: string;
-  issuing_organization: string;
+  certification: CertificationType; // Changed from name to match SQL ENUM
+  issued_by: string; // Changed from issuing_organization
   issue_date: string | null; // DATE
   expiry_date: string | null; // DATE (null if no expiry)
   certificate_url: string | null; // URL to certificate document/image
-  verification_status: 'PENDING' | 'VERIFIED' | 'REJECTED';
-  verified_at: string | null;
-  verified_by: string | null; // Admin user_id
-  notes: string | null;
   created_at: string;
-  updated_at: string;
 }
 
 // DTOs for creating certifications
 export interface CreateCertificationDTO {
-  name: string;
-  issuing_organization: string;
+  certification: CertificationType;
+  issued_by: string;
   issue_date?: string; // DATE format YYYY-MM-DD
   expiry_date?: string; // DATE format YYYY-MM-DD
   certificate_url?: string;
-  notes?: string;
 }
 
 export interface UpdateCertificationDTO {
-  name?: string;
-  issuing_organization?: string;
+  certification?: CertificationType;
+  issued_by?: string;
   issue_date?: string;
   expiry_date?: string;
   certificate_url?: string;
-  notes?: string;
 }
 
-// Dispute types
-export type DisputeStatus = 'OPENED' | 'IN_REVIEW' | 'RESOLVED' | 'CLOSED';
-export type DisputeType = 
-  | 'SERVICE_QUALITY'
-  | 'NO_SHOW'
-  | 'CANCELLATION_ISSUE'
+// Dispute types (matches SQL)
+export type DisputeStatus = 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'CLOSED';
+export type DisputeReason = 
+  | 'SERVICE_NOT_PROVIDED'
+  | 'POOR_QUALITY'
+  | 'LATE_ARRIVAL'
+  | 'HYGIENE_ISSUE'
+  | 'DAMAGE'
   | 'PAYMENT_ISSUE'
-  | 'BEHAVIOR'
-  | 'OTHER';
-export type DisputeResolution = 
-  | 'REFUND_FULL'
-  | 'REFUND_PARTIAL'
-  | 'NO_REFUND'
-  | 'RESCHEDULE'
-  | 'WARNING_ISSUED'
-  | 'ACCOUNT_SUSPENDED'
   | 'OTHER';
 
-// Dispute table
+// Dispute table (matches SQL: disputes)
 export interface Dispute {
   id: string;
   booking_id: string;
-  opened_by: string; // User ID (client or cook)
-  dispute_type: DisputeType;
-  title: string;
+  raised_by: string; // Changed from opened_by to match SQL
+  status: DisputeStatus; // 'OPEN' not 'OPENED'
+  reason: DisputeReason; // Changed from dispute_type to match SQL ENUM
   description: string;
-  status: DisputeStatus;
-  resolution: DisputeResolution | null;
-  resolution_notes: string | null;
-  resolved_by: string | null; // Admin user_id
+  resolution: string | null; // TEXT, not ENUM
   resolved_at: string | null;
-  closed_at: string | null;
   created_at: string;
   updated_at: string;
-}
-
-// Dispute Message table (for communication within dispute)
-export interface DisputeMessage {
-  id: string;
-  dispute_id: string;
-  sender_id: string; // User ID
-  message: string;
-  attachment_url: string | null;
-  is_internal: boolean; // If true, only visible to admins
-  created_at: string;
 }
 
 // DTOs for creating disputes
 export interface CreateDisputeDTO {
   booking_id: string;
-  dispute_type: DisputeType;
-  title: string;
+  reason: DisputeReason;
   description: string;
 }
 
 export interface UpdateDisputeDTO {
-  title?: string;
   description?: string;
   status?: DisputeStatus;
 }
 
 export interface ResolveDisputeDTO {
-  resolution: DisputeResolution;
-  resolution_notes: string;
-  refund_amount?: number; // Required for REFUND_PARTIAL, ignored for others
+  resolution: string; // TEXT, not ENUM
+  refund_amount?: number; // For reference, but handled via transactions
 }
 
-export interface CreateDisputeMessageDTO {
-  message: string;
-  attachment_url?: string;
-  is_internal?: boolean;
+// Transaction types (matches SQL)
+export type TransactionType = 
+  | 'BOOKING_PAYMENT'
+  | 'REFUND'
+  | 'PAYOUT'
+  | 'PLATFORM_FEE'
+  | 'BONUS'
+  | 'PENALTY';
+
+export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+// Transaction table (matches SQL: transactions)
+export interface Transaction {
+  id: string;
+  type: TransactionType;
+  status: TransactionStatus;
+  booking_id: string | null;
+  from_user_id: string | null;
+  to_user_id: string | null;
+  amount: number;
+  currency: string;
+  stripe_payment_id: string | null;
+  stripe_transfer_id: string | null;
+  stripe_refund_id: string | null;
+  description: string | null;
+  metadata: Record<string, any> | null; // JSONB
+  completed_at: string | null;
+  failure_reason: string | null;
+  created_at: string;
+}
+
+// DTOs for creating transactions
+export interface CreateTransactionDTO {
+  type: TransactionType;
+  booking_id?: string;
+  from_user_id?: string;
+  to_user_id?: string;
+  amount: number;
+  currency?: string;
+  stripe_payment_id?: string;
+  stripe_transfer_id?: string;
+  stripe_refund_id?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
+// Client dietary preferences (M:N tables)
+export type CuisineType = 
+  | 'FRENCH'
+  | 'ITALIAN'
+  | 'ASIAN'
+  | 'MEDITERRANEAN'
+  | 'VEGETARIAN'
+  | 'VEGAN'
+  | 'HEALTHY'
+  | 'TRADITIONAL'
+  | 'GASTRONOMIC'
+  | 'COMFORT_FOOD'
+  | 'INTERNATIONAL'
+  | 'FUSION'
+  | 'SEAFOOD'
+  | 'GRILLED'
+  | 'PASTRY';
+
+export interface ClientDietaryRestriction {
+  client_profile_id: string;
+  restriction: DietaryRestriction;
+}
+
+export interface ClientAllergy {
+  client_profile_id: string;
+  allergy: Allergy;
+}
+
+export interface ClientFavoriteCuisine {
+  client_profile_id: string;
+  cuisine: CuisineType;
 }
 

@@ -17,6 +17,9 @@ import portfolioRoutes from '@domain/portfolio/portfolio.routes';
 import certificationRoutes from '@domain/certifications/certification.routes';
 import disputeRoutes from '@domain/disputes/dispute.routes';
 import paymentRoutes from '@domain/payments/payment.routes';
+import transactionRoutes from '@domain/transactions/transaction.routes';
+import clientPreferencesRoutes from '@domain/clientPreferences/clientPreferences.routes';
+import mapboxRoutes from '@domain/mapbox/mapbox.routes';
 
 // Load environment variables
 dotenv.config();
@@ -67,6 +70,9 @@ app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/certifications', certificationRoutes);
 app.use('/api/disputes', disputeRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/transactions', transactionRoutes);
+app.use('/api/client-preferences', clientPreferencesRoutes);
+app.use('/api/mapbox', mapboxRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

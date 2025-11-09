@@ -1,11 +1,9 @@
 import { supabaseAdmin } from '@config/supabaseClient';
 import type {
   Dispute,
-  DisputeMessage,
   CreateDisputeDTO,
   UpdateDisputeDTO,
   ResolveDisputeDTO,
-  CreateDisputeMessageDTO,
   DisputeStatus,
 } from '../types/database.types';
 
@@ -13,16 +11,15 @@ export class DisputeStore {
   /**
    * Create a new dispute
    */
-  static async createDispute(disputeData: CreateDisputeDTO, openedBy: string): Promise<Dispute> {
+  static async createDispute(disputeData: CreateDisputeDTO, raisedBy: string): Promise<Dispute> {
     const { data, error } = await supabaseAdmin
       .from('disputes')
       .insert({
         booking_id: disputeData.booking_id,
-        opened_by: openedBy,
-        dispute_type: disputeData.dispute_type,
-        title: disputeData.title,
+        raised_by: raisedBy, // Changed from opened_by
+        reason: disputeData.reason, // Changed from dispute_type
         description: disputeData.description,
-        status: 'OPENED',
+        status: 'OPEN', // Changed from OPENED
       })
       .select()
       .single();
@@ -126,11 +123,11 @@ export class DisputeStore {
       }
     }
 
-    // Get disputes opened by user
-    const { data: openedDisputes } = await supabaseAdmin
+    // Get disputes raised by user
+    const { data: raisedDisputes } = await supabaseAdmin
       .from('disputes')
       .select('*')
-      .eq('opened_by', userId);
+      .eq('raised_by', userId);
 
     // Get disputes for bookings
     let bookingDisputes: Dispute[] = [];
@@ -146,7 +143,7 @@ export class DisputeStore {
     }
 
     // Combine and deduplicate
-    const allDisputes = [...(openedDisputes ?? []), ...bookingDisputes];
+    const allDisputes = [...(raisedDisputes ?? []), ...bookingDisputes];
     const uniqueDisputes = Array.from(
       new Map(allDisputes.map((d) => [d.id, d])).values()
     );
@@ -186,7 +183,6 @@ export class DisputeStore {
     const { data, error } = await supabaseAdmin
       .from('disputes')
       .update({
-        ...(updates.title && { title: updates.title }),
         ...(updates.description && { description: updates.description }),
         ...(updates.status && { status: updates.status }),
         updated_at: new Date().toISOString(),
@@ -207,16 +203,14 @@ export class DisputeStore {
    */
   static async resolveDispute(
     disputeId: string,
-    adminUserId: string,
+    _adminUserId: string, // Not stored in SQL, kept for API compatibility
     resolutionData: ResolveDisputeDTO
   ): Promise<Dispute> {
     const { data, error } = await supabaseAdmin
       .from('disputes')
       .update({
         status: 'RESOLVED',
-        resolution: resolutionData.resolution,
-        resolution_notes: resolutionData.resolution_notes,
-        resolved_by: adminUserId,
+        resolution: resolutionData.resolution, // TEXT, not ENUM
         resolved_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -228,14 +222,7 @@ export class DisputeStore {
       throw new Error(`Failed to resolve dispute: ${error.message}`);
     }
 
-    // Update booking status back to COMPLETED or CANCELLED based on resolution
-    const dispute = data as Dispute;
-    if (resolutionData.resolution === 'REFUND_FULL' || resolutionData.resolution === 'REFUND_PARTIAL') {
-      // Keep as DISPUTED or set to CANCELLED based on business logic
-      // For now, we'll leave it as DISPUTED
-    }
-
-    return dispute;
+    return data as Dispute;
   }
 
   /**
@@ -246,7 +233,6 @@ export class DisputeStore {
       .from('disputes')
       .update({
         status: 'CLOSED',
-        closed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
       .eq('id', disputeId)
@@ -261,61 +247,6 @@ export class DisputeStore {
   }
 
   /**
-   * Create a dispute message
-   */
-  static async createDisputeMessage(
-    disputeId: string,
-    senderId: string,
-    messageData: CreateDisputeMessageDTO
-  ): Promise<DisputeMessage> {
-    const { data, error } = await supabaseAdmin
-      .from('dispute_messages')
-      .insert({
-        dispute_id: disputeId,
-        sender_id: senderId,
-        message: messageData.message,
-        attachment_url: messageData.attachment_url ?? null,
-        is_internal: messageData.is_internal ?? false,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to create dispute message: ${error.message}`);
-    }
-
-    return data as DisputeMessage;
-  }
-
-  /**
-   * Get messages for a dispute
-   */
-  static async getDisputeMessages(
-    disputeId: string,
-    _userId?: string,
-    isAdmin: boolean = false
-  ): Promise<DisputeMessage[]> {
-    let query = supabaseAdmin
-      .from('dispute_messages')
-      .select('*')
-      .eq('dispute_id', disputeId)
-      .order('created_at', { ascending: true });
-
-    // If not admin, filter out internal messages
-    if (!isAdmin) {
-      query = query.eq('is_internal', false);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      throw new Error(`Failed to get dispute messages: ${error.message}`);
-    }
-
-    return (data ?? []) as DisputeMessage[];
-  }
-
-  /**
    * Check if user has access to dispute
    */
   static async userHasAccessToDispute(disputeId: string, userId: string): Promise<boolean> {
@@ -324,8 +255,8 @@ export class DisputeStore {
       return false;
     }
 
-    // User opened the dispute
-    if (dispute.opened_by === userId) {
+    // User raised the dispute
+    if (dispute.raised_by === userId) {
       return true;
     }
 

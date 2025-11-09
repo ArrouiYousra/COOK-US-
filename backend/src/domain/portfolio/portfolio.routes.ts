@@ -5,7 +5,6 @@ import {
   createPortfolioItem,
   updatePortfolioItem,
   deletePortfolioItem,
-  reorderPortfolioItems,
 } from './portfolio.controllers';
 import { authGuard } from '@core/middleware';
 
@@ -29,13 +28,8 @@ const router = Router();
  *         description:
  *           type: string
  *           nullable: true
- *         image_url:
+ *         media_url:
  *           type: string
- *         category:
- *           type: string
- *           nullable: true
- *         display_order:
- *           type: number
  *         created_at:
  *           type: string
  *           format: date-time
@@ -46,18 +40,14 @@ const router = Router();
  *       type: object
  *       required:
  *         - title
- *         - image_url
+ *         - media_url
  *       properties:
  *         title:
  *           type: string
  *         description:
  *           type: string
- *         image_url:
+ *         media_url:
  *           type: string
- *         category:
- *           type: string
- *         display_order:
- *           type: number
  */
 
 /**
@@ -151,12 +141,8 @@ router.post('/', authGuard, createPortfolioItem);
  *                 type: string
  *               description:
  *                 type: string
- *               image_url:
+ *               media_url:
  *                 type: string
- *               category:
- *                 type: string
- *               display_order:
- *                 type: number
  *     responses:
  *       200:
  *         description: Portfolio item updated successfully
@@ -198,39 +184,7 @@ router.put('/:itemId', authGuard, updatePortfolioItem);
  */
 router.delete('/:itemId', authGuard, deletePortfolioItem);
 
-/**
- * @swagger
- * /api/portfolio/reorder:
- *   post:
- *     summary: Reorder portfolio items
- *     tags: [Portfolio]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - itemIds
- *             properties:
- *               itemIds:
- *                 type: array
- *                 items:
- *                   type: string
- *                   format: uuid
- *     responses:
- *       200:
- *         description: Portfolio items reordered successfully
- *       400:
- *         description: Bad Request
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden
- */
-router.post('/reorder', authGuard, reorderPortfolioItems);
+// Reorder route removed - no display_order in SQL schema
 
 export default router;
 

@@ -118,10 +118,10 @@ export const createPortfolioItem = async (req: AuthRequest, res: Response): Prom
     const itemData: CreatePortfolioItemDTO = req.body;
 
     // Validation
-    if (!itemData.title || !itemData.image_url) {
+    if (!itemData.title || !itemData.media_url) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'Title and image_url are required',
+        message: 'Title and media_url are required',
       });
       return;
     }
@@ -258,58 +258,5 @@ export const deletePortfolioItem = async (req: AuthRequest, res: Response): Prom
   }
 };
 
-export const reorderPortfolioItems = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
-
-    // Only cooks can reorder portfolio items
-    const user = await UserStore.getUserById(req.user.id);
-    if (!user || user.role !== 'COOK') {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only cooks can reorder portfolio items',
-      });
-      return;
-    }
-
-    const cookProfile = await ProfileStore.getCookProfileByUserId(req.user.id);
-    if (!cookProfile) {
-      res.status(404).json({
-        error: 'Not Found',
-        message: 'Cook profile not found',
-      });
-      return;
-    }
-
-    const { itemIds } = req.body;
-    if (!Array.isArray(itemIds) || itemIds.length === 0) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'itemIds must be a non-empty array',
-      });
-      return;
-    }
-
-    const portfolioItems = await PortfolioStore.reorderPortfolioItems(cookProfile.id, itemIds);
-
-    res.status(200).json({
-      message: 'Portfolio items reordered successfully',
-      portfolio: portfolioItems,
-    });
-  } catch (error) {
-    console.error('Reorder portfolio items error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to reorder portfolio items',
-      details: errorMessage,
-    });
-  }
-};
+// Reorder removed - no display_order in SQL schema
 

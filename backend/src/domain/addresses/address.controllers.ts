@@ -3,6 +3,7 @@ import { type AuthRequest } from '@core/middleware';
 import { AddressStore } from '@stores/address.store';
 import { ProfileStore } from '@stores/profile.store';
 import { UserStore } from '@stores/user.store';
+import { MapboxService } from '@core/services/mapbox.service';
 import { BookingStore } from '@stores/booking.store';
 
 export const getMyAddresses = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -222,10 +223,34 @@ export const createAddress = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    if (latitude === undefined || longitude === undefined) {
+    // If coordinates are not provided, try to geocode the address using Mapbox
+    let finalLatitude = latitude;
+    let finalLongitude = longitude;
+
+    if (!finalLatitude || !finalLongitude) {
+      try {
+        // Build address string for geocoding
+        const addressString = `${street_number || ''} ${street}, ${postal_code} ${city}, ${country || 'FR'}`.trim();
+        const geocodeResult = await MapboxService.geocodeAddress(addressString, country || 'FR');
+        
+        if (geocodeResult) {
+          finalLatitude = geocodeResult.latitude;
+          finalLongitude = geocodeResult.longitude;
+          console.log(`Address geocoded successfully: ${geocodeResult.placeName}`);
+        } else {
+          console.warn(`Could not geocode address: ${addressString}`);
+        }
+      } catch (geocodeError) {
+        // Log error but continue - address can be created without coordinates
+        console.warn('Mapbox geocoding failed, continuing without coordinates:', geocodeError);
+      }
+    }
+
+    // If still no coordinates after geocoding attempt, return error
+    if (!finalLatitude || !finalLongitude) {
       res.status(400).json({
         error: 'Bad Request',
-        message: 'latitude and longitude are required',
+        message: 'latitude and longitude are required. If not provided, address geocoding will be attempted automatically.',
       });
       return;
     }
@@ -239,8 +264,8 @@ export const createAddress = async (req: AuthRequest, res: Response): Promise<vo
       city,
       postal_code,
       country,
-      latitude,
-      longitude,
+      latitude: finalLatitude,
+      longitude: finalLongitude,
       access_code,
       access_notes,
       parking_info,

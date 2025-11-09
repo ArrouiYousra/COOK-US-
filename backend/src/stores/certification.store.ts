@@ -17,13 +17,11 @@ export class CertificationStore {
       .from('cook_certifications')
       .insert({
         cook_profile_id: cookProfileId,
-        name: certData.name,
-        issuing_organization: certData.issuing_organization,
+        certification: certData.certification, // Changed from name
+        issued_by: certData.issued_by, // Changed from issuing_organization
         issue_date: certData.issue_date ?? null,
         expiry_date: certData.expiry_date ?? null,
         certificate_url: certData.certificate_url ?? null,
-        notes: certData.notes ?? null,
-        verification_status: 'PENDING',
       })
       .select()
       .single();
@@ -51,7 +49,7 @@ export class CertificationStore {
       .from('cook_certifications')
       .select('*')
       .eq('cook_profile_id', cookProfileId)
-      .order('issue_date', { ascending: false, nullsFirst: false });
+      .order('created_at', { ascending: false }); // Order by created_at since no issue_date ordering needed
 
     if (error) {
       throw new Error(`Failed to get certifications: ${error.message}`);
@@ -94,29 +92,16 @@ export class CertificationStore {
       throw new Error('Certification not found or access denied');
     }
 
-    // If verification status is VERIFIED, only admins can update
-    // For now, we allow updates but reset to PENDING if verified fields change
-    const needsReVerification =
-      cert.verification_status === 'VERIFIED' &&
-      (updates.name || updates.issuing_organization || updates.certificate_url);
-
     const { data, error } = await supabaseAdmin
       .from('cook_certifications')
       .update({
-        ...(updates.name && { name: updates.name }),
-        ...(updates.issuing_organization && { issuing_organization: updates.issuing_organization }),
+        ...(updates.certification && { certification: updates.certification }), // Changed from name
+        ...(updates.issued_by && { issued_by: updates.issued_by }), // Changed from issuing_organization
         ...(updates.issue_date !== undefined && { issue_date: updates.issue_date ?? null }),
         ...(updates.expiry_date !== undefined && { expiry_date: updates.expiry_date ?? null }),
         ...(updates.certificate_url !== undefined && {
           certificate_url: updates.certificate_url ?? null,
         }),
-        ...(updates.notes !== undefined && { notes: updates.notes ?? null }),
-        ...(needsReVerification && {
-          verification_status: 'PENDING',
-          verified_at: null,
-          verified_by: null,
-        }),
-        updated_at: new Date().toISOString(),
       })
       .eq('id', certId)
       .eq('cook_profile_id', cookProfileId)
@@ -151,52 +136,5 @@ export class CertificationStore {
     }
   }
 
-  /**
-   * Verify a certification (admin only)
-   */
-  static async verifyCertification(
-    certId: string,
-    adminUserId: string,
-    status: 'VERIFIED' | 'REJECTED',
-    notes?: string
-  ): Promise<CookCertification> {
-    const { data, error } = await supabaseAdmin
-      .from('cook_certifications')
-      .update({
-        verification_status: status,
-        verified_at: status === 'VERIFIED' ? new Date().toISOString() : null,
-        verified_by: adminUserId,
-        notes: notes ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', certId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to verify certification: ${error.message}`);
-    }
-
-    return data as CookCertification;
-  }
-
-  /**
-   * Get certifications by verification status (admin)
-   */
-  static async getCertificationsByStatus(
-    status: 'PENDING' | 'VERIFIED' | 'REJECTED'
-  ): Promise<CookCertification[]> {
-    const { data, error } = await supabaseAdmin
-      .from('cook_certifications')
-      .select('*')
-      .eq('verification_status', status)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw new Error(`Failed to get certifications: ${error.message}`);
-    }
-
-    return (data ?? []) as CookCertification[];
-  }
 }
 
