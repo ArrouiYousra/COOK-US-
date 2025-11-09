@@ -118,6 +118,7 @@ router.post('/login', login);
  * /api/auth/refresh:
  *   post:
  *     summary: Refresh access token
+ *     description: Use a refresh token to get a new access token and refresh token
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -130,11 +131,31 @@ router.post('/login', login);
  *             properties:
  *               refreshToken:
  *                 type: string
+ *                 example: "v1.abc123def456..."
+ *                 description: The refresh token obtained from login
  *     responses:
  *       200:
  *         description: Token refreshed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Token refreshed successfully"
+ *                 session:
+ *                   type: object
+ *                 accessToken:
+ *                   type: string
+ *                   example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+ *                 refreshToken:
+ *                   type: string
+ *                   example: "v1.abc123def456..."
+ *       400:
+ *         description: Bad request - refresh token is required
  *       401:
- *         description: Token refresh failed
+ *         description: Token refresh failed - invalid or expired refresh token
  */
 router.post('/refresh', refreshToken);
 

@@ -308,11 +308,27 @@ export const refreshToken = async (
       return;
     }
 
+    if (!data.session) {
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'No session returned from refresh',
+      });
+      return;
+    }
+
+    // Debug: vérifier ce que contient data.session
+    console.log('Session data:', JSON.stringify(data.session, null, 2));
+    console.log('Refresh token in session:', data.session.refresh_token);
+
+    // Le refresh_token peut être dans data.session.refresh_token
+    // ou il faut garder l'ancien refresh_token si Supabase n'en renvoie pas de nouveau
+    const newRefreshToken = data.session.refresh_token || refreshToken;
+
     res.status(200).json({
       message: 'Token refreshed successfully',
       session: data.session,
-      accessToken: data.session?.access_token,
-      refreshToken: data.session?.refresh_token,
+      accessToken: data.session.access_token,
+      refreshToken: newRefreshToken,
     });
   } catch (error) {
     res.status(500).json({
