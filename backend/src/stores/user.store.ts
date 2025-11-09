@@ -34,7 +34,13 @@ export class UserStore {
       .single();
 
     if (error) {
-      throw new Error(`Failed to create user: ${error.message}`);
+      console.error('Supabase error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+      });
+      throw new Error(`Failed to create user: ${error.message} (code: ${error.code})`);
     }
 
     return data as User;

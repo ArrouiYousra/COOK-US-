@@ -127,9 +127,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       // If database creation fails, try to delete the auth user
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
 
+      const errorMessage = dbError instanceof Error ? dbError.message : 'Unknown error';
       res.status(500).json({
         error: 'Internal Server Error',
         message: 'Failed to create user profile in database',
+        details: errorMessage,
       });
       return;
     }
