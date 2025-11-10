@@ -42,54 +42,41 @@ export default function RegisterClientPage() {
   });
 
   // Fonction pour formater le numéro de téléphone français
+  // Note: Le préfixe "+33" est déjà affiché visuellement, donc on ne l'ajoute pas dans la valeur
   const formatPhoneNumber = (value: string): string => {
     if (!value) return '';
     
-    // Retirer tous les espaces existants pour nettoyer
-    let cleaned = value.replace(/\s/g, '');
+    // Retirer tous les espaces et le préfixe +33 s'il est présent (car il est déjà affiché visuellement)
+    let cleaned = value.replace(/\s/g, '').replace(/^\+33/, '');
     
-    // Si ça commence par +33, on garde +33 et on nettoie le reste
-    if (cleaned.startsWith('+33')) {
-      cleaned = '+33' + cleaned.slice(3).replace(/\D/g, '');
-    } else if (cleaned.startsWith('33') && cleaned.length > 2) {
-      cleaned = '+33' + cleaned.slice(2).replace(/\D/g, '');
-    } else if (cleaned.startsWith('0') && cleaned.length > 1) {
-      cleaned = '+33' + cleaned.slice(1).replace(/\D/g, '');
-    } else if (cleaned && !cleaned.startsWith('+')) {
-      // Si c'est juste des chiffres, on ajoute +33
-      const digits = cleaned.replace(/\D/g, '');
-      if (digits.length > 0) {
-        cleaned = '+33' + digits;
-      } else {
-        return '';
-      }
-    } else {
-      // Si ça commence par + mais pas +33, on nettoie
-      cleaned = cleaned.replace(/\D/g, '');
-      if (cleaned.length > 0) {
-        cleaned = '+33' + cleaned;
-      } else {
-        return '';
-      }
+    // Si ça commence par 33, on le retire aussi
+    if (cleaned.startsWith('33') && cleaned.length > 2) {
+      cleaned = cleaned.slice(2);
     }
     
-    // Limiter à 9 chiffres après +33 (format français)
-    const digits = cleaned.slice(3);
-    if (digits.length > 9) {
-      cleaned = '+33' + digits.slice(0, 9);
+    // Si ça commence par 0, on le retire (remplacé par +33)
+    if (cleaned.startsWith('0') && cleaned.length > 1) {
+      cleaned = cleaned.slice(1);
     }
     
-    // Formater avec des espaces : +33 X XX XX XX XX
-    const finalDigits = cleaned.slice(3);
-    if (finalDigits.length > 0) {
+    // Ne garder que les chiffres
+    cleaned = cleaned.replace(/\D/g, '');
+    
+    // Limiter à 9 chiffres (format français)
+    if (cleaned.length > 9) {
+      cleaned = cleaned.slice(0, 9);
+    }
+    
+    // Formater avec des espaces : X XX XX XX XX (sans le +33 car il est déjà affiché)
+    if (cleaned.length > 0) {
       // Format: premier chiffre seul, puis groupes de 2
-      const first = finalDigits[0];
-      const rest = finalDigits.slice(1);
+      const first = cleaned[0];
+      const rest = cleaned.slice(1);
       const groups = rest.match(/.{1,2}/g) || [];
-      return '+33 ' + first + (groups.length > 0 ? ' ' + groups.join(' ') : '');
+      return first + (groups.length > 0 ? ' ' + groups.join(' ') : '');
     }
     
-    return cleaned;
+    return '';
   };
 
   // Vérifier que le rôle est sélectionné (redirection dans useEffect pour éviter l'erreur React)
@@ -109,11 +96,15 @@ export default function RegisterClientPage() {
       setSubmitError(null);
 
       const { confirmPassword, ...registerData } = data;
-      // Nettoyer le numéro de téléphone : retirer les espaces et garder uniquement +33XXXXXXXXX
+      // Nettoyer le numéro de téléphone : retirer les espaces et ajouter +33 au début
+      // La valeur du champ ne contient que les chiffres (sans +33 car il est affiché visuellement)
       let normalizedPhone = registerData.phone?.trim().replace(/\s/g, '');
-      // Si le numéro est vide ou contient seulement +33, on le met à undefined
-      if (!normalizedPhone || normalizedPhone === "+33" || normalizedPhone === "") {
+      // Si le numéro est vide, on le met à undefined
+      if (!normalizedPhone || normalizedPhone === "") {
         normalizedPhone = undefined;
+      } else {
+        // Ajouter le préfixe +33 car il n'est pas dans la valeur du champ
+        normalizedPhone = '+33' + normalizedPhone;
       }
       const cleanedData = {
         ...registerData,
@@ -122,7 +113,7 @@ export default function RegisterClientPage() {
       const response = await apiClient.registerClient(cleanedData);
 
       setSelectedRole(null);
-      
+
       // Rediriger vers la page de connexion avec l'email pré-rempli
       const emailParam = encodeURIComponent(cleanedData.email);
       router.push(`/auth/login?email=${emailParam}&registered=true`);

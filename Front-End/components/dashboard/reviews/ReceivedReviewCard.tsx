@@ -37,6 +37,7 @@ export function ReceivedReviewCard({ review }: ReceivedReviewCardProps) {
               alt={review.cookName}
               fill
               className="object-cover"
+              unoptimized
             />
           ) : (
             <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -91,4 +92,3 @@ export function ReceivedReviewCard({ review }: ReceivedReviewCardProps) {
     </motion.div>
   );
 }
-

@@ -52,6 +52,7 @@ export interface User {
   two_factor_secret: string | null;
   fcm_token: string | null;
   fcm_token_updated_at: string | null;
+  stripe_customer_id: string | null;
   last_login_at: string | null;
   last_login_ip: string | null;
   created_at: string;
@@ -117,6 +118,24 @@ export interface ClientProfile {
   total_bookings: number;
   total_spent: number;
   average_rating_given: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SavedFilterCriteria {
+  location: string;
+  specialties: string[];
+  minBudget: number;
+  maxBudget: number;
+  minRating: number;
+  availability: string[];
+}
+
+export interface SavedFilter {
+  id: string;
+  client_profile_id: string;
+  name: string;
+  filters: SavedFilterCriteria;
   created_at: string;
   updated_at: string;
 }
@@ -538,10 +557,81 @@ export interface Transaction {
   created_at: string;
 }
 
+// Payment Method table (matches SQL: payment_methods)
+export interface PaymentMethod {
+  id: string;
+  user_id: string;
+  stripe_payment_method_id: string;
+  type: string; // 'card', etc.
+  last4: string | null;
+  brand: string | null; // 'visa', 'mastercard', etc.
+  expiry_month: number | null;
+  expiry_year: number | null;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// DTOs for payment methods
+export interface CreatePaymentMethodDTO {
+  stripe_payment_method_id: string;
+  type?: string;
+  last4?: string;
+  brand?: string;
+  expiry_month?: number;
+  expiry_year?: number;
+  is_default?: boolean;
+}
+
 // DTOs for creating transactions
 export interface CreateTransactionDTO {
   type: TransactionType;
   booking_id?: string;
+  from_user_id?: string;
+  to_user_id?: string;
+  amount: number;
+  currency?: string;
+  stripe_payment_id?: string;
+  stripe_transfer_id?: string;
+  stripe_refund_id?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
+// Client dietary preferences (M:N tables)
+export type CuisineType = 
+  | 'FRENCH'
+  | 'ITALIAN'
+  | 'ASIAN'
+  | 'MEDITERRANEAN'
+  | 'VEGETARIAN'
+  | 'VEGAN'
+  | 'HEALTHY'
+  | 'TRADITIONAL'
+  | 'GASTRONOMIC'
+  | 'COMFORT_FOOD'
+  | 'INTERNATIONAL'
+  | 'FUSION'
+  | 'SEAFOOD'
+  | 'GRILLED'
+  | 'PASTRY';
+
+export interface ClientDietaryRestriction {
+  client_profile_id: string;
+  restriction: DietaryRestriction;
+}
+
+export interface ClientAllergy {
+  client_profile_id: string;
+  allergy: Allergy;
+}
+
+export interface ClientFavoriteCuisine {
+  client_profile_id: string;
+  cuisine: CuisineType;
+}
+
+
   from_user_id?: string;
   to_user_id?: string;
   amount: number;

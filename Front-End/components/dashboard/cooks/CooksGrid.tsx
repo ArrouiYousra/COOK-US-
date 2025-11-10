@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
-import { Star, Heart, MapPin, Euro, Calendar } from "lucide-react";
+import { Star, Heart, MapPin, Euro, Calendar, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { mockCooks } from "@/mockData";
+import { apiClient } from "@/lib/api/client";
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "distance" | "availability";
 
@@ -24,60 +24,147 @@ interface CooksGridProps {
   sortBy?: SortOption;
 }
 
+interface CookProfile {
+  id: string;
+  user: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    avatar_url: string | null;
+    city: string | null;
+  };
+  headline: string | null;
+  hourly_rate: number;
+  average_rating: number | null;
+  review_count: number | null;
+  specialties?: string[];
+  is_available?: boolean;
+}
+
 /**
  * Grille de cartes de cuisiniers
- * Affiche les résultats filtrés et recherchés
+ * Affiche les résultats filtrés et recherchés depuis l'API
  */
 export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGridProps) {
-  // Filtrage et tri des cuisiniers
+  const [cooks, setCooks] = useState<CookProfile[]>([]);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [count, setCount] = useState(0);
+  const [page, setPage] = useState(0);
+  const limit = 12;
+
+  // Charger les cuisiniers depuis l'API
+  useEffect(() => {
+    const loadCooks = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Préparer les paramètres de l'API
+        const apiParams: {
+          status?: string;
+          city?: string;
+          min_rating?: number;
+          max_hourly_rate?: number;
+          limit?: number;
+          offset?: number;
+        } = {
+          status: "ACTIVE",
+          limit,
+          offset: page * limit,
+        };
+
+        // Appliquer les filtres
+        if (filters.location) {
+          apiParams.city = filters.location;
+        }
+        if (filters.minRating > 0) {
+          apiParams.min_rating = filters.minRating;
+        }
+        if (filters.maxBudget < 1000) {
+          apiParams.max_hourly_rate = filters.maxBudget;
+        }
+
+        const response = await apiClient.getCookProfiles(apiParams);
+
+        // Vérifier que la réponse contient bien des profils
+        if (!response || !Array.isArray(response.profiles)) {
+          throw new Error("Réponse invalide de l'API");
+        }
+
+        // Charger les favoris pour tous les cuisiniers (seulement si l'utilisateur est authentifié)
+        const favoritesSet = new Set<string>();
+        try {
+          const favoritesPromises = response.profiles.map((cook) =>
+            apiClient.checkFavorite(cook.id).catch(() => ({ isFavorite: false }))
+          );
+          const favoritesResults = await Promise.all(favoritesPromises);
+          response.profiles.forEach((cook, index) => {
+            if (favoritesResults[index]?.isFavorite) {
+              favoritesSet.add(cook.id);
+            }
+          });
+        } catch (error) {
+          // Si l'utilisateur n'est pas authentifié, on continue sans les favoris
+          console.warn("Impossible de charger les favoris:", error);
+        }
+
+        setCooks(response.profiles);
+        setFavorites(favoritesSet);
+        setCount(response.count || 0);
+      } catch (err: any) {
+        console.error("Erreur lors du chargement des cuisiniers:", err);
+        const errorMessage = err?.message || "Impossible de charger les cuisiniers. Veuillez réessayer.";
+        setError(errorMessage);
+        setCooks([]);
+        setCount(0);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadCooks();
+  }, [filters.location, filters.minRating, filters.maxBudget, page]);
+
+  // Filtrer et trier côté client (pour la recherche par nom et spécialités)
   const filteredAndSortedCooks = useMemo(() => {
-    let filtered = mockCooks.filter((cook) => {
-      // Recherche par nom
-      if (
-        searchQuery &&
-        !cook.name.toLowerCase().includes(searchQuery.toLowerCase())
-      ) {
-        return false;
-      }
+    let filtered = [...cooks];
 
-      // Filtre par spécialités
-      if (
-        filters.specialties.length > 0 &&
-        !filters.specialties.some((s) => cook.specialties.includes(s))
-      ) {
-        return false;
-      }
+    // Recherche par nom
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (cook) =>
+          cook.user.first_name.toLowerCase().includes(query) ||
+          cook.user.last_name.toLowerCase().includes(query) ||
+          `${cook.user.first_name} ${cook.user.last_name}`.toLowerCase().includes(query) ||
+          cook.headline?.toLowerCase().includes(query)
+      );
+    }
 
-      // Filtre par budget
-      if (
-        cook.pricePerPerson < filters.minBudget ||
-        cook.pricePerPerson > filters.maxBudget
-      ) {
-        return false;
-      }
-
-      // Filtre par note
-      if (cook.rating < filters.minRating) {
-        return false;
-      }
-
-      return true;
-    });
+    // Filtre par spécialités (si disponible dans les données)
+    if (filters.specialties.length > 0 && filtered.length > 0) {
+      // Note: Les spécialités ne sont pas encore dans l'API, on les ignore pour l'instant
+      // TODO: Ajouter les spécialités dans l'API
+    }
 
     // Tri des résultats
     filtered.sort((a, b) => {
       switch (sortBy) {
         case "rating":
-          return b.rating - a.rating;
+          return (b.average_rating || 0) - (a.average_rating || 0);
         case "price_asc":
-          return a.pricePerPerson - b.pricePerPerson;
+          return a.hourly_rate - b.hourly_rate;
         case "price_desc":
-          return b.pricePerPerson - a.pricePerPerson;
+          return b.hourly_rate - a.hourly_rate;
         case "distance":
-          // TODO: Calculer la distance réelle
+          // TODO: Calculer la distance réelle avec Mapbox
           return 0;
         case "availability":
-          // TODO: Trier par disponibilité
+          // Trier par disponibilité (is_available)
+          if (a.is_available && !b.is_available) return -1;
+          if (!a.is_available && b.is_available) return 1;
           return 0;
         default:
           return 0;
@@ -85,37 +172,132 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
     });
 
     return filtered;
-  }, [searchQuery, filters, sortBy]);
+  }, [cooks, searchQuery, filters.specialties, sortBy]);
 
-  if (filteredAndSortedCooks.length === 0) {
+  const handleToggleFavorite = async (cookId: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const isCurrentlyFavorite = favorites.has(cookId);
+    const newFavorites = new Set(favorites);
+
+    // Optimistic update
+    if (isCurrentlyFavorite) {
+      newFavorites.delete(cookId);
+    } else {
+      newFavorites.add(cookId);
+    }
+    setFavorites(newFavorites);
+
+    try {
+      if (isCurrentlyFavorite) {
+        await apiClient.removeFavorite(cookId);
+      } else {
+        await apiClient.addFavorite(cookId);
+      }
+    } catch (error: any) {
+      // Revert on error
+      setFavorites(favorites);
+      console.error("Erreur lors de la mise à jour des favoris:", error);
+      
+      // Vérifier si c'est une erreur d'authentification
+      if (error?.message?.includes("Unauthorized") || error?.message?.includes("authenticated")) {
+        alert("Vous devez être connecté pour ajouter des favoris.");
+      } else {
+        alert("Impossible de mettre à jour les favoris. Veuillez réessayer.");
+      }
+    }
+  };
+
+  if (isLoading && page === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
     return (
       <div className="text-center py-12">
-        <p className="text-muted-foreground mb-4">
-          Aucun cuisinier ne correspond à vos critères.
-        </p>
+        <p className="text-destructive mb-4">{error}</p>
         <Button variant="outline" onClick={() => window.location.reload()}>
-          Réinitialiser les filtres
+          Réessayer
         </Button>
       </div>
     );
   }
 
+  if (filteredAndSortedCooks.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground mb-4">
+          {searchQuery || filters.location || filters.minRating > 0 || filters.maxBudget < 1000
+            ? "Aucun cuisinier ne correspond à vos critères."
+            : "Aucun cuisinier disponible pour le moment."}
+        </p>
+        {(searchQuery || filters.location || filters.minRating > 0 || filters.maxBudget < 1000) && (
+          <Button variant="outline" onClick={() => window.location.reload()}>
+            Réinitialiser les filtres
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {filteredAndSortedCooks.map((cook, index) => (
-        <CookCard key={cook.id} cook={cook} index={index} />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredAndSortedCooks.map((cook, index) => (
+          <CookCard
+            key={cook.id}
+            cook={cook}
+            index={index}
+            isFavorite={favorites.has(cook.id)}
+            onToggleFavorite={handleToggleFavorite}
+          />
+        ))}
+      </div>
+
+      {/* Pagination */}
+      {count > limit && (
+        <div className="flex items-center justify-center gap-2 mt-8">
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            disabled={page === 0 || isLoading}
+          >
+            Précédent
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {page + 1} sur {Math.ceil(count / limit)}
+          </span>
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page >= Math.ceil(count / limit) - 1 || isLoading}
+          >
+            Suivant
+          </Button>
+        </div>
+      )}
+    </>
   );
 }
 
 interface CookCardProps {
-  cook: typeof mockCooks[0];
+  cook: CookProfile;
   index: number;
+  isFavorite: boolean;
+  onToggleFavorite: (cookId: string, event: React.MouseEvent) => void;
 }
 
-function CookCard({ cook, index }: CookCardProps) {
-  const [isFavorite, setIsFavorite] = useState(false);
+function CookCard({ cook, index, isFavorite, onToggleFavorite }: CookCardProps) {
+  const fullName = `${cook.user.first_name} ${cook.user.last_name}`;
+  const rating = cook.average_rating || 0;
+  const reviewCount = cook.review_count || 0;
+  const city = cook.user.city || "Ville non renseignée";
+  const specialties = cook.specialties || ["Cuisine variée"];
 
   return (
     <motion.div
@@ -127,10 +309,10 @@ function CookCard({ cook, index }: CookCardProps) {
     >
       {/* Photo */}
       <div className="relative w-full h-64">
-        {cook.avatarUrl ? (
+        {cook.user.avatar_url ? (
           <Image
-            src={cook.avatarUrl}
-            alt={cook.name}
+            src={cook.user.avatar_url}
+            alt={fullName}
             fill
             className="object-cover"
           />
@@ -141,15 +323,15 @@ function CookCard({ cook, index }: CookCardProps) {
         )}
         {/* Badge favori */}
         <button
-          onClick={() => setIsFavorite(!isFavorite)}
-          className="absolute top-4 right-4 p-2 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background transition-colors"
-          aria-label="Ajouter aux favoris"
+          onClick={(e) => onToggleFavorite(cook.id, e)}
+          className="absolute top-4 right-4 p-2 rounded-full bg-background/80 backdrop-blur-sm hover:bg-background transition-colors z-10"
+          aria-label={isFavorite ? "Retirer des favoris" : "Ajouter aux favoris"}
         >
           <Heart
-            className={`w-5 h-5 ${
+            className={`w-5 h-5 transition-colors ${
               isFavorite
                 ? "fill-red-500 text-red-500"
-                : "text-muted-foreground"
+                : "text-muted-foreground hover:text-red-500"
             }`}
           />
         </button>
@@ -161,25 +343,40 @@ function CookCard({ cook, index }: CookCardProps) {
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1">
             <h3 className="font-cera text-xl font-bold text-foreground mb-1">
-              {cook.name}
+              {fullName}
             </h3>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                <span className="text-sm font-medium text-foreground">
-                  {cook.rating.toFixed(1)}
-                </span>
-              </div>
-              <span className="text-xs text-muted-foreground">
-                ({cook.reviewCount} avis)
-              </span>
+              {rating > 0 ? (
+                <>
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <span className="text-sm font-medium text-foreground">
+                      {rating.toFixed(1)}
+                    </span>
+                  </div>
+                  {reviewCount > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      ({reviewCount} avis)
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">Aucun avis</span>
+              )}
             </div>
           </div>
         </div>
 
+        {/* Headline */}
+        {cook.headline && (
+          <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+            {cook.headline}
+          </p>
+        )}
+
         {/* Spécialités */}
         <div className="flex flex-wrap gap-2 mb-4">
-          {cook.specialties.slice(0, 2).map((specialty, idx) => (
+          {specialties.slice(0, 2).map((specialty, idx) => (
             <span
               key={specialty}
               className={cn(
@@ -192,9 +389,9 @@ function CookCard({ cook, index }: CookCardProps) {
               {specialty}
             </span>
           ))}
-          {cook.specialties.length > 2 && (
+          {specialties.length > 2 && (
             <span className="px-2 py-1 text-xs rounded-full bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 font-medium">
-              +{cook.specialties.length - 2}
+              +{specialties.length - 2}
             </span>
           )}
         </div>
@@ -206,9 +403,9 @@ function CookCard({ cook, index }: CookCardProps) {
           </div>
           <span>
             <span className="font-semibold text-foreground">
-              {cook.pricePerPerson} €
+              {cook.hourly_rate} €
             </span>{" "}
-            / personne
+            / heure
           </span>
         </div>
 
@@ -217,7 +414,7 @@ function CookCard({ cook, index }: CookCardProps) {
           <div className="w-8 h-8 rounded-lg bg-pink-500/10 dark:bg-pink-500/20 flex items-center justify-center">
             <MapPin className="w-4 h-4 text-pink-600 dark:text-pink-400" />
           </div>
-          <span>{cook.location.city}</span>
+          <span>{city}</span>
         </div>
 
         {/* Disponibilités */}
@@ -225,7 +422,9 @@ function CookCard({ cook, index }: CookCardProps) {
           <div className="w-8 h-8 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center">
             <Calendar className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
           </div>
-          <span>Disponible cette semaine</span>
+          <span>
+            {cook.is_available !== false ? "Disponible" : "Indisponible"}
+          </span>
         </div>
 
         {/* Actions */}
@@ -244,4 +443,3 @@ function CookCard({ cook, index }: CookCardProps) {
     </motion.div>
   );
 }
-

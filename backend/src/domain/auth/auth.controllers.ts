@@ -243,14 +243,14 @@ const createBaseUser = async (
 
   const passwordHash = await bcrypt.hash(registerPayload.password, saltRounds);
   try {
-    await UserStore.createUser(data.user.id, {
-      email: registerPayload.email,
-      passwordHash,
-      first_name: registerPayload.firstName,
-      last_name: registerPayload.lastName,
-      role,
-      phone: registerPayload.phone,
-    });
+  await UserStore.createUser(data.user.id, {
+    email: registerPayload.email,
+    passwordHash,
+    first_name: registerPayload.firstName,
+    last_name: registerPayload.lastName,
+    role,
+    phone: registerPayload.phone,
+  });
   } catch (userError) {
     console.error('Error creating user in database:', userError);
     // Rollback Supabase Auth user if database insert fails
@@ -340,54 +340,77 @@ export const registerCook = async (req: Request, res: Response): Promise<void> =
           : req.body?.hourlyRate,
     });
 
+    // Validation du SIRET uniquement pour AUTO_ENTREPRENEUR et MICRO_ENTREPRISE
+    // Pour PORTAGE_SALARIAL et ASSOCIATION : pas de SIRET requis, pas de validation
     const requiresSiretValidation =
       payload.employmentStatus === 'AUTO_ENTREPRENEUR' || payload.employmentStatus === 'MICRO_ENTREPRISE';
-    const hasSiretNumber = Boolean(payload.siretNumber);
-
+    
     let siretValidationResult: SiretValidationResult | undefined;
-    let validatedSiretNumber: string | undefined = payload.siretNumber;
+    let validatedSiretNumber: string | undefined = undefined;
 
-    // Mode dégradé : si l'API INSEE échoue, on continue quand même (siret_verified = false)
-    if (requiresSiretValidation || hasSiretNumber) {
-      if (!payload.siretNumber) {
-        if (requiresSiretValidation) {
-          // SIRET obligatoire pour ces statuts
-          res.status(400).json({
-            error: 'ValidationError',
-            message: 'Le numéro SIRET est obligatoire pour les statuts AUTO_ENTREPRENEUR et MICRO_ENTREPRISE',
-          });
-          return;
+    // Validation du SIRET uniquement si requis
+    if (requiresSiretValidation) {
+      // Vérifier si un SIRET valide a été fourni
+      const hasSiretNumber = payload.siretNumber && payload.siretNumber.trim().length > 0;
+      
+      // SIRET obligatoire pour AUTO_ENTREPRENEUR et MICRO_ENTREPRISE
+      if (!hasSiretNumber) {
+        res.status(400).json({
+          error: 'ValidationError',
+          message: 'Le numéro SIRET est obligatoire pour les statuts AUTO_ENTREPRENEUR et MICRO_ENTREPRISE',
+        });
+        return;
+      }
+
+      // Valider le SIRET (obligatoire, donc on bloque en cas d'erreur)
+      try {
+        siretValidationResult = await InseeService.validateSiret(payload.siretNumber!);
+        // Si un SIREN a été fourni, utiliser le SIRET principal trouvé
+        if (siretValidationResult.siret && siretValidationResult.siret !== payload.siretNumber) {
+          validatedSiretNumber = siretValidationResult.siret;
+        } else {
+          validatedSiretNumber = payload.siretNumber;
         }
-      } else {
-        try {
-          siretValidationResult = await InseeService.validateSiret(payload.siretNumber);
-          // Si un SIREN a été fourni, utiliser le SIRET principal trouvé
-          if (siretValidationResult.siret && siretValidationResult.siret !== payload.siretNumber) {
-            validatedSiretNumber = siretValidationResult.siret;
-          }
-        } catch (validationError) {
-          // Mode dégradé : si l'API INSEE est down, on continue quand même
-          if (validationError instanceof InseeApiError) {
-            // Si c'est une erreur de validation (400), on bloque
-            if (validationError.statusCode === 400) {
-              res.status(400).json({
-                error: 'SiretValidationError',
-                message: validationError.message,
-                details: validationError.details,
-              });
-              return;
+      } catch (validationError) {
+        // Mode dégradé : si l'API INSEE est down, on continue quand même
+        if (validationError instanceof InseeApiError) {
+          // Si c'est une erreur de validation (400), on bloque car le SIRET est obligatoire
+          if (validationError.statusCode === 400) {
+            // Construire un message d'erreur plus informatif
+            const details = validationError.details as any;
+            let errorMessage = validationError.message;
+            
+            // Ajouter des suggestions basées sur les détails
+            if (details?.possibleCauses && Array.isArray(details.possibleCauses)) {
+              errorMessage += '\n\nCauses possibles :\n' + details.possibleCauses.map((cause: string) => `• ${cause}`).join('\n');
             }
-            // Sinon (500, 503, etc.), on continue avec siret_verified = false
-            console.warn('API INSEE indisponible, inscription en mode dégradé:', validationError.message);
-            siretValidationResult = { isValid: false };
-          } else {
-            // Erreur inattendue, on continue quand même
-            console.error('Erreur validation SIRET:', validationError);
-            siretValidationResult = { isValid: false };
+            
+            // Ajouter des suggestions de dépannage si disponibles
+            if (details?.troubleshooting && Array.isArray(details.troubleshooting)) {
+              errorMessage += '\n\nVérifications à effectuer :\n' + details.troubleshooting.map((step: string) => `• ${step}`).join('\n');
+            }
+            
+            res.status(400).json({
+              error: 'SiretValidationError',
+              message: errorMessage,
+              details: validationError.details,
+              siret: payload.siretNumber,
+            });
+            return;
           }
+          // Sinon (500, 503, etc.), on continue avec siret_verified = false
+          console.warn('API INSEE indisponible, inscription en mode dégradé:', validationError.message);
+          siretValidationResult = { isValid: false };
+          validatedSiretNumber = payload.siretNumber;
+        } else {
+          // Erreur inattendue, on continue quand même
+          console.error('Erreur validation SIRET:', validationError);
+          siretValidationResult = { isValid: false };
+          validatedSiretNumber = payload.siretNumber;
         }
       }
     }
+    // Pour PORTAGE_SALARIAL et ASSOCIATION : pas de SIRET, pas de validation, on continue normalement
 
     const { userId } = await createBaseUser('COOK', payload, {
       employmentStatus: payload.employmentStatus,
@@ -455,9 +478,26 @@ export const registerCook = async (req: Request, res: Response): Promise<void> =
     }
 
     console.error('Register cook error:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : String(error),
+      name: error instanceof Error ? error.name : typeof error,
+      cause: error instanceof Error ? error.cause : undefined,
+    });
+    
+    // Si c'est une erreur de validation Zod, la traiter séparément
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        error: 'ValidationError',
+        details: error.flatten(),
+      });
+      return;
+    }
+    
     res.status(500).json({
       error: 'Internal Server Error',
-      message: "Impossible d'inscrire le cuisinier",
+      message: error instanceof Error ? error.message : "Impossible d'inscrire le cuisinier",
+      details: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : String(error)) : undefined,
     });
   }
 };

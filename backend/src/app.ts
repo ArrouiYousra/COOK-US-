@@ -21,6 +21,7 @@ import paymentRoutes from '@domain/payments/payment.routes';
 import transactionRoutes from '@domain/transactions/transaction.routes';
 import clientPreferencesRoutes from '@domain/clientPreferences/clientPreferences.routes';
 import mapboxRoutes from '@domain/mapbox/mapbox.routes';
+import clientFiltersRoutes from '@domain/clientFilters/filter.routes';
 
 // Load environment variables
 dotenv.config();
@@ -82,6 +83,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/client-preferences', clientPreferencesRoutes);
 app.use('/api/mapbox', mapboxRoutes);
+app.use('/api/client', clientFiltersRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

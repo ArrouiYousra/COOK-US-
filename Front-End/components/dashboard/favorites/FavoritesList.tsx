@@ -19,42 +19,57 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { Cook } from "@/types";
 import { formatPrice } from "@/lib/utils";
+import { apiClient } from "@/lib/api/client";
 
-// Mock data pour les notifications - À remplacer par les vraies données
-const getDefaultNotifications = (favorites: Cook[]) => {
-  const notifications: Record<string, boolean> = {};
-  favorites.forEach((cook, index) => {
-    // Activer les notifications pour le premier favori par défaut
-    notifications[cook.id] = index === 0;
-  });
-  return notifications;
-};
+interface FavoriteCook {
+  id: string;
+  cookId: string;
+  name: string;
+  avatarUrl?: string | null;
+  rating: number;
+  reviewCount: number;
+  specialties: string[];
+  location: {
+    city: string;
+  };
+  pricePerPerson: number;
+  favoriteId: string;
+}
 
 interface FavoritesListProps {
-  favorites: Cook[];
+  favorites: FavoriteCook[];
+  onFavoriteRemoved?: () => void;
 }
 
 /**
  * Liste des favoris avec actions
  * Affiche les chefs favoris avec possibilité de voir le profil, supprimer, et activer les notifications
  */
-export function FavoritesList({ favorites }: FavoritesListProps) {
-  const [notifications, setNotifications] = useState<Record<string, boolean>>(
-    getDefaultNotifications(favorites)
-  );
-
+export function FavoritesList({ favorites, onFavoriteRemoved }: FavoritesListProps) {
+  const [notifications, setNotifications] = useState<Record<string, boolean>>({});
   const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const handleRemoveFavorite = async (cookId: string) => {
-    setRemovingId(cookId);
-    // TODO: Appel API pour supprimer des favoris
-    // await apiClient.removeFavorite(cookId);
-    setTimeout(() => {
+  const handleRemoveFavorite = async (cook: FavoriteCook) => {
+    if (!confirm("Êtes-vous sûr de vouloir retirer ce cuisinier de vos favoris ?")) {
+      return;
+    }
+
+    setRemovingId(cook.cookId);
+    try {
+      // L'API attend le cook_profile_id, pas le user_id
+      // Utiliser l'id (qui est le cook_profile_id) plutôt que cookId (qui est le user_id)
+      await apiClient.removeFavorite(cook.id);
+      // Appeler le callback pour recharger la liste
+      if (onFavoriteRemoved) {
+        onFavoriteRemoved();
+      }
+    } catch (error: any) {
+      console.error("Erreur lors de la suppression du favori:", error);
+      alert(error.response?.data?.message || "Impossible de retirer ce favori");
+    } finally {
       setRemovingId(null);
-      // En production, on mettrait à jour la liste après la suppression
-    }, 500);
+    }
   };
 
   const toggleNotification = (cookId: string) => {
@@ -62,7 +77,8 @@ export function FavoritesList({ favorites }: FavoritesListProps) {
       ...prev,
       [cookId]: !prev[cookId],
     }));
-    // TODO: Appel API pour activer/désactiver les notifications
+    // TODO: Appel API pour activer/désactiver les notifications pour ce cuisinier
+    // Pour l'instant, c'est juste local
   };
 
   return (
@@ -74,8 +90,8 @@ export function FavoritesList({ favorites }: FavoritesListProps) {
           index={index}
           isNotified={notifications[cook.id] || false}
           onToggleNotification={() => toggleNotification(cook.id)}
-          onRemove={() => handleRemoveFavorite(cook.id)}
-          isRemoving={removingId === cook.id}
+          onRemove={() => handleRemoveFavorite(cook)}
+          isRemoving={removingId === cook.cookId}
         />
       ))}
     </div>
@@ -83,7 +99,7 @@ export function FavoritesList({ favorites }: FavoritesListProps) {
 }
 
 interface FavoriteCardProps {
-  cook: Cook;
+  cook: FavoriteCook;
   index: number;
   isNotified: boolean;
   onToggleNotification: () => void;
@@ -114,6 +130,7 @@ function FavoriteCard({
             alt={cook.name}
             fill
             className="object-cover"
+            unoptimized
           />
         ) : (
           <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -136,29 +153,37 @@ function FavoriteCard({
             {cook.name}
           </h3>
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1">
-              <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-              <span className="text-sm font-semibold text-foreground">
-                {cook.rating}
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              ({cook.reviewCount} avis)
-            </span>
+            {cook.rating > 0 && (
+              <>
+                <div className="flex items-center gap-1">
+                  <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                  <span className="text-sm font-semibold text-foreground">
+                    {cook.rating.toFixed(1)}
+                  </span>
+                </div>
+                {cook.reviewCount > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    ({cook.reviewCount} avis)
+                  </span>
+                )}
+              </>
+            )}
           </div>
         </div>
 
         {/* Spécialités */}
-        <div className="flex flex-wrap gap-2">
-          {cook.specialties.slice(0, 2).map((specialty, idx) => (
-            <span
-              key={idx}
-              className="px-2 py-1 rounded-full bg-accent text-xs text-muted-foreground"
-            >
-              {specialty}
-            </span>
-          ))}
-        </div>
+        {cook.specialties && cook.specialties.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {cook.specialties.slice(0, 2).map((specialty, idx) => (
+              <span
+                key={idx}
+                className="px-2 py-1 rounded-full bg-accent text-xs text-muted-foreground"
+              >
+                {specialty}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Localisation */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -177,7 +202,7 @@ function FavoriteCard({
             <span className="text-sm text-muted-foreground">Tarif moyen</span>
           </div>
           <span className="font-semibold text-foreground">
-            {formatPrice(cook.pricePerPerson)} / personne
+            {cook.pricePerPerson > 0 ? `${formatPrice(cook.pricePerPerson)} / personne` : "Tarif sur demande"}
           </span>
         </div>
 
@@ -239,4 +264,3 @@ function FavoriteCard({
     </motion.div>
   );
 }
-

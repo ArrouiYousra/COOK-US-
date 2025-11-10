@@ -3,51 +3,13 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { Send, Smile, Image as ImageIcon, Paperclip, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { MessageInput } from "./MessageInput";
-import { mockCooks } from "@/mockData";
-import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
+import { apiClient } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/authStore";
+import { format, isToday, isYesterday } from "date-fns";
 import { fr } from "date-fns/locale";
-
-// Mock data - À remplacer par les vraies données
-const mockMessages = {
-  "1": [
-    {
-      id: "1",
-      senderId: "cook-1",
-      senderName: "Marie Martin",
-      text: "Bonjour ! Je serais ravie de cuisiner pour vous ce week-end.",
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      isRead: true,
-    },
-    {
-      id: "2",
-      senderId: "client",
-      senderName: "Vous",
-      text: "Parfait ! Quels sont vos tarifs ?",
-      timestamp: new Date(Date.now() - 1.5 * 60 * 60 * 1000),
-      isRead: true,
-    },
-    {
-      id: "3",
-      senderId: "cook-1",
-      senderName: "Marie Martin",
-      text: "Mon tarif est de 35€ par personne. Je peux préparer un menu sur-mesure selon vos préférences.",
-      timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000),
-      isRead: true,
-    },
-    {
-      id: "4",
-      senderId: "cook-1",
-      senderName: "Marie Martin",
-      text: "Avez-vous des allergies ou restrictions alimentaires ?",
-      timestamp: new Date(Date.now() - 30 * 60 * 1000),
-      isRead: false,
-    },
-  ],
-};
 
 interface ChatWindowProps {
   conversationId: string;
@@ -85,32 +47,202 @@ function formatMessageTime(timestamp: Date): string {
 
 export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const [messages, setMessages] = useState(mockMessages[conversationId as keyof typeof mockMessages] || []);
+  const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cook, setCook] = useState<any>(null);
+  const { user } = useAuthStore();
 
-  // Trouver le cuisinier de la conversation
-  const cook = mockCooks.find((c) => c.id === conversationId);
+  // Charger les messages et les infos du cuisinier
+  useEffect(() => {
+    const loadMessages = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        // D'abord, charger toutes les conversations pour vérifier si conversationId est une conversation existante
+        const conversationsData = await apiClient.getConversations({ limit: 100 });
+        const existingConv = conversationsData.conversations.find(
+          (c: any) => c.id === conversationId || c.other_user?.id === conversationId
+        );
+
+        let actualConversationId = conversationId;
+        let cookData = null;
+
+        if (existingConv) {
+          // C'est une conversation existante
+          actualConversationId = existingConv.id;
+          if (existingConv.other_user) {
+            cookData = {
+              id: existingConv.other_user.id,
+              name: existingConv.other_user.first_name && existingConv.other_user.last_name
+                ? `${existingConv.other_user.first_name} ${existingConv.other_user.last_name}`
+                : existingConv.other_user.first_name || "Cuisinier",
+              avatarUrl: existingConv.other_user.avatar_url,
+            };
+          }
+        } else {
+          // C'est probablement un cookId, charger les infos du cuisinier
+          try {
+            const cookProfiles = await apiClient.getCookProfiles({ limit: 1000 });
+            const cookProfile = cookProfiles.profiles.find(
+              (p: any) => p.id === conversationId || p.user?.id === conversationId
+            );
+            if (cookProfile?.user) {
+              cookData = {
+                id: cookProfile.user.id,
+                name: cookProfile.user.first_name && cookProfile.user.last_name
+                  ? `${cookProfile.user.first_name} ${cookProfile.user.last_name}`
+                  : cookProfile.user.first_name || "Cuisinier",
+                avatarUrl: cookProfile.user.avatar_url,
+              };
+            }
+          } catch (err) {
+            console.warn("Impossible de charger le profil du cuisinier:", err);
+          }
+        }
+
+        if (cookData) {
+          setCook(cookData);
+        }
+
+        // Essayer de charger les messages si c'est une conversation existante
+        if (existingConv) {
+          try {
+            const data = await apiClient.getMessages(actualConversationId, { limit: 100 });
+            
+            // Transformer les messages pour correspondre au format attendu
+            const transformedMessages = data.messages.map((msg: any) => {
+              const isOwnMessage = msg.sender_id === user?.id;
+              const senderName = isOwnMessage 
+                ? "Vous" 
+                : msg.sender?.first_name && msg.sender?.last_name
+                ? `${msg.sender.first_name} ${msg.sender.last_name}`
+                : msg.sender?.first_name || "Cuisinier";
+
+              return {
+                id: msg.id,
+                senderId: msg.sender_id,
+                senderName,
+                text: msg.content,
+                timestamp: new Date(msg.created_at),
+                isRead: msg.is_read || false,
+                sender: msg.sender,
+              };
+            });
+
+            // Trier par date (plus ancien en premier)
+            transformedMessages.sort((a: any, b: any) => 
+              a.timestamp.getTime() - b.timestamp.getTime()
+            );
+
+            setMessages(transformedMessages);
+
+            // Marquer comme lu
+            await apiClient.markConversationAsRead(actualConversationId);
+          } catch (err: any) {
+            // Si erreur 404, c'est une nouvelle conversation
+            if (err.response?.status !== 404) {
+              throw err;
+            }
+            setMessages([]);
+          }
+        } else {
+          // Nouvelle conversation, pas de messages
+          setMessages([]);
+        }
+      } catch (err: any) {
+        console.error("Erreur lors du chargement des messages:", err);
+        setError(err.response?.data?.message || "Impossible de charger les messages");
+        setMessages([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (conversationId && user) {
+      loadMessages();
+      
+      // Rafraîchir les messages toutes les 10 secondes
+      const interval = setInterval(loadMessages, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [conversationId, user]);
 
   useEffect(() => {
     // Scroll vers le bas à chaque nouveau message
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !cook || !user || isSending) return;
 
-    const message = {
-      id: Date.now().toString(),
-      senderId: "client",
-      senderName: "Vous",
-      text: newMessage,
-      timestamp: new Date(),
-      isRead: false,
-    };
+    const messageText = newMessage;
+    setNewMessage(""); // Vider immédiatement pour meilleure UX
+    setIsSending(true);
+    setError(null);
 
-    setMessages([...messages, message]);
-    setNewMessage("");
+    try {
+      // Envoyer le message via l'API (cela créera automatiquement la conversation si elle n'existe pas)
+      const response = await apiClient.sendMessage({
+        recipient_id: cook.id,
+        content: messageText,
+        message_type: "TEXT",
+      });
+
+      // Ajouter le message à la liste localement (optimistic update)
+      const newMsg = {
+        id: response.message.id,
+        senderId: user.id,
+        senderName: "Vous",
+        text: messageText,
+        timestamp: new Date(response.message.created_at),
+        isRead: false,
+      };
+
+      setMessages([...messages, newMsg]);
+
+      // Recharger les messages pour obtenir la conversation créée et les données complètes
+      // On attend un peu pour que le backend traite le message
+      setTimeout(async () => {
+        try {
+          const conversationsData = await apiClient.getConversations({ limit: 100 });
+          const newConv = conversationsData.conversations.find(
+            (c: any) => c.other_user?.id === cook.id
+          );
+          if (newConv && newConv.id !== conversationId) {
+            // La conversation a été créée, on peut recharger les messages
+            window.location.href = `/dashboard/client/messages?cook=${cook.id}`;
+          }
+        } catch (err) {
+          console.warn("Erreur lors du rafraîchissement:", err);
+        }
+      }, 1000);
+    } catch (err: any) {
+      console.error("Erreur lors de l'envoi du message:", err);
+      setError(err.response?.data?.message || "Impossible d'envoyer le message");
+      setNewMessage(messageText); // Restaurer le message en cas d'erreur
+    } finally {
+      setIsSending(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-card border border-border rounded-xl">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error && messages.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-card border border-border rounded-xl">
+        <p className="text-destructive">{error}</p>
+      </div>
+    );
+  }
 
   if (!cook) {
     return (
@@ -144,6 +276,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                   alt={cook.name}
                   fill
                   className="object-cover"
+                  unoptimized
                 />
               ) : (
                 <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -151,12 +284,12 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                 </div>
               )}
             </div>
-            {/* Indicateur en ligne */}
-            <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
+            {/* Indicateur en ligne - TODO: Implémenter via WebSocket */}
+            <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-gray-400 border-2 border-background" />
           </div>
           <div className="flex-1">
             <h3 className="font-semibold text-foreground">{cook.name}</h3>
-            <p className="text-xs text-muted-foreground">En ligne</p>
+            <p className="text-xs text-muted-foreground">Hors ligne</p>
           </div>
         </div>
       </div>
@@ -185,6 +318,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                         alt={cook.name}
                         fill
                         className="object-cover"
+                        unoptimized
                       />
                     ) : (
                       <div className="w-full h-full bg-muted flex items-center justify-center text-xs">
@@ -288,4 +422,3 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     </div>
   );
 }
-

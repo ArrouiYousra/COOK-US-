@@ -82,9 +82,9 @@ export function NotificationsDropdown() {
     }
   };
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = async (notification: Notification) => {
     if (!notification.isRead) {
-      markAsRead(notification.id);
+      await markAsRead(notification.id);
     }
     setIsOpen(false);
   };

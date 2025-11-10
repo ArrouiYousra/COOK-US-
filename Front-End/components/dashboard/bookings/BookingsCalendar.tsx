@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { formatDate } from "@/lib/utils";
-import { mockBookings } from "@/mockData";
+import { useBookingStore } from "@/stores/bookingStore";
 
 /**
  * Calendrier global des réservations
@@ -14,6 +14,12 @@ import { mockBookings } from "@/mockData";
  */
 export function BookingsCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const { bookings, fetchBookings, isLoadingBookings } = useBookingStore();
+
+  // Charger les bookings au montage
+  useEffect(() => {
+    fetchBookings({ limit: 1000 });
+  }, [fetchBookings]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -28,23 +34,27 @@ export function BookingsCalendar() {
   const adjustedStartingDay = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
 
   // Filtrer les réservations du mois
-  const monthBookings = mockBookings.filter((booking) => {
-    const bookingDate = new Date(booking.date);
-    return (
-      bookingDate.getFullYear() === year &&
-      bookingDate.getMonth() === month
-    );
-  });
+  const monthBookings = useMemo(() => {
+    return bookings.filter((booking: any) => {
+      const bookingDate = new Date(booking.date || booking.booking_date);
+      return (
+        bookingDate.getFullYear() === year &&
+        bookingDate.getMonth() === month
+      );
+    });
+  }, [bookings, year, month]);
 
   // Grouper les réservations par jour
-  const bookingsByDay = monthBookings.reduce((acc, booking) => {
-    const day = new Date(booking.date).getDate();
-    if (!acc[day]) {
-      acc[day] = [];
-    }
-    acc[day].push(booking);
-    return acc;
-  }, {} as Record<number, typeof mockBookings>);
+  const bookingsByDay = useMemo(() => {
+    return monthBookings.reduce((acc, booking) => {
+      const day = new Date(booking.date || booking.booking_date).getDate();
+      if (!acc[day]) {
+        acc[day] = [];
+      }
+      acc[day].push(booking);
+      return acc;
+    }, {} as Record<number, any[]>);
+  }, [monthBookings]);
 
   const monthNames = [
     "Janvier",
@@ -83,6 +93,14 @@ export function BookingsCalendar() {
       year === today.getFullYear()
     );
   };
+
+  if (isLoadingBookings) {
+    return (
+      <div className="bg-card border border-border rounded-xl p-6 lg:p-8 flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-card border border-border rounded-xl p-6 lg:p-8">
@@ -170,13 +188,34 @@ export function BookingsCalendar() {
 
                 {/* Réservations */}
                 <div className="flex-1 overflow-hidden space-y-1">
-                  {dayBookings.slice(0, 2).map((booking) => {
+                  {dayBookings.slice(0, 2).map((booking: any) => {
                     const statusColors = {
                       pending: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400",
                       confirmed: "bg-green-500/20 text-green-700 dark:text-green-400",
+                      completed: "bg-blue-500/20 text-blue-700 dark:text-blue-400",
                       done: "bg-blue-500/20 text-blue-700 dark:text-blue-400",
                       cancelled: "bg-red-500/20 text-red-700 dark:text-red-400",
                     };
+
+                    // Mapper le statut
+                    let mappedStatus = booking.status;
+                    if (booking.status === "proposition_pending" || booking.status === "payment_pending") {
+                      mappedStatus = "pending";
+                    } else if (booking.status === "confirmed" || booking.status === "proposition_accepted") {
+                      mappedStatus = "confirmed";
+                    } else if (booking.status === "completed" || booking.status === "done") {
+                      mappedStatus = "completed";
+                    } else if (booking.status === "cancelled") {
+                      mappedStatus = "cancelled";
+                    }
+
+                    const timeSlot = booking.time
+                      ? booking.time.includes(":")
+                        ? booking.time
+                        : `${booking.time}h`
+                      : "Non spécifié";
+
+                    const cookName = booking.cook?.name || booking.cookName || "Cuisinier";
 
                     return (
                       <Link
@@ -184,12 +223,12 @@ export function BookingsCalendar() {
                         href={`/dashboard/client/bookings/${booking.id}`}
                         className={`
                           block text-xs px-1.5 py-0.5 rounded truncate
-                          ${statusColors[booking.status as keyof typeof statusColors] || statusColors.pending}
+                          ${statusColors[mappedStatus as keyof typeof statusColors] || statusColors.pending}
                           hover:opacity-80 transition-opacity
                         `}
-                        title={`${booking.cookName} - ${booking.time}`}
+                        title={`${cookName} - ${timeSlot}`}
                       >
-                        {booking.time}
+                        {timeSlot}
                       </Link>
                     );
                   })}
@@ -229,4 +268,3 @@ export function BookingsCalendar() {
     </div>
   );
 }
-

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RequestsList } from "@/components/dashboard/requests/RequestsList";
 import { CreateRequestModal } from "@/components/dashboard/requests/CreateRequestModal";
+import { useBookingStore } from "@/stores/bookingStore";
 
 type RequestTab = "pending" | "confirmed" | "completed";
 
@@ -16,11 +17,31 @@ type RequestTab = "pending" | "confirmed" | "completed";
 export default function RequestsPage() {
   const [activeTab, setActiveTab] = useState<RequestTab>("pending");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const { bookings, fetchBookings } = useBookingStore();
+  const [counts, setCounts] = useState({ pending: 0, confirmed: 0, completed: 0 });
+
+  useEffect(() => {
+    const loadCounts = async () => {
+      await fetchBookings({ limit: 1000 });
+    };
+    loadCounts();
+  }, [fetchBookings]);
+
+  useEffect(() => {
+    // Calculer les compteurs à partir des bookings
+    const pendingCount = bookings.filter(
+      (b) => b.status === "proposition_pending" || b.status === "payment_pending" || b.status === "pending"
+    ).length;
+    const confirmedCount = bookings.filter((b) => b.status === "confirmed").length;
+    const completedCount = bookings.filter((b) => b.status === "done" || b.status === "completed").length;
+
+    setCounts({ pending: pendingCount, confirmed: confirmedCount, completed: completedCount });
+  }, [bookings]);
 
   const tabs = [
-    { id: "pending" as RequestTab, label: "En attente de propositions", count: 3 },
-    { id: "confirmed" as RequestTab, label: "Confirmées", count: 2 },
-    { id: "completed" as RequestTab, label: "Terminées / Historiques", count: 5 },
+    { id: "pending" as RequestTab, label: "En attente de propositions", count: counts.pending },
+    { id: "confirmed" as RequestTab, label: "Confirmées", count: counts.confirmed },
+    { id: "completed" as RequestTab, label: "Terminées / Historiques", count: counts.completed },
   ];
 
   return (
@@ -92,4 +113,3 @@ export default function RequestsPage() {
     </div>
   );
 }
-

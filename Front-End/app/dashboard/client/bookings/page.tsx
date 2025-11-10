@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Calendar, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BookingsList } from "@/components/dashboard/bookings/BookingsList";
 import { BookingsCalendar } from "@/components/dashboard/bookings/BookingsCalendar";
+import { useBookingStore } from "@/stores/bookingStore";
 
 type BookingStatusFilter = "all" | "pending" | "confirmed" | "completed" | "cancelled";
 type ViewMode = "list" | "calendar";
@@ -17,13 +18,47 @@ type ViewMode = "list" | "calendar";
 export default function BookingsPage() {
   const [statusFilter, setStatusFilter] = useState<BookingStatusFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const { bookings, fetchBookings, isLoadingBookings } = useBookingStore();
+  const [counts, setCounts] = useState({
+    all: 0,
+    pending: 0,
+    confirmed: 0,
+    completed: 0,
+    cancelled: 0,
+  });
+
+  // Charger les bookings au montage
+  useEffect(() => {
+    fetchBookings({ limit: 1000 });
+  }, [fetchBookings]);
+
+  // Calculer les compteurs dynamiquement
+  useEffect(() => {
+    const allCount = bookings.length;
+    const pendingCount = bookings.filter(
+      (b) => b.status === "proposition_pending" || b.status === "payment_pending" || b.status === "pending"
+    ).length;
+    const confirmedCount = bookings.filter(
+      (b) => b.status === "confirmed" || b.status === "proposition_accepted"
+    ).length;
+    const completedCount = bookings.filter((b) => b.status === "completed" || b.status === "done").length;
+    const cancelledCount = bookings.filter((b) => b.status === "cancelled").length;
+
+    setCounts({
+      all: allCount,
+      pending: pendingCount,
+      confirmed: confirmedCount,
+      completed: completedCount,
+      cancelled: cancelledCount,
+    });
+  }, [bookings]);
 
   const statusFilters = [
-    { id: "all" as BookingStatusFilter, label: "Toutes", count: 12 },
-    { id: "pending" as BookingStatusFilter, label: "En attente", count: 2 },
-    { id: "confirmed" as BookingStatusFilter, label: "Confirmées", count: 5 },
-    { id: "completed" as BookingStatusFilter, label: "Terminées", count: 4 },
-    { id: "cancelled" as BookingStatusFilter, label: "Annulées", count: 1 },
+    { id: "all" as BookingStatusFilter, label: "Toutes", count: counts.all },
+    { id: "pending" as BookingStatusFilter, label: "En attente", count: counts.pending },
+    { id: "confirmed" as BookingStatusFilter, label: "Confirmées", count: counts.confirmed },
+    { id: "completed" as BookingStatusFilter, label: "Terminées", count: counts.completed },
+    { id: "cancelled" as BookingStatusFilter, label: "Annulées", count: counts.cancelled },
   ];
 
   return (
@@ -101,4 +136,3 @@ export default function BookingsPage() {
     </div>
   );
 }
-

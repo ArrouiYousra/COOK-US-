@@ -45,6 +45,7 @@ export function ClientReviewCard({ review }: ClientReviewCardProps) {
               alt={review.cookName}
               fill
               className="object-cover"
+              unoptimized
             />
           ) : (
             <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -132,6 +133,7 @@ export function ClientReviewCard({ review }: ClientReviewCardProps) {
                     alt={`Photo ${index + 1}`}
                     fill
                     className="object-cover"
+                    unoptimized
                   />
                 </div>
               ))}
@@ -147,4 +149,3 @@ export function ClientReviewCard({ review }: ClientReviewCardProps) {
     </motion.div>
   );
 }
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
@@ -14,62 +14,12 @@ import {
   Euro,
   MapPin,
   Hourglass,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { mockCooks } from "@/mockData";
-import type { ClientProposal } from "@/types";
+import { apiClient } from "@/lib/api/client";
 import { formatDate } from "@/lib/utils";
-
-// Mock data - À remplacer par les vraies données
-const mockProposals: ClientProposal[] = [
-  {
-    id: "prop-1",
-    cookId: mockCooks[0].id,
-    clientId: "client-123",
-    date: "2024-01-25",
-    timeSlot: "Dîner (19h-21h)",
-    numberOfGuests: 4,
-    budget: 200,
-    address: "123 Rue de la Paix, 75001 Paris",
-    description: "Dîner romantique pour 4 personnes, cuisine française",
-    status: "pending",
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "prop-2",
-    cookId: mockCooks[1].id,
-    clientId: "client-123",
-    date: "2024-01-28",
-    timeSlot: "Midi (12h-14h)",
-    numberOfGuests: 2,
-    budget: 150,
-    address: "45 Avenue des Champs, 75008 Paris",
-    description: "Brunch dominical pour 2 personnes",
-    status: "accepted",
-    acceptedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    bookingId: "booking-1",
-    conversationId: "conv-1",
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "prop-3",
-    cookId: mockCooks[2].id,
-    clientId: "client-123",
-    date: "2024-01-30",
-    timeSlot: "Dîner (19h-21h)",
-    numberOfGuests: 6,
-    budget: 300,
-    address: "78 Boulevard Saint-Germain, 75006 Paris",
-    description: "Repas de famille, cuisine italienne",
-    status: "rejected",
-    rejectedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
 
 /**
  * Page "Mes Propositions"
@@ -77,13 +27,155 @@ const mockProposals: ClientProposal[] = [
  */
 export default function ProposalsPage() {
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "accepted" | "rejected">("all");
+  const [enrichedProposals, setEnrichedProposals] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({ pending: 0, accepted: 0, rejected: 0 });
 
-  const filteredProposals = mockProposals.filter((proposal) => {
+  // Charger toutes les propositions au montage
+  useEffect(() => {
+    const loadProposals = async () => {
+      setIsLoading(true);
+      try {
+        // Charger toutes les propositions directement depuis l'API
+        const [pendingRes, acceptedRes, rejectedRes] = await Promise.allSettled([
+          apiClient.getMyProposals({ filter: "pending", limit: 100 }),
+          apiClient.getMyProposals({ filter: "accepted", limit: 100 }),
+          apiClient.getMyProposals({ filter: "rejected", limit: 100 }),
+        ]);
+
+        // Combiner toutes les propositions et calculer les stats
+        const allProposals: any[] = [];
+        let pendingCount = 0;
+        let acceptedCount = 0;
+        let rejectedCount = 0;
+
+        if (pendingRes.status === "fulfilled") {
+          const pending = pendingRes.value.bookings || [];
+          allProposals.push(...pending);
+          pendingCount = pending.length;
+        }
+        if (acceptedRes.status === "fulfilled") {
+          const accepted = acceptedRes.value.bookings || [];
+          allProposals.push(...accepted);
+          acceptedCount = accepted.length;
+        }
+        if (rejectedRes.status === "fulfilled") {
+          const rejected = rejectedRes.value.bookings || [];
+          allProposals.push(...rejected);
+          rejectedCount = rejected.length;
+        }
+
+        setStats({ pending: pendingCount, accepted: acceptedCount, rejected: rejectedCount });
+
+        // Récupérer tous les cookIds uniques pour charger les profils en une seule fois
+        const cookIds = new Set<string>();
+        allProposals.forEach((proposal) => {
+          const cookId = (proposal as any).cookId || (proposal as any).cook?.id;
+          if (cookId) cookIds.add(cookId);
+        });
+
+        // Charger tous les profils de cuisiniers en une seule fois
+        let cooksMap = new Map();
+        if (cookIds.size > 0) {
+          try {
+            const allCooks = await apiClient.getCookProfiles({ limit: 1000 });
+            allCooks.profiles.forEach((cook: any) => {
+              const id = cook.id || cook.user?.id;
+              if (id) cooksMap.set(id, cook);
+            });
+          } catch (error) {
+            console.warn("Impossible de charger les profils des cuisiniers:", error);
+          }
+        }
+
+        // Enrichir les propositions avec les données des cuisiniers
+        const enriched = allProposals.map((proposal) => {
+          try {
+            // Récupérer les infos du cuisinier si cookId est disponible
+            const cookId = (proposal as any).cookId || (proposal as any).cook?.id;
+            const cookData = cookId ? cooksMap.get(cookId) : null;
+
+              // Mapper le statut du booking au statut de proposition
+              let proposalStatus: "pending" | "accepted" | "rejected" = "pending";
+              if (proposal.status === "confirmed" || proposal.status === "proposition_accepted") {
+                proposalStatus = "accepted";
+              } else if (proposal.status === "cancelled" || (proposal as any).rejected) {
+                proposalStatus = "rejected";
+              } else if (
+                proposal.status === "proposition_pending" ||
+                proposal.status === "pending" ||
+                proposal.status === "payment_pending"
+              ) {
+                proposalStatus = "pending";
+              }
+
+              // Formater l'heure
+              const timeSlot = proposal.time
+                ? proposal.time.includes(":")
+                  ? proposal.time
+                  : `${proposal.time}h`
+                : "Non spécifié";
+
+              return {
+                id: proposal.id,
+                cookId: cookId || (proposal as any).cook?.id,
+                clientId: proposal.userId,
+                date: proposal.date,
+                timeSlot,
+                numberOfGuests: proposal.numberOfGuests,
+                budget: proposal.totalPrice,
+                address: (proposal as any).address || (proposal as any).location?.address || "Adresse non spécifiée",
+                description: proposal.specialRequests || (proposal as any).description || "Aucune description",
+                status: proposalStatus,
+                createdAt: proposal.createdAt,
+                updatedAt: proposal.updatedAt,
+                acceptedAt: proposalStatus === "accepted" ? (proposal as any).acceptedAt || proposal.updatedAt : undefined,
+                rejectedAt: proposalStatus === "rejected" ? (proposal as any).rejectedAt || proposal.updatedAt : undefined,
+                bookingId: proposalStatus === "accepted" ? proposal.id : undefined,
+                conversationId: (proposal as any).conversationId,
+                cook: cookData
+                  ? {
+                      id: cookData.id || cookData.user?.id,
+                      name: cookData.user?.first_name && cookData.user?.last_name
+                        ? `${cookData.user.first_name} ${cookData.user.last_name}`
+                        : cookData.user?.name || "Cuisinier",
+                      avatarUrl: cookData.user?.avatar_url,
+                      rating: cookData.average_rating || cookData.user?.rating,
+                    }
+                  : (proposal as any).cook || {
+                      id: cookId,
+                      name: "Cuisinier",
+                      avatarUrl: null,
+                      rating: null,
+                    },
+              };
+            } catch (error) {
+              console.error(`Erreur lors de l'enrichissement de la proposition ${proposal.id}:`, error);
+              return null;
+            }
+          })
+          .filter((p) => p !== null);
+
+        setEnrichedProposals(enriched);
+      } catch (error) {
+        console.error("Erreur lors du chargement des propositions:", error);
+        setEnrichedProposals([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProposals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Charger uniquement au montage
+
+  // Filtrer les propositions selon l'onglet actif
+  const filteredProposals = enrichedProposals.filter((proposal) => {
     if (activeTab === "all") return true;
     return proposal.status === activeTab;
   });
 
-  const getStatusConfig = (status: ClientProposal["status"]) => {
+  const getStatusConfig = (status: "pending" | "accepted" | "rejected") => {
     switch (status) {
       case "pending":
         return {
@@ -135,14 +227,46 @@ export default function ProposalsPage() {
       {/* Onglets */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
         <TabsList>
-          <TabsTrigger value="all">Toutes</TabsTrigger>
-          <TabsTrigger value="pending">En attente</TabsTrigger>
-          <TabsTrigger value="accepted">Acceptées</TabsTrigger>
-          <TabsTrigger value="rejected">Refusées</TabsTrigger>
+          <TabsTrigger value="all">
+            Toutes
+            {enrichedProposals.length > 0 && (
+              <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-muted text-muted-foreground">
+                {enrichedProposals.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="pending">
+            En attente
+            {stats.pending > 0 && (
+              <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-yellow-500/20 text-yellow-600 dark:text-yellow-400">
+                {stats.pending}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="accepted">
+            Acceptées
+            {stats.accepted > 0 && (
+              <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-green-500/20 text-green-600 dark:text-green-400">
+                {stats.accepted}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="rejected">
+            Refusées
+            {stats.rejected > 0 && (
+              <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-600 dark:text-red-400">
+                {stats.rejected}
+              </span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-6">
-          {filteredProposals.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 bg-card border border-border rounded-xl">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredProposals.length === 0 ? (
             <div className="text-center py-12 bg-card border border-border rounded-xl">
               <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">
@@ -152,7 +276,7 @@ export default function ProposalsPage() {
           ) : (
             <div className="space-y-4">
               {filteredProposals.map((proposal, index) => {
-                const cook = mockCooks.find((c) => c.id === proposal.cookId);
+                const cook = proposal.cook;
                 if (!cook) return null;
 
                 const statusConfig = getStatusConfig(proposal.status);
@@ -175,6 +299,7 @@ export default function ProposalsPage() {
                             alt={cook.name}
                             fill
                             className="object-cover"
+                            unoptimized
                           />
                         ) : (
                           <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -187,9 +312,16 @@ export default function ProposalsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between mb-3">
                           <div>
-                            <h3 className="font-cera text-xl font-bold text-foreground mb-1">
-                              {cook.name}
-                            </h3>
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-cera text-xl font-bold text-foreground">
+                                {cook.name}
+                              </h3>
+                              {cook.rating && (
+                                <span className="text-sm text-yellow-600 dark:text-yellow-400">
+                                  ⭐ {cook.rating.toFixed(1)}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-sm text-muted-foreground mb-2">
                               {proposal.description}
                             </p>
@@ -287,4 +419,3 @@ export default function ProposalsPage() {
     </div>
   );
 }
-

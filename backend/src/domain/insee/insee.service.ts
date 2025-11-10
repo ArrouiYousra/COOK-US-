@@ -1,12 +1,5 @@
 import { fetch } from 'undici';
 
-interface InseeTokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-  scope?: string;
-}
-
 interface InseeSiretResponse {
   etablissement?: {
     siret?: string;
@@ -77,94 +70,29 @@ export class InseeApiError extends Error {
   }
 }
 
-const INSEE_TOKEN_URL: string = process.env.INSEE_API_TOKEN_URL ?? 'https://api.insee.fr/token';
+// URL de base de l'API Sirene (version 3.11)
 const INSEE_BASE_URL: string =
-  process.env.INSEE_API_BASE_URL ?? 'https://api.insee.fr/entreprises/sirene/V3';
-const INSEE_CLIENT_ID: string | undefined = process.env.INSEE_API_KEY;
-const INSEE_CLIENT_SECRET: string | undefined = process.env.INSEE_API_SECRET;
-const INSEE_SCOPE: string | undefined = process.env.INSEE_API_SCOPE;
+  process.env.INSEE_API_BASE_URL ?? 'https://api.insee.fr/api-sirene/3.11';
+// Clé API pour l'authentification (mode public)
+const INSEE_API_KEY: string | undefined = process.env.INSEE_API_KEY;
 
 const SIRET_REGEX = /^[0-9]{14}$/;
 const SIREN_REGEX = /^[0-9]{9}$/;
 
-interface CachedToken {
-  token: string;
-  expiresAt: number;
-}
-
 /**
- * Service pour la validation des SIRET via l'API INSEE
+ * Service pour la validation des SIRET via l'API INSEE Sirene
+ * Utilise le mode "Public" avec API Key via le header X-INSEE-Api-Key-Integration
+ * 
+ * Documentation: https://api.insee.fr/catalogue/
  */
 export class InseeService {
-  private static cachedToken: CachedToken | null = null;
-
   private static ensureConfigured(): void {
-    if (!INSEE_CLIENT_ID) {
+    if (!INSEE_API_KEY) {
       throw new InseeApiError(
-        'INSEE API credentials are not configured. Please set INSEE_API_KEY.',
+        'INSEE API credentials are not configured. Please set INSEE_API_KEY in your .env file.',
         500
       );
     }
-  }
-
-  /**
-   * Obtient un token d'accès pour l'API INSEE
-   * Supporte deux modes :
-   * - OAuth 2.0 (si Client Secret fourni)
-   * - API Key directe (si pas de Client Secret)
-   */
-  private static async getAccessToken(): Promise<string> {
-    this.ensureConfigured();
-
-    // Mode API Key directe (plan "api key" sans OAuth)
-    if (!INSEE_CLIENT_SECRET || INSEE_CLIENT_SECRET.trim() === '') {
-      // Retourne directement l'API Key comme "token"
-      // Elle sera utilisée dans les headers Authorization
-      return INSEE_CLIENT_ID;
-    }
-
-    // Mode OAuth 2.0 (plan avec Client Secret)
-    const now = Date.now();
-    if (this.cachedToken && this.cachedToken.expiresAt > now + 60_000) {
-      return this.cachedToken.token;
-    }
-
-    const credentials = Buffer.from(`${INSEE_CLIENT_ID}:${INSEE_CLIENT_SECRET}`).toString('base64');
-    const body = new URLSearchParams({
-      grant_type: 'client_credentials',
-    });
-
-    if (INSEE_SCOPE && INSEE_SCOPE.trim().length > 0) {
-      body.append('scope', INSEE_SCOPE.trim());
-    }
-
-    const response = await fetch(INSEE_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-    });
-
-    if (!response.ok) {
-      const errorPayload = await response.text().catch(() => undefined);
-      throw new InseeApiError(
-        "Échec de l'authentification auprès de l'API INSEE",
-        response.status,
-        errorPayload
-      );
-    }
-
-    const data = (await response.json()) as InseeTokenResponse;
-    const expiresAt = now + data.expires_in * 1000;
-
-    this.cachedToken = {
-      token: data.access_token,
-      expiresAt,
-    };
-
-    return data.access_token;
   }
 
   private static buildAddress(payload?: InseeSiretResponse['etablissement']): string | undefined {
@@ -210,11 +138,13 @@ export class InseeService {
    * Chercher le SIRET principal (siège) à partir d'un SIREN
    */
   private static async findMainSiretFromSiren(siren: string): Promise<string> {
-    const token = await this.getAccessToken();
-    const response = await fetch(`${INSEE_BASE_URL}/siret?q=siren:${siren}`, {
+    this.ensureConfigured();
+    
+    // L'API Sirene utilise le header X-INSEE-Api-Key-Integration
+    const response = await fetch(`${INSEE_BASE_URL}/siren/${siren}`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'X-INSEE-Api-Key-Integration': INSEE_API_KEY!,
         Accept: 'application/json',
       },
     });
@@ -286,17 +216,57 @@ export class InseeService {
       );
     }
 
-    const token = await this.getAccessToken();
+    this.ensureConfigured();
+    
+    // Log pour debugging (en développement seulement)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[INSEE] Validating SIRET:', siretToValidate);
+      console.log('[INSEE] API Key configured:', INSEE_API_KEY ? 'Yes' : 'No');
+      console.log('[INSEE] API Key preview:', INSEE_API_KEY ? `${INSEE_API_KEY.substring(0, 10)}...` : 'N/A');
+      console.log('[INSEE] API URL:', `${INSEE_BASE_URL}/siret/${siretToValidate}`);
+    }
+    
+    // L'API Sirene utilise le header X-INSEE-Api-Key-Integration (pas Authorization)
     const response = await fetch(`${INSEE_BASE_URL}/siret/${siretToValidate}`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${token}`,
+        'X-INSEE-Api-Key-Integration': INSEE_API_KEY!,
         Accept: 'application/json',
       },
     });
 
+    // Log de la réponse complète en développement
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[INSEE] Response status:', response.status);
+      console.log('[INSEE] Response statusText:', response.statusText);
+      console.log('[INSEE] Response headers:', Object.fromEntries(response.headers.entries()));
+    }
+
     if (response.status === 404) {
-      throw new InseeApiError('Numéro SIRET introuvable dans la base INSEE', 400);
+      const errorBody = await response.text().catch(() => '');
+      console.error('[INSEE] 404 Error - SIRET not found:', siretToValidate);
+      console.error('[INSEE] Response body:', errorBody);
+      
+      // Essayer de parser le JSON si possible
+      let parsedError: any = null;
+      try {
+        parsedError = JSON.parse(errorBody);
+      } catch {
+        // Pas de JSON, on garde le texte brut
+      }
+      
+      throw new InseeApiError('Numéro SIRET introuvable dans la base INSEE', 400, {
+        siret: siretToValidate,
+        responseBody: errorBody,
+        parsedError,
+        possibleCauses: [
+          'Le SIRET n\'existe pas dans la base INSEE',
+          'Le SIRET correspond à un établissement fermé',
+          'Problème d\'authentification (vérifier INSEE_API_KEY)',
+          'Format du header X-INSEE-Api-Key-Integration incorrect',
+          'L\'établissement a une opposition à la diffusion',
+        ],
+      });
     }
 
     if (response.status === 429) {
@@ -305,6 +275,44 @@ export class InseeService {
 
     if (!response.ok) {
       const errorPayload = await response.text().catch(() => undefined);
+      
+      // Log détaillé en développement
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[INSEE] Request failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          url: `${INSEE_BASE_URL}/siret/${siretToValidate}`,
+          apiKeyUsed: INSEE_API_KEY ? `${INSEE_API_KEY.substring(0, 10)}...` : 'N/A',
+          errorPayload,
+        });
+      }
+      
+      // Si c'est une erreur 401, c'est probablement un problème d'authentification
+      if (response.status === 401) {
+        throw new InseeApiError(
+          "Erreur d'authentification auprès de l'API INSEE. Vérifiez votre clé API (INSEE_API_KEY).",
+          response.status,
+          {
+            errorPayload,
+            troubleshooting: [
+              'Vérifiez que INSEE_API_KEY est correctement configuré dans votre .env',
+              'Vérifiez que la clé API n\'est pas expirée ou révoquée',
+              'Vérifiez que vous avez bien souscrit au plan "Public" sur https://api.insee.fr/catalogue/',
+              'Vérifiez le format du header X-INSEE-Api-Key-Integration',
+            ],
+          }
+        );
+      }
+      
+      // Si c'est une erreur 403, problème de permissions
+      if (response.status === 403) {
+        throw new InseeApiError(
+          "Accès refusé par l'API INSEE. Vérifiez les permissions de votre clé API.",
+          response.status,
+          errorPayload
+        );
+      }
+      
       throw new InseeApiError(
         "Échec de la validation du SIRET auprès de l'API INSEE",
         response.status,
@@ -346,5 +354,3 @@ export class InseeService {
     };
   }
 }
-
-

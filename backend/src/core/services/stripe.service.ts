@@ -182,5 +182,108 @@ export class StripeService {
   static calculateCookEarnings(totalAmount: number, platformFee: number): number {
     return Math.round((totalAmount - platformFee) * 100) / 100; // Round to 2 decimals
   }
-}
 
+  /**
+   * Create or retrieve a Stripe Customer for a user
+   */
+  static async getOrCreateCustomer(
+    userId: string,
+    email: string,
+    name?: string
+  ): Promise<string> {
+    const stripe = getStripe();
+
+    // Create a new customer (in production, check database first for existing customer ID)
+    const customer = await stripe.customers.create({
+      email,
+      name,
+      metadata: {
+        userId,
+      },
+    });
+
+    return customer.id;
+  }
+
+  /**
+   * Create a Setup Intent for adding a payment method
+   */
+  static async createSetupIntent(customerId: string): Promise<{
+    clientSecret: string;
+    setupIntentId: string;
+  }> {
+    const stripe = getStripe();
+
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+    });
+
+    return {
+      clientSecret: setupIntent.client_secret!,
+      setupIntentId: setupIntent.id,
+    };
+  }
+
+  /**
+   * Attach a payment method to a customer
+   */
+  static async attachPaymentMethod(
+    paymentMethodId: string,
+    customerId: string
+  ): Promise<void> {
+    const stripe = getStripe();
+
+    await stripe.paymentMethods.attach(paymentMethodId, {
+      customer: customerId,
+    });
+  }
+
+  /**
+   * Detach a payment method from a customer
+   */
+  static async detachPaymentMethod(paymentMethodId: string): Promise<void> {
+    const stripe = getStripe();
+
+    await stripe.paymentMethods.detach(paymentMethodId);
+  }
+
+  /**
+   * Set default payment method for a customer
+   */
+  static async setDefaultPaymentMethod(
+    customerId: string,
+    paymentMethodId: string
+  ): Promise<void> {
+    const stripe = getStripe();
+
+    await stripe.customers.update(customerId, {
+      invoice_settings: {
+        default_payment_method: paymentMethodId,
+      },
+    });
+  }
+
+  /**
+   * Get payment method details
+   */
+  static async getPaymentMethod(paymentMethodId: string): Promise<Stripe.PaymentMethod> {
+    const stripe = getStripe();
+
+    return await stripe.paymentMethods.retrieve(paymentMethodId);
+  }
+
+  /**
+   * List all payment methods for a customer
+   */
+  static async listPaymentMethods(customerId: string): Promise<Stripe.PaymentMethod[]> {
+    const stripe = getStripe();
+
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: customerId,
+      type: 'card',
+    });
+
+    return paymentMethods.data;
+  }
+}

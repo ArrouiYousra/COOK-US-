@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { mockCooks } from "@/mockData";
+import { apiClient } from "@/lib/api/client";
 
 interface SearchResult {
   id: string;
@@ -60,30 +60,55 @@ export function GlobalSearch() {
     setIsLoading(true);
     setIsOpen(true);
 
-    // Simuler un délai de recherche
-    const timeoutId = setTimeout(() => {
+    // Recherche avec l'API
+    const timeoutId = setTimeout(async () => {
       const query = searchQuery.toLowerCase().trim();
       const foundResults: SearchResult[] = [];
 
-      // Recherche dans les cuisiniers
-      mockCooks
-        .filter(
-          (cook) =>
-            cook.name.toLowerCase().includes(query) ||
-            cook.specialties.some((s) => s.toLowerCase().includes(query)) ||
-            cook.location.toLowerCase().includes(query)
-        )
-        .slice(0, 3)
-        .forEach((cook) => {
-          foundResults.push({
-            id: cook.id,
-            type: "cook",
-            title: cook.name,
-            subtitle: cook.specialties.join(", "),
-            href: `/dashboard/client/cooks/${cook.id}`,
-            icon: ChefHat,
-          });
+      try {
+        // Recherche dans les cuisiniers via l'API
+        const response = await apiClient.getCookProfiles({
+          limit: 20, // Récupérer plus de résultats pour filtrer côté client
         });
+
+        if (response.profiles && Array.isArray(response.profiles)) {
+          // Filtrer les résultats côté client selon la requête
+          const filteredCooks = response.profiles.filter((cook: any) => {
+            if (!cook.user) return false;
+            const cookName = `${cook.user.first_name || ""} ${cook.user.last_name || ""}`.toLowerCase().trim();
+            const location = (cook.user.city || "").toLowerCase();
+            const headline = (cook.headline || "").toLowerCase();
+            const specialties = (cook.specialties || []).map((s: string) => s.toLowerCase());
+            
+            return (
+              cookName.includes(query) ||
+              location.includes(query) ||
+              headline.includes(query) ||
+              specialties.some((s: string) => s.includes(query))
+            );
+          }).slice(0, 5); // Limiter à 5 résultats
+
+          filteredCooks.forEach((cook: any) => {
+            const cookName = `${cook.user.first_name || ""} ${cook.user.last_name || ""}`.trim();
+            const specialties = cook.specialties || [];
+            const location = cook.user.city || "";
+
+            foundResults.push({
+              id: cook.id,
+              type: "cook",
+              title: cookName || "Cuisinier",
+              subtitle: specialties.length > 0 
+                ? `${specialties.join(", ")}${location ? ` • ${location}` : ""}`
+                : location || "",
+              href: `/dashboard/client/cooks/${cook.id}`,
+              icon: ChefHat,
+            });
+          });
+        }
+      } catch (error) {
+        console.error("Erreur lors de la recherche de cuisiniers:", error);
+        // En cas d'erreur, on continue sans résultats pour cette catégorie
+      }
 
       // TODO: Recherche dans les demandes (à implémenter avec l'API)
       // TODO: Recherche dans les messages (à implémenter avec l'API)

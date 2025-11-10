@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Bell, Mail, Smartphone, MessageSquare } from "lucide-react";
+import { Bell, Mail, Smartphone, MessageSquare, Loader2, CheckCircle2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { apiClient } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/authStore";
+// Toast notifications - utiliser alert pour l'instant
 
 interface NotificationPreferences {
   email: {
@@ -36,6 +40,11 @@ interface NotificationPreferences {
  * Gestion des préférences de notifications (mail, app, SMS)
  */
 export function NotificationsTab() {
+  const router = useRouter();
+  const { user, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     email: {
       bookings: true,
@@ -61,7 +70,75 @@ export function NotificationsTab() {
     },
   });
 
-  const updatePreference = (
+  // Vérifier l'authentification au montage
+  useEffect(() => {
+    const verifyAuth = async () => {
+      if (!isAuthenticated && !isAuthLoading) {
+        try {
+          await checkAuth();
+        } catch (error) {
+          console.warn("Authentification échouée, redirection vers la page de connexion");
+          router.push("/auth/login");
+        }
+      }
+    };
+
+    if (!isAuthLoading) {
+      verifyAuth();
+    }
+  }, [isAuthenticated, checkAuth, router, isAuthLoading]);
+
+  // Charger les préférences depuis le profil
+  useEffect(() => {
+    const loadPreferences = async () => {
+      if (isAuthLoading) return;
+      if (!isAuthenticated || !user) return;
+
+      setIsLoading(true);
+      try {
+        // Charger les préférences détaillées depuis l'API
+        const detailedPrefs = await apiClient.getNotificationPreferences();
+        const prefs = detailedPrefs.preferences;
+
+        // Mapper les préférences détaillées vers l'interface locale
+        setPreferences((prev) => ({
+          ...prev,
+          email: {
+            bookings: prefs.booking_request?.email || prefs.booking_confirmed?.email || false,
+            messages: prefs.message_received?.email || false,
+            reviews: prefs.review_received?.email || false,
+            promotions: false, // Pas de préférence détaillée pour les promotions
+          },
+          app: {
+            bookings: prefs.booking_request?.push || prefs.booking_confirmed?.push || false,
+            messages: prefs.message_received?.push || false,
+            reviews: prefs.review_received?.push || false,
+            promotions: false,
+          },
+          sms: {
+            bookings: prefs.booking_confirmed?.sms || false,
+            urgent: prefs.booking_reminder?.sms || false,
+          },
+        }));
+      } catch (error: any) {
+        console.error("Erreur lors du chargement des préférences:", error);
+        
+        // Si l'erreur est 401, rediriger vers la connexion
+        if (error.response?.status === 401 || error.message?.includes("Jeton d'authentification manquant")) {
+          router.push("/auth/login");
+          return;
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (isAuthenticated && user && !isAuthLoading) {
+      loadPreferences();
+    }
+  }, [user, isAuthenticated, isAuthLoading, router]);
+
+  const updatePreference = async (
     category: keyof NotificationPreferences,
     key: string,
     value: boolean
@@ -73,9 +150,81 @@ export function NotificationsTab() {
         [key]: value,
       },
     }));
-    // TODO: Appel API pour sauvegarder les préférences
-    // await apiClient.updateNotificationPreferences(preferences);
+
+    // Mapper les préférences locales vers les préférences détaillées de l'API
+    try {
+      const updateData: any = {};
+
+      // Mapper les préférences email
+      if (category === "email") {
+        if (key === "bookings") {
+          updateData.booking_request = { email: value, sms: false, push: preferences.app.bookings };
+          updateData.booking_confirmed = { email: value, sms: preferences.sms.bookings, push: preferences.app.bookings };
+        } else if (key === "messages") {
+          updateData.message_received = { email: value, sms: false, push: preferences.app.messages };
+        } else if (key === "reviews") {
+          updateData.review_received = { email: value, sms: false, push: preferences.app.reviews };
+        }
+      }
+
+      // Mapper les préférences app (push)
+      if (category === "app") {
+        if (key === "bookings") {
+          updateData.booking_request = { email: preferences.email.bookings, sms: false, push: value };
+          updateData.booking_confirmed = { email: preferences.email.bookings, sms: preferences.sms.bookings, push: value };
+        } else if (key === "messages") {
+          updateData.message_received = { email: preferences.email.messages, sms: false, push: value };
+        } else if (key === "reviews") {
+          updateData.review_received = { email: preferences.email.reviews, sms: false, push: value };
+        }
+      }
+
+      // Mapper les préférences SMS
+      if (category === "sms") {
+        if (key === "bookings") {
+          updateData.booking_confirmed = { email: preferences.email.bookings, sms: value, push: preferences.app.bookings };
+        } else if (key === "urgent") {
+          updateData.booking_reminder = { email: true, sms: value, push: true };
+        }
+      }
+
+      // Sauvegarder les préférences détaillées
+      await apiClient.updateNotificationPreferences(updateData);
+
+      // Mettre à jour les préférences globales
+      const notificationsEnabled = value || 
+        preferences.email.bookings || preferences.email.messages || preferences.email.reviews ||
+        preferences.app.bookings || preferences.app.messages || preferences.app.reviews;
+
+      await apiClient.updateMyProfile({
+        notifications_enabled: notificationsEnabled,
+        email_notifications: category === "email" ? value : (preferences.email.bookings || preferences.email.messages || preferences.email.reviews),
+        sms_notifications: category === "sms" ? value : (preferences.sms.bookings || preferences.sms.urgent),
+      });
+
+      setSuccessMessage("Préférences mises à jour !");
+      setTimeout(() => setSuccessMessage(null), 2000);
+    } catch (error: any) {
+      console.error("Erreur lors de la sauvegarde des préférences:", error);
+      alert("Erreur: Impossible de sauvegarder les préférences");
+      // Revert the change
+      setPreferences((prev) => ({
+        ...prev,
+        [category]: {
+          ...prev[category],
+          [key]: !value,
+        },
+      }));
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -83,13 +232,18 @@ export function NotificationsTab() {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-6"
     >
+      {successMessage && (
+        <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center gap-2">
+          <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
+          <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
+        </div>
+      )}
+
       {/* Notifications par email */}
       <div className="bg-card border border-border rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-2 mb-4">
           <Mail className="w-5 h-5 text-muted-foreground" />
-          <h3 className="font-cera text-xl font-bold text-foreground">
-            Notifications par email
-          </h3>
+          <h3 className="font-cera text-xl font-bold text-foreground">Notifications par email</h3>
         </div>
 
         <div className="space-y-4">
@@ -105,9 +259,7 @@ export function NotificationsTab() {
             <Switch
               id="email-bookings"
               checked={preferences.email.bookings}
-              onCheckedChange={(checked) =>
-                updatePreference("email", "bookings", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("email", "bookings", checked)}
             />
           </div>
 
@@ -123,9 +275,7 @@ export function NotificationsTab() {
             <Switch
               id="email-messages"
               checked={preferences.email.messages}
-              onCheckedChange={(checked) =>
-                updatePreference("email", "messages", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("email", "messages", checked)}
             />
           </div>
 
@@ -141,9 +291,7 @@ export function NotificationsTab() {
             <Switch
               id="email-reviews"
               checked={preferences.email.reviews}
-              onCheckedChange={(checked) =>
-                updatePreference("email", "reviews", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("email", "reviews", checked)}
             />
           </div>
 
@@ -159,9 +307,7 @@ export function NotificationsTab() {
             <Switch
               id="email-promotions"
               checked={preferences.email.promotions}
-              onCheckedChange={(checked) =>
-                updatePreference("email", "promotions", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("email", "promotions", checked)}
             />
           </div>
         </div>
@@ -189,9 +335,7 @@ export function NotificationsTab() {
             <Switch
               id="app-bookings"
               checked={preferences.app.bookings}
-              onCheckedChange={(checked) =>
-                updatePreference("app", "bookings", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("app", "bookings", checked)}
             />
           </div>
 
@@ -207,9 +351,7 @@ export function NotificationsTab() {
             <Switch
               id="app-messages"
               checked={preferences.app.messages}
-              onCheckedChange={(checked) =>
-                updatePreference("app", "messages", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("app", "messages", checked)}
             />
           </div>
 
@@ -225,9 +367,7 @@ export function NotificationsTab() {
             <Switch
               id="app-reviews"
               checked={preferences.app.reviews}
-              onCheckedChange={(checked) =>
-                updatePreference("app", "reviews", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("app", "reviews", checked)}
             />
           </div>
 
@@ -243,9 +383,7 @@ export function NotificationsTab() {
             <Switch
               id="app-promotions"
               checked={preferences.app.promotions}
-              onCheckedChange={(checked) =>
-                updatePreference("app", "promotions", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("app", "promotions", checked)}
             />
           </div>
         </div>
@@ -255,15 +393,13 @@ export function NotificationsTab() {
       <div className="bg-card border border-border rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-2 mb-4">
           <MessageSquare className="w-5 h-5 text-muted-foreground" />
-          <h3 className="font-cera text-xl font-bold text-foreground">
-            Notifications par SMS
-          </h3>
+          <h3 className="font-cera text-xl font-bold text-foreground">Notifications par SMS</h3>
         </div>
 
         <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 mb-4">
           <p className="text-sm text-blue-600 dark:text-blue-400">
-            Les notifications SMS sont disponibles uniquement pour les
-            événements importants et urgents.
+            Les notifications SMS sont disponibles uniquement pour les événements importants et
+            urgents.
           </p>
         </div>
 
@@ -280,9 +416,7 @@ export function NotificationsTab() {
             <Switch
               id="sms-bookings"
               checked={preferences.sms.bookings}
-              onCheckedChange={(checked) =>
-                updatePreference("sms", "bookings", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("sms", "bookings", checked)}
             />
           </div>
 
@@ -298,9 +432,7 @@ export function NotificationsTab() {
             <Switch
               id="sms-urgent"
               checked={preferences.sms.urgent}
-              onCheckedChange={(checked) =>
-                updatePreference("sms", "urgent", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("sms", "urgent", checked)}
             />
           </div>
         </div>
@@ -310,9 +442,7 @@ export function NotificationsTab() {
       <div className="bg-card border border-border rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-2 mb-4">
           <Bell className="w-5 h-5 text-muted-foreground" />
-          <h3 className="font-cera text-xl font-bold text-foreground">
-            Rappels automatiques
-          </h3>
+          <h3 className="font-cera text-xl font-bold text-foreground">Rappels automatiques</h3>
         </div>
 
         <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20 mb-4">
@@ -334,9 +464,7 @@ export function NotificationsTab() {
             <Switch
               id="reminders-enabled"
               checked={preferences.reminders.enabled}
-              onCheckedChange={(checked) =>
-                updatePreference("reminders", "enabled", checked)
-              }
+              onCheckedChange={(checked) => updatePreference("reminders", "enabled", checked)}
             />
           </div>
 
@@ -354,9 +482,7 @@ export function NotificationsTab() {
                 <Switch
                   id="reminders-24h"
                   checked={preferences.reminders.hours24}
-                  onCheckedChange={(checked) =>
-                    updatePreference("reminders", "hours24", checked)
-                  }
+                  onCheckedChange={(checked) => updatePreference("reminders", "hours24", checked)}
                 />
               </div>
 
@@ -372,9 +498,7 @@ export function NotificationsTab() {
                 <Switch
                   id="reminders-1h"
                   checked={preferences.reminders.hours1}
-                  onCheckedChange={(checked) =>
-                    updatePreference("reminders", "hours1", checked)
-                  }
+                  onCheckedChange={(checked) => updatePreference("reminders", "hours1", checked)}
                 />
               </div>
 
@@ -438,4 +562,3 @@ export function NotificationsTab() {
     </motion.div>
   );
 }
-

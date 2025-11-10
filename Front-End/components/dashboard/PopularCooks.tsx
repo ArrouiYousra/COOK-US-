@@ -33,6 +33,7 @@ export function PopularCooks() {
   useEffect(() => {
     const loadPopularCooks = async () => {
       try {
+        setIsLoading(true);
         // Récupérer les cuisiniers actifs, triés par note moyenne (les plus populaires)
         const response = await apiClient.getCookProfiles({
           status: "ACTIVE",
@@ -40,9 +41,13 @@ export function PopularCooks() {
           limit: 3,
           offset: 0,
         });
-        setPopularCooks(response.profiles);
-      } catch (error) {
+        
+        // Filtrer les profils qui ont bien un utilisateur (sécurité supplémentaire)
+        const validCooks = response.profiles.filter((cook) => cook.user);
+        setPopularCooks(validCooks);
+      } catch (error: any) {
         console.error("Erreur lors du chargement des cuisiniers populaires:", error);
+        // Ne pas afficher d'erreur à l'utilisateur, juste un tableau vide
         setPopularCooks([]);
       } finally {
         setIsLoading(false);

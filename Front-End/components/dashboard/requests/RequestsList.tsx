@@ -1,73 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Calendar, Clock, Users, Euro, MapPin, Eye, Edit, Trash2, Copy } from "lucide-react";
+import { Calendar, Clock, Users, Euro, MapPin, Eye, Edit, Trash2, Copy, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { PropositionsModal } from "./PropositionsModal";
 import { EditRequestModal } from "./EditRequestModal";
 import { DeleteRequestDialog } from "./DeleteRequestDialog";
-
-// Mock data - À remplacer par les vraies données
-const mockRequests = {
-  pending: [
-    {
-      id: "1",
-      title: "Dîner romantique pour 2",
-      description: "Cuisine française, menu surprise",
-      date: "2024-01-20",
-      timeSlot: "Dîner (19h-21h)",
-      guestCount: 2,
-      budget: 150,
-      address: "123 Rue de la Paix, 75001 Paris",
-      status: "pending",
-      proposalCount: 3,
-    },
-    {
-      id: "2",
-      title: "Brunch dominical",
-      description: "Pancakes, œufs bénédictine, fruits frais",
-      date: "2024-01-21",
-      timeSlot: "Midi (12h-14h)",
-      guestCount: 4,
-      budget: 200,
-      address: "45 Avenue des Champs, 75008 Paris",
-      status: "pending",
-      proposalCount: 1,
-    },
-  ],
-  confirmed: [
-    {
-      id: "3",
-      title: "Repas de famille",
-      description: "Cuisine italienne traditionnelle",
-      date: "2024-01-15",
-      timeSlot: "Dîner (19h-21h)",
-      guestCount: 6,
-      budget: 300,
-      address: "78 Boulevard Saint-Germain, 75006 Paris",
-      status: "confirmed",
-      cookName: "Sophie Dubois",
-      cookRating: 4.8,
-    },
-  ],
-  completed: [
-    {
-      id: "4",
-      title: "Anniversaire surprise",
-      description: "Menu gastronomique 5 services",
-      date: "2024-01-10",
-      timeSlot: "Dîner (19h-21h)",
-      guestCount: 8,
-      budget: 500,
-      address: "12 Rue de Rivoli, 75004 Paris",
-      status: "completed",
-      cookName: "Marie Martin",
-      cookRating: 4.9,
-    },
-  ],
-};
+import { useBookingStore } from "@/stores/bookingStore";
+import { apiClient } from "@/lib/api/client";
 
 interface RequestsListProps {
   status: "pending" | "confirmed" | "completed";
@@ -78,7 +20,147 @@ interface RequestsListProps {
  * Affiche les demandes selon leur statut
  */
 export function RequestsList({ status }: RequestsListProps) {
-  const requests = mockRequests[status] || [];
+  const { bookings, proposals, fetchBookings, fetchProposals, isLoadingBookings, isLoadingProposals } = useBookingStore();
+  const [isLoading, setIsLoading] = useState(true);
+  const [requests, setRequests] = useState<any[]>([]);
+  
+  // Fonction pour recharger les données
+  const reloadData = async () => {
+    await Promise.all([
+      fetchBookings({ limit: 100 }),
+      fetchProposals({ filter: "pending", limit: 100 }),
+    ]);
+  };
+
+  useEffect(() => {
+    const loadRequests = async () => {
+      setIsLoading(true);
+      try {
+        // Charger les bookings et propositions en parallèle
+        await Promise.all([
+          fetchBookings({ limit: 100 }),
+          fetchProposals({ filter: "pending", limit: 100 }),
+        ]);
+
+        // Transformer les données selon le statut demandé
+        let filteredRequests: any[] = [];
+
+        if (status === "pending") {
+          // Bookings en attente (proposition_pending, payment_pending) + propositions en attente
+          const pendingBookings = bookings.filter(
+            (b) => b.status === "proposition_pending" || b.status === "payment_pending" || b.status === "pending"
+          );
+          
+          // Transformer les bookings en format request
+          filteredRequests = pendingBookings.map((booking) => {
+            // Compter les propositions pour ce booking
+            const proposalCount = proposals.filter((p) => p.id === booking.id || p.requestId === booking.id).length;
+            
+            // Formater l'heure si disponible
+            const timeSlot = booking.time 
+              ? booking.time.includes(":") 
+                ? booking.time 
+                : `${booking.time}h`
+              : "Non spécifié";
+            
+            return {
+              id: booking.id,
+              title: (booking as any).title || booking.specialRequests || "Demande de repas",
+              description: booking.specialRequests || (booking as any).description || "Aucune description",
+              date: booking.date,
+              timeSlot,
+              guestCount: booking.numberOfGuests,
+              budget: booking.totalPrice,
+              address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+              status: "pending",
+              proposalCount,
+            };
+          });
+        } else if (status === "confirmed") {
+          // Bookings confirmés
+          const confirmedBookings = bookings.filter((b) => b.status === "confirmed");
+          
+          filteredRequests = confirmedBookings.map((booking) => {
+            // Récupérer les infos du cuisinier si disponibles
+            const cook = (booking as any).cook || {};
+            const cookName = cook.first_name && cook.last_name 
+              ? `${cook.first_name} ${cook.last_name}` 
+              : cook.name || (booking as any).cookName || "Cuisinier";
+            const cookRating = cook.average_rating || cook.rating || (booking as any).cookRating;
+            
+            const timeSlot = booking.time 
+              ? booking.time.includes(":") 
+                ? booking.time 
+                : `${booking.time}h`
+              : "Non spécifié";
+            
+            return {
+              id: booking.id,
+              title: (booking as any).title || booking.specialRequests || "Repas confirmé",
+              description: booking.specialRequests || (booking as any).description || "Aucune description",
+              date: booking.date,
+              timeSlot,
+              guestCount: booking.numberOfGuests,
+              budget: booking.totalPrice,
+              address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+              status: "confirmed",
+              cookName,
+              cookRating,
+            };
+          });
+        } else if (status === "completed") {
+          // Bookings terminés
+          const completedBookings = bookings.filter((b) => b.status === "done" || b.status === "completed");
+          
+          filteredRequests = completedBookings.map((booking) => {
+            const cook = (booking as any).cook || {};
+            const cookName = cook.first_name && cook.last_name 
+              ? `${cook.first_name} ${cook.last_name}` 
+              : cook.name || (booking as any).cookName || "Cuisinier";
+            const cookRating = cook.average_rating || cook.rating || (booking as any).cookRating;
+            
+            const timeSlot = booking.time 
+              ? booking.time.includes(":") 
+                ? booking.time 
+                : `${booking.time}h`
+              : "Non spécifié";
+            
+            return {
+              id: booking.id,
+              title: (booking as any).title || booking.specialRequests || "Repas terminé",
+              description: booking.specialRequests || (booking as any).description || "Aucune description",
+              date: booking.date,
+              timeSlot,
+              guestCount: booking.numberOfGuests,
+              budget: booking.totalPrice,
+              address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+              status: "completed",
+              cookName,
+              cookRating,
+            };
+          });
+        }
+
+        setRequests(filteredRequests);
+      } catch (error) {
+        console.error("Erreur lors du chargement des demandes:", error);
+        setRequests([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]); // Recharger uniquement quand le statut change
+
+  if (isLoading || isLoadingBookings || isLoadingProposals) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (requests.length === 0) {
     return (
@@ -287,13 +369,18 @@ function RequestCard({ request, index }: RequestCardProps) {
         onClose={() => setShowDeleteDialog(false)}
         onConfirm={async () => {
           setIsDeleting(true);
-          // TODO: Appel API pour supprimer la demande
-          // await deleteRequest(request.id);
-          console.log("Suppression de la demande:", request.id);
-          setTimeout(() => {
+          try {
+            // Annuler la réservation via l'API
+            await apiClient.cancelBooking(request.id, "CLIENT_REQUEST", "Demande annulée par le client");
+            // Recharger les données
+            await reloadData();
+          } catch (error) {
+            console.error("Erreur lors de l'annulation de la demande:", error);
+            alert("Erreur lors de l'annulation de la demande. Veuillez réessayer.");
+          } finally {
             setIsDeleting(false);
             setShowDeleteDialog(false);
-          }, 1000);
+          }
         }}
         requestTitle={request.title}
         hasProposals={request.proposalCount ? request.proposalCount > 0 : false}
@@ -303,4 +390,3 @@ function RequestCard({ request, index }: RequestCardProps) {
     </>
   );
 }
-

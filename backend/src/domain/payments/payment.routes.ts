@@ -5,6 +5,13 @@ import {
   createRefund,
   getRefund,
 } from './payment.controllers';
+import {
+  getMyPaymentMethods,
+  createSetupIntent,
+  confirmPaymentMethod,
+  setDefaultPaymentMethod,
+  deletePaymentMethod,
+} from './payment-method.controllers';
 import { handleStripeWebhook } from './payment.webhook';
 import { authGuard } from '@core/middleware';
 
@@ -152,5 +159,11 @@ router.get('/refund/:refundId', authGuard, getRefund);
  */
 router.post('/webhook', handleStripeWebhook);
 
-export default router;
+// Payment Methods routes
+router.get('/methods', authGuard, getMyPaymentMethods);
+router.post('/methods/setup-intent', authGuard, createSetupIntent);
+router.post('/methods/confirm', authGuard, confirmPaymentMethod);
+router.put('/methods/:paymentMethodId/default', authGuard, setDefaultPaymentMethod);
+router.delete('/methods/:paymentMethodId', authGuard, deletePaymentMethod);
 
+export default router;

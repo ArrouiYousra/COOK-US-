@@ -5,8 +5,8 @@ import type { Notification, NotificationType } from "@/types/notifications";
 
 interface NotificationStore extends NotificationState {
   addNotification: (notification: Notification) => void;
-  markAsRead: (notificationId: string) => void;
-  markAllAsRead: () => void;
+  markAsRead: (notificationId: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
   removeNotification: (notificationId: string) => void;
   clearAll: () => void;
   setNotifications: (notifications: Notification[]) => void;
@@ -31,7 +31,8 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
     }));
   },
 
-  markAsRead: (notificationId) => {
+  markAsRead: async (notificationId) => {
+    // Mise à jour optimiste de l'UI
     set((state) => {
       const updated = state.notifications.map((notif) =>
         notif.id === notificationId && !notif.isRead
@@ -43,11 +44,30 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
         unreadCount: Math.max(0, state.unreadCount - 1),
       };
     });
-    // TODO: Appel API pour marquer comme lu
-    // await apiClient.markNotificationAsRead(notificationId);
+
+    // Appel API pour marquer comme lu
+    try {
+      const { apiClient } = await import("@/lib/api/client");
+      await apiClient.markNotificationAsRead(notificationId);
+    } catch (error) {
+      console.error("Erreur lors du marquage de la notification comme lue:", error);
+      // En cas d'erreur, on revert l'état optimiste
+      set((state) => {
+        const updated = state.notifications.map((notif) =>
+          notif.id === notificationId
+            ? { ...notif, isRead: false, readAt: undefined }
+            : notif
+        );
+        return {
+          notifications: updated,
+          unreadCount: state.unreadCount + 1,
+        };
+      });
+    }
   },
 
-  markAllAsRead: () => {
+  markAllAsRead: async () => {
+    // Mise à jour optimiste de l'UI
     set((state) => ({
       notifications: state.notifications.map((notif) =>
         !notif.isRead
@@ -56,8 +76,26 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
       ),
       unreadCount: 0,
     }));
-    // TODO: Appel API pour marquer toutes comme lues
-    // await apiClient.markAllNotificationsAsRead();
+
+    // Appel API pour marquer toutes comme lues
+    try {
+      const { apiClient } = await import("@/lib/api/client");
+      await apiClient.markAllNotificationsAsRead();
+    } catch (error) {
+      console.error("Erreur lors du marquage de toutes les notifications comme lues:", error);
+      // En cas d'erreur, on revert l'état optimiste
+      set((state) => {
+        const unreadCount = state.notifications.filter((n) => !n.isRead).length;
+        return {
+          notifications: state.notifications.map((notif) =>
+            notif.isRead && !notif.readAt
+              ? { ...notif, isRead: false, readAt: undefined }
+              : notif
+          ),
+          unreadCount,
+        };
+      });
+    }
   },
 
   removeNotification: (notificationId) => {
@@ -111,4 +149,3 @@ export function createMockNotification(
     createdAt: new Date().toISOString(),
   };
 }
-

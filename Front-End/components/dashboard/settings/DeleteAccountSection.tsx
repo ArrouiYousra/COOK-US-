@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Trash2 } from "lucide-react";
+import { AlertTriangle, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "next/navigation";
+import { apiClient } from "@/lib/api/client";
+// Toast notifications - utiliser alert pour l'instant
 
 /**
  * Section "Supprimer mon compte"
@@ -26,21 +28,28 @@ export function DeleteAccountSection() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [password, setPassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
   const confirmationText = "SUPPRIMER";
-  const isConfirmed = confirmText === confirmationText;
+  const isConfirmed = confirmText === confirmationText && password.length > 0;
 
   const handleDeleteAccount = async () => {
     if (!isConfirmed) return;
 
     setIsDeleting(true);
-    // TODO: Appel API pour supprimer le compte
-    // await apiClient.deleteAccount();
-    setTimeout(async () => {
+
+    try {
+      await apiClient.deleteAccount(password);
+
+      // Déconnexion et redirection
       await logout();
       router.push("/");
-    }, 2000);
+    } catch (error: any) {
+      console.error("Erreur lors de la suppression du compte:", error);
+      alert(`Erreur: ${error.response?.data?.message || "Impossible de supprimer le compte"}`);
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -54,13 +63,10 @@ export function DeleteAccountSection() {
           <AlertTriangle className="w-6 h-6 text-destructive" />
         </div>
         <div className="flex-1">
-          <h3 className="font-cera text-xl font-bold text-foreground mb-2">
-            Zone de danger
-          </h3>
+          <h3 className="font-cera text-xl font-bold text-foreground mb-2">Zone de danger</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            La suppression de votre compte est définitive et irréversible.
-            Toutes vos données, réservations et historique seront supprimés
-            définitivement.
+            La suppression de votre compte est définitive et irréversible. Toutes vos données,
+            réservations et historique seront supprimés définitivement.
           </p>
 
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -74,16 +80,13 @@ export function DeleteAccountSection() {
               <DialogHeader>
                 <DialogTitle>Supprimer définitivement votre compte</DialogTitle>
                 <DialogDescription>
-                  Cette action est irréversible. Toutes vos données seront
-                  supprimées.
+                  Cette action est irréversible. Toutes vos données seront supprimées.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4 py-4">
                 <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/20">
-                  <p className="text-sm text-destructive font-semibold mb-2">
-                    ⚠️ Attention
-                  </p>
+                  <p className="text-sm text-destructive font-semibold mb-2">⚠️ Attention</p>
                   <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
                     <li>Toutes vos réservations seront annulées</li>
                     <li>Vos messages et conversations seront supprimés</li>
@@ -91,6 +94,20 @@ export function DeleteAccountSection() {
                     <li>Vos données de paiement seront supprimées</li>
                     <li>Cette action est définitive et irréversible</li>
                   </ul>
+                </div>
+
+                <div>
+                  <Label htmlFor="password">
+                    Entrez votre mot de passe pour confirmer
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Votre mot de passe"
+                    className="mt-2"
+                  />
                 </div>
 
                 <div>
@@ -112,8 +129,10 @@ export function DeleteAccountSection() {
                     onClick={() => {
                       setIsOpen(false);
                       setConfirmText("");
+                      setPassword("");
                     }}
                     className="flex-1"
+                    disabled={isDeleting}
                   >
                     Annuler
                   </Button>
@@ -123,7 +142,14 @@ export function DeleteAccountSection() {
                     disabled={!isConfirmed || isDeleting}
                     className="flex-1"
                   >
-                    {isDeleting ? "Suppression..." : "Supprimer définitivement"}
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Suppression...
+                      </>
+                    ) : (
+                      "Supprimer définitivement"
+                    )}
                   </Button>
                 </div>
               </div>
@@ -134,4 +160,3 @@ export function DeleteAccountSection() {
     </motion.div>
   );
 }
-

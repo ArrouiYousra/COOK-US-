@@ -66,54 +66,41 @@ export default function RegisterCookPage() {
   const hourlyRate = watch("hourlyRate");
 
   // Fonction pour formater le numéro de téléphone français
+  // Note: Le préfixe "+33" est déjà affiché visuellement, donc on ne l'ajoute pas dans la valeur
   const formatPhoneNumber = (value: string): string => {
     if (!value) return '';
     
-    // Retirer tous les espaces existants pour nettoyer
-    let cleaned = value.replace(/\s/g, '');
+    // Retirer tous les espaces et le préfixe +33 s'il est présent (car il est déjà affiché visuellement)
+    let cleaned = value.replace(/\s/g, '').replace(/^\+33/, '');
     
-    // Si ça commence par +33, on garde +33 et on nettoie le reste
-    if (cleaned.startsWith('+33')) {
-      cleaned = '+33' + cleaned.slice(3).replace(/\D/g, '');
-    } else if (cleaned.startsWith('33') && cleaned.length > 2) {
-      cleaned = '+33' + cleaned.slice(2).replace(/\D/g, '');
-    } else if (cleaned.startsWith('0') && cleaned.length > 1) {
-      cleaned = '+33' + cleaned.slice(1).replace(/\D/g, '');
-    } else if (cleaned && !cleaned.startsWith('+')) {
-      // Si c'est juste des chiffres, on ajoute +33
-      const digits = cleaned.replace(/\D/g, '');
-      if (digits.length > 0) {
-        cleaned = '+33' + digits;
-      } else {
-        return '';
-      }
-    } else {
-      // Si ça commence par + mais pas +33, on nettoie
-      cleaned = cleaned.replace(/\D/g, '');
-      if (cleaned.length > 0) {
-        cleaned = '+33' + cleaned;
-      } else {
-        return '';
-      }
+    // Si ça commence par 33, on le retire aussi
+    if (cleaned.startsWith('33') && cleaned.length > 2) {
+      cleaned = cleaned.slice(2);
     }
     
-    // Limiter à 9 chiffres après +33 (format français)
-    const digits = cleaned.slice(3);
-    if (digits.length > 9) {
-      cleaned = '+33' + digits.slice(0, 9);
+    // Si ça commence par 0, on le retire (remplacé par +33)
+    if (cleaned.startsWith('0') && cleaned.length > 1) {
+      cleaned = cleaned.slice(1);
     }
     
-    // Formater avec des espaces : +33 X XX XX XX XX
-    const finalDigits = cleaned.slice(3);
-    if (finalDigits.length > 0) {
+    // Ne garder que les chiffres
+    cleaned = cleaned.replace(/\D/g, '');
+    
+    // Limiter à 9 chiffres (format français)
+    if (cleaned.length > 9) {
+      cleaned = cleaned.slice(0, 9);
+    }
+    
+    // Formater avec des espaces : X XX XX XX XX (sans le +33 car il est déjà affiché)
+    if (cleaned.length > 0) {
       // Format: premier chiffre seul, puis groupes de 2
-      const first = finalDigits[0];
-      const rest = finalDigits.slice(1);
+      const first = cleaned[0];
+      const rest = cleaned.slice(1);
       const groups = rest.match(/.{1,2}/g) || [];
-      return '+33 ' + first + (groups.length > 0 ? ' ' + groups.join(' ') : '');
+      return first + (groups.length > 0 ? ' ' + groups.join(' ') : '');
     }
     
-    return cleaned;
+    return '';
   };
 
   const onSubmit = async (data: RegisterCookFormData) => {
@@ -122,30 +109,48 @@ export default function RegisterCookPage() {
       setSubmitError(null);
 
       const { confirmPassword, ...registerData } = data;
-      // Nettoyer le numéro de téléphone : retirer les espaces et garder uniquement +33XXXXXXXXX
+      // Nettoyer le numéro de téléphone : retirer les espaces et ajouter +33 au début
+      // La valeur du champ ne contient que les chiffres (sans +33 car il est affiché visuellement)
       let normalizedPhone = registerData.phone?.trim().replace(/\s/g, '');
-      // Si le numéro est vide ou contient seulement +33, on le met à undefined
-      if (!normalizedPhone || normalizedPhone === "+33" || normalizedPhone === "") {
+      // Si le numéro est vide, on le met à undefined
+      if (!normalizedPhone || normalizedPhone === "") {
         normalizedPhone = undefined;
+      } else {
+        // Ajouter le préfixe +33 car il n'est pas dans la valeur du champ
+        normalizedPhone = '+33' + normalizedPhone;
       }
       const cleanedData = {
         ...registerData,
         phone: normalizedPhone,
+        // Envoyer le SIRET uniquement si requis (AUTO_ENTREPRENEUR ou MICRO_ENTREPRISE)
+        // Pour PORTAGE_SALARIAL et ASSOCIATION : ne pas envoyer de SIRET
         siretNumber:
-          registerData.siretNumber && registerData.siretNumber.trim() !== ""
-            ? registerData.siretNumber.trim()
+          (registerData.employmentStatus === "AUTO_ENTREPRENEUR" || 
+           registerData.employmentStatus === "MICRO_ENTREPRISE")
+            ? (registerData.siretNumber?.trim() || undefined)
             : undefined,
         hourlyRate: Number(registerData.hourlyRate),
-        // Note: Les champs PORTAGE_SALARIAL ne sont plus envoyés à l'inscription
-        // Ils seront complétés via updateMyProfile après l'inscription
+        // Note: Les champs PORTAGE_SALARIAL (birthPlace, socialSecurityNumber, iban, bic, ribDocument)
+        // ne sont PAS envoyés à l'inscription - ils seront complétés via updateMyProfile après l'inscription
       };
       const response = await apiClient.registerCook(cleanedData);
 
+      // Appliquer la réponse d'authentification
       applyAuthResponse(response);
       setSelectedRole(null);
       
-      const role = useAuthStore.getState().user?.role;
-      router.push(role === "COOK" ? "/dashboard/cook" : "/dashboard/client");
+      // Utiliser le rôle de la réponse directement (plus fiable que le store qui peut ne pas être encore mis à jour)
+      const role = response.user?.role;
+      
+      // Rediriger vers le dashboard approprié
+      if (role === "COOK") {
+        router.push("/dashboard/cook");
+      } else if (role === "CLIENT") {
+        router.push("/dashboard/client");
+      } else {
+        // Fallback : rediriger vers la page de connexion avec l'email pré-rempli
+        router.push(`/auth/login?email=${encodeURIComponent(registerData.email)}`);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Une erreur est survenue lors de l'inscription";
       setSubmitError(message);
@@ -429,7 +434,7 @@ export default function RegisterCookPage() {
             )}
           </div>
 
-          {/* Numéro SIRET (obligatoire pour AUTO_ENTREPRENEUR et MICRO_ENTREPRISE) */}
+          {/* Numéro SIRET (obligatoire pour AUTO_ENTREPRENEUR et MICRO_ENTREPRISE, optionnel pour ASSOCIATION) */}
           {(employmentStatus === "AUTO_ENTREPRENEUR" || employmentStatus === "MICRO_ENTREPRISE" || employmentStatus === "ASSOCIATION") && (
             <div>
               <label
@@ -565,7 +570,9 @@ export default function RegisterCookPage() {
           {/* Erreur générale */}
           {submitError && (
             <div className="p-3 rounded-md bg-destructive/10 border border-destructive/20">
-              <p className="text-sm text-destructive">{submitError}</p>
+              <div className="text-sm text-destructive whitespace-pre-line">
+                {submitError}
+              </div>
             </div>
           )}
 

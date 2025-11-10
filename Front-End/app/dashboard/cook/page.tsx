@@ -1,24 +1,179 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { Calendar, Euro, Star, TrendingUp, Clock, Users, FileText, ChefHat } from "lucide-react";
-import { mockBookings } from "@/mockData";
+import { Calendar, Euro, Star, TrendingUp, Clock, Users, FileText, ChefHat, Loader2, AlertCircle } from "lucide-react";
+import { apiClient } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/authStore";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 
 /**
  * Page Dashboard (Accueil) du cuisinier
- * Vue synthétique des activités et statistiques
+ * Vue synthétique des activités et statistiques avec données réelles
  */
 export default function CookDashboardPage() {
-  // Calculer les statistiques (mock data - à remplacer par les vraies données)
-  const stats = {
-    totalRevenue: mockBookings.reduce((sum, b) => sum + b.totalPrice, 0),
-    upcomingBookings: mockBookings.filter((b) => b.status === "confirmed").length,
-    averageRating: 4.7,
-    totalBookings: mockBookings.length,
-    pendingRequests: 3,
-    todayBookings: 2,
-  };
+  const router = useRouter();
+  const { user, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    upcomingBookings: 0,
+    averageRating: 0,
+    totalBookings: 0,
+    pendingRequests: 0,
+    todayBookings: 0,
+  });
+  const [upcomingBookings, setUpcomingBookings] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
+
+  // Vérifier l'authentification au montage
+  useEffect(() => {
+    const verifyAuth = async () => {
+      if (!isAuthenticated && !isAuthLoading) {
+        try {
+          await checkAuth();
+        } catch (error) {
+          console.warn("Authentification échouée, redirection vers la page de connexion");
+          router.push("/auth/login");
+        }
+      }
+    };
+
+    if (!isAuthLoading) {
+      verifyAuth();
+    }
+  }, [isAuthenticated, checkAuth, router, isAuthLoading]);
+
+  // Charger les données du dashboard
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      if (isAuthLoading) return;
+      if (!isAuthenticated || !user) return;
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Charger les bookings, les avis et les demandes en parallèle
+        const [bookingsResponse, reviewsResponse, pendingBookingsResponse] = await Promise.allSettled([
+          apiClient.getBookings({ limit: 1000 }), // Récupérer tous les bookings pour les stats
+          apiClient.getMyReviews(),
+          apiClient.getBookings({ status: "PENDING", limit: 100 }), // Demandes en attente
+        ]);
+
+        // Traiter les bookings
+        let allBookings: any[] = [];
+        if (bookingsResponse.status === "fulfilled") {
+          allBookings = bookingsResponse.value.bookings || [];
+        }
+
+        // Traiter les demandes en attente
+        let pendingBookings: any[] = [];
+        if (pendingBookingsResponse.status === "fulfilled") {
+          pendingBookings = pendingBookingsResponse.value.bookings || [];
+        }
+
+        // Traiter les avis
+        let reviewsData: any[] = [];
+        if (reviewsResponse.status === "fulfilled") {
+          reviewsData = reviewsResponse.value.reviews || [];
+        }
+
+        // Calculer les statistiques
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        // Revenus totaux (bookings complétés)
+        const completedBookings = allBookings.filter(
+          (b) => b.status === "COMPLETED" && b.total_price
+        );
+        const totalRevenue = completedBookings.reduce((sum, b) => sum + (b.total_price || 0), 0);
+
+        // Réservations à venir (CONFIRMED ou ACCEPTED)
+        const upcoming = allBookings.filter(
+          (b) => (b.status === "CONFIRMED" || b.status === "ACCEPTED") && new Date(b.booking_date) >= today
+        );
+
+        // Réservations aujourd'hui
+        const todayBookings = upcoming.filter((b) => {
+          const bookingDate = new Date(b.booking_date);
+          return (
+            bookingDate.getFullYear() === today.getFullYear() &&
+            bookingDate.getMonth() === today.getMonth() &&
+            bookingDate.getDate() === today.getDate()
+          );
+        });
+
+        // Note moyenne (basée sur les avis reçus par le cuisinier)
+        const cookReviews = reviewsData.filter((r) => r.reviewed_user_id === user.id);
+        const averageRating =
+          cookReviews.length > 0
+            ? cookReviews.reduce((sum, r) => sum + (r.rating || 0), 0) / cookReviews.length
+            : 0;
+
+        // Mettre à jour les statistiques
+        setStats({
+          totalRevenue,
+          upcomingBookings: upcoming.length,
+          averageRating,
+          totalBookings: allBookings.length,
+          pendingRequests: pendingBookings.length,
+          todayBookings: todayBookings.length,
+        });
+
+        // Trier les prochaines réservations par date
+        const sortedUpcoming = [...upcoming]
+          .sort((a, b) => new Date(a.booking_date).getTime() - new Date(b.booking_date).getTime())
+          .slice(0, 3);
+
+        setUpcomingBookings(sortedUpcoming);
+        setReviews(cookReviews);
+      } catch (err: any) {
+        console.error("Erreur lors du chargement du dashboard:", err);
+        setError(err.response?.data?.message || "Impossible de charger les données du dashboard");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (!isAuthLoading && isAuthenticated && user) {
+      loadDashboardData();
+    }
+  }, [isAuthenticated, user, isAuthLoading]);
+
+  // Afficher un loader pendant le chargement
+  if (isLoading || isAuthLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Chargement du tableau de bord...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Afficher une erreur si nécessaire
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <p className="text-destructive">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+          >
+            Réessayer
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -46,9 +201,9 @@ export default function CookDashboardPage() {
             <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
           </div>
           <p className="text-sm text-muted-foreground mb-1">Revenus totaux</p>
-          <p className="text-2xl font-bold text-foreground">{stats.totalRevenue} €</p>
+          <p className="text-2xl font-bold text-foreground">{stats.totalRevenue.toFixed(2)} €</p>
           <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-            +15% vs mois dernier
+            Réservations complétées
           </p>
         </motion.div>
 
@@ -82,9 +237,11 @@ export default function CookDashboardPage() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground mb-1">Note moyenne</p>
-          <p className="text-2xl font-bold text-foreground">{stats.averageRating.toFixed(1)}</p>
+          <p className="text-2xl font-bold text-foreground">
+            {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : "N/A"}
+          </p>
           <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
-            Basée sur vos avis
+            Basée sur {reviews.length} avis
           </p>
         </motion.div>
 
@@ -170,36 +327,44 @@ export default function CookDashboardPage() {
             Prochaines réservations
           </h2>
           <div className="space-y-3">
-            {mockBookings
-              .filter((b) => b.status === "confirmed")
-              .slice(0, 3)
-              .map((booking, index) => (
-                <div
+            {upcomingBookings.length > 0 ? (
+              upcomingBookings.map((booking, index) => (
+                <Link
                   key={booking.id}
-                  className="flex items-center gap-3 p-4 rounded-lg bg-accent"
+                  href={`/dashboard/cook/bookings/${booking.id}`}
+                  className="flex items-center gap-3 p-4 rounded-lg bg-accent hover:bg-accent/80 transition-colors"
                 >
                   <div className="w-12 h-12 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0">
                     <Calendar className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-foreground truncate">
-                      Réservation #{booking.id.slice(0, 6)}
+                      Réservation #{booking.id.slice(0, 8)}
                     </p>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Clock className="w-4 h-4" />
-                      <span>{booking.date} à {booking.time}</span>
+                      <span>
+                        {format(new Date(booking.booking_date), "d MMMM yyyy", { locale: fr })}
+                        {booking.start_time && ` à ${booking.start_time.slice(0, 5)}`}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                      <Users className="w-4 h-4" />
-                      <span>{booking.numberOfGuests} personne{booking.numberOfGuests > 1 ? "s" : ""}</span>
+                    {booking.number_of_guests && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                        <Users className="w-4 h-4" />
+                        <span>
+                          {booking.number_of_guests} personne{booking.number_of_guests > 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {booking.total_price && (
+                    <div className="text-right">
+                      <p className="font-bold text-foreground">{booking.total_price.toFixed(2)} €</p>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-foreground">{booking.totalPrice} €</p>
-                  </div>
-                </div>
-              ))}
-            {mockBookings.filter((b) => b.status === "confirmed").length === 0 && (
+                  )}
+                </Link>
+              ))
+            ) : (
               <p className="text-center text-muted-foreground py-8">
                 Aucune réservation à venir
               </p>
@@ -210,4 +375,3 @@ export default function CookDashboardPage() {
     </div>
   );
 }
-

@@ -7,11 +7,22 @@ import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/stores/authStore";
 
 /**
+ * Détermine la salutation selon l'heure de la journée
+ * Bonjour : 0h - 17h59
+ * Bonsoir : 18h - 23h59
+ */
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  return hour >= 18 ? "Bonsoir" : "Bonjour";
+}
+
+/**
  * Message de bienvenue personnalisé avec CTA
  */
 export function WelcomeMessage() {
   const { user } = useAuthStore();
   const firstName = user?.firstName || "Utilisateur";
+  const greeting = getGreeting();
 
   return (
     <motion.div
@@ -23,7 +34,7 @@ export function WelcomeMessage() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex-1">
           <h1 className="font-trebuchet text-3xl lg:text-4xl font-bold text-foreground mb-2">
-            Bonjour, {firstName} 👋
+            {greeting}, {firstName} 👋
           </h1>
           <p className="text-lg text-muted-foreground">
             Prêt à savourer un nouveau repas chez vous ?
@@ -43,4 +54,3 @@ export function WelcomeMessage() {
     </motion.div>
   );
 }
-

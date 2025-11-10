@@ -1,61 +1,76 @@
 "use client";
 
-import { useEffect } from "react";
-import { useNotificationStore, createMockNotification } from "@/stores/notificationStore";
+import { useEffect, useRef } from "react";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { useAuthStore } from "@/stores/authStore";
+import { apiClient } from "@/lib/api/client";
+import type { Notification } from "@/types/notifications";
 
 /**
  * Hook pour initialiser et gérer les notifications en temps réel
+ * Charge les notifications depuis l'API et les met à jour périodiquement
  * TODO: Intégrer Socket.io ou Firebase pour les notifications en temps réel
  */
 export function useNotifications() {
-  const { user } = useAuthStore();
-  const { setNotifications, addNotification } = useNotificationStore();
+  const { user, isAuthenticated } = useAuthStore();
+  const { setNotifications, setLoading, setError } = useNotificationStore();
+  const isLoadingRef = useRef(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isAuthenticated) {
+      setNotifications([]);
+      return;
+    }
 
-    // TODO: Initialiser la connexion Socket.io ou Firebase
-    // const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL);
-    // socket.on('notification', (notification) => {
-    //   addNotification(notification);
-    // });
+    const loadNotifications = async () => {
+      // Éviter les appels multiples simultanés
+      if (isLoadingRef.current) return;
+      
+      try {
+        isLoadingRef.current = true;
+        setLoading(true);
+        setError(null);
 
-    // Mock data pour le développement
-    const mockNotifications = [
-      createMockNotification(
-        "BOOKING_REQUEST",
-        "Nouvelle proposition reçue",
-        "Marie Martin vous a proposé ses services pour votre demande du 25 décembre",
-        "/dashboard/client/requests"
-      ),
-      createMockNotification(
-        "MESSAGE_RECEIVED",
-        "Nouveau message",
-        "Thomas Dubois vous a envoyé un message",
-        "/dashboard/client/messages?cook=3"
-      ),
-      createMockNotification(
-        "BOOKING_CONFIRMED",
-        "Réservation confirmée",
-        "Votre réservation avec Sophie Dubois pour le 25 décembre est confirmée",
-        "/dashboard/client/bookings"
-      ),
-      createMockNotification(
-        "PAYMENT_RECEIVED",
-        "Paiement réussi",
-        "Votre paiement de 140€ pour la réservation du 25 décembre a été traité avec succès",
-        "/dashboard/client/bookings"
-      ),
-    ];
+        const response = await apiClient.getNotifications({
+          limit: 50, // Charger les 50 dernières notifications
+          offset: 0,
+        });
 
-    // Charger les notifications initiales (mock data pour le développement)
-    // TODO: Remplacer par un appel API réel
-    // const notifications = await apiClient.getNotifications();
-    // setNotifications(notifications);
-    setNotifications(mockNotifications);
+        // Mapper les données de l'API au format Notification
+        const mappedNotifications: Notification[] = (response.notifications || []).map(
+          (notif: any) => ({
+            id: notif.id,
+            userId: notif.user_id,
+            type: notif.type as Notification["type"],
+            title: notif.title || "Notification",
+            message: notif.message || "",
+            actionUrl: notif.action_url || undefined,
+            metadata: notif.metadata || {},
+            isRead: notif.is_read || false,
+            readAt: notif.read_at || undefined,
+            createdAt: notif.created_at || new Date().toISOString(),
+          })
+        );
 
-    // TODO: Intégrer Socket.io pour les notifications en temps réel
+        setNotifications(mappedNotifications);
+      } catch (error) {
+        console.error("Erreur lors du chargement des notifications:", error);
+        setError("Impossible de charger les notifications");
+        // En cas d'erreur, on garde un tableau vide plutôt que de planter
+        setNotifications([]);
+      } finally {
+        setLoading(false);
+        isLoadingRef.current = false;
+      }
+    };
+
+    // Charger les notifications immédiatement
+    loadNotifications();
+
+    // Rafraîchir les notifications toutes les 30 secondes
+    const interval = setInterval(loadNotifications, 30000);
+
+    // TODO: Intégrer Socket.io ou Firebase pour les notifications en temps réel
     // Exemple avec Socket.io :
     // const socket = io(process.env.NEXT_PUBLIC_SOCKET_URL, {
     //   auth: { token: getToken() }
@@ -68,14 +83,11 @@ export function useNotifications() {
     // });
     // return () => {
     //   socket.disconnect();
+    //   clearInterval(interval);
     // };
 
-    // Pour le développement uniquement : simuler de nouvelles notifications
-    // Supprimer en production
-    if (process.env.NODE_ENV === "development") {
-      // Ne pas créer d'interval automatique pour éviter le spam
-      // Les notifications mock sont déjà chargées ci-dessus
-    }
-  }, [user, setNotifications, addNotification]);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [user, isAuthenticated, setNotifications, setLoading, setError]);
 }
-

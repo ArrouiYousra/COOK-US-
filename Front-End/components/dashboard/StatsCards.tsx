@@ -25,15 +25,17 @@ export function StatsCards() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Charger les propositions pour avoir les stats (demandes actives)
-        await fetchProposals({ filter: "pending" });
-        
-        // Charger les bookings confirmés pour le total dépensé
-        await fetchBookings({ status: "CONFIRMED" });
-        
-        // Charger les favoris
-        const favoritesResponse = await apiClient.getFavorites();
-        setFavoritesCount(favoritesResponse.count);
+        // Charger toutes les données en parallèle pour améliorer les performances
+        await Promise.allSettled([
+          fetchProposals({ filter: "pending" }),
+          fetchBookings({ status: "CONFIRMED" }),
+          apiClient.getFavorites().then((response) => {
+            setFavoritesCount(response.count);
+          }).catch((error) => {
+            console.warn("Erreur lors du chargement des favoris:", error);
+            setFavoritesCount(0);
+          }),
+        ]);
       } catch (error) {
         console.error("Erreur lors du chargement des données:", error);
       } finally {
@@ -112,4 +114,6 @@ export function StatsCards() {
     </div>
   );
 }
+
+
 

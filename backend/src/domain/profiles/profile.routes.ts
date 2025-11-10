@@ -159,27 +159,6 @@ router.put('/me', authGuard, updateMyProfile);
 
 /**
  * @swagger
- * /api/profiles/{id}:
- *   get:
- *     summary: Get user profile by ID (public)
- *     tags: [Profiles]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: User ID
- *     responses:
- *       200:
- *         description: User profile (sensitive data removed)
- *       404:
- *         description: User not found
- */
-router.get('/:id', getUserProfile);
-
-/**
- * @swagger
  * /api/profiles/cooks:
  *   get:
  *     summary: Get list of cook profiles with filters
@@ -238,6 +217,27 @@ router.get('/:id', getUserProfile);
  *                   type: integer
  */
 router.get('/cooks', getCookProfiles);
+
+/**
+ * @swagger
+ * /api/profiles/{id}:
+ *   get:
+ *     summary: Get user profile by ID (public)
+ *     tags: [Profiles]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: User profile (sensitive data removed)
+ *       404:
+ *         description: User not found
+ */
+router.get('/:id', getUserProfile);
 
 export default router;
 

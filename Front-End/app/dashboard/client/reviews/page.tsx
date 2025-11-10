@@ -1,71 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Star, Filter, MessageSquare, MessageCircle } from "lucide-react";
+import { Star, Filter, MessageSquare, MessageCircle, Loader2 } from "lucide-react";
 import { ClientReviewCard } from "@/components/dashboard/reviews/ClientReviewCard";
 import { ReceivedReviewCard } from "@/components/dashboard/reviews/ReceivedReviewCard";
 import { Button } from "@/components/ui/button";
-
-// Mock data - Avis donnés par le client aux cuisiniers
-const mockClientReviews = [
-  {
-    id: "1",
-    cookName: "Marie Martin",
-    cookAvatar: undefined,
-    rating: 5,
-    detailedRatings: {
-      quality: 5,
-      punctuality: 5,
-      cleanliness: 5,
-      communication: 4,
-    },
-    comment: "Excellente expérience ! La cuisine était délicieuse et le service impeccable.",
-    photos: [],
-    isRecommended: true,
-    createdAt: "2024-12-26T10:00:00Z",
-    bookingDate: "2024-12-20T19:00:00Z",
-  },
-  {
-    id: "2",
-    cookName: "Sophie Dubois",
-    cookAvatar: undefined,
-    rating: 4,
-    detailedRatings: {
-      quality: 4,
-      punctuality: 5,
-      cleanliness: 4,
-      communication: 4,
-    },
-    comment: "Très bon repas, cuisinier ponctuel et professionnel.",
-    photos: [],
-    isRecommended: true,
-    createdAt: "2024-12-15T14:00:00Z",
-    bookingDate: "2024-12-10T19:00:00Z",
-  },
-];
-
-// Mock data - Avis reçus par le client des cuisiniers
-const mockReceivedReviews = [
-  {
-    id: "1",
-    cookName: "Marie Martin",
-    cookAvatar: undefined,
-    rating: 5,
-    comment: "Client très agréable, ponctuel et respectueux. Excellente communication tout au long de la réservation.",
-    createdAt: "2024-12-21T10:00:00Z",
-    bookingDate: "2024-12-20T19:00:00Z",
-  },
-  {
-    id: "2",
-    cookName: "Sophie Dubois",
-    cookAvatar: undefined,
-    rating: 4,
-    comment: "Très bon client, ambiance conviviale. Je recommande !",
-    createdAt: "2024-12-11T14:00:00Z",
-    bookingDate: "2024-12-10T19:00:00Z",
-  },
-];
+import { apiClient } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/authStore";
 
 type TabType = "given" | "received";
 
@@ -74,24 +17,184 @@ type TabType = "given" | "received";
  * Affiche les avis donnés par le client aux cuisiniers ET les avis reçus des cuisiniers
  */
 export default function ClientReviewsPage() {
+  const router = useRouter();
+  const { user, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>("given");
   const [filter, setFilter] = useState<"all" | "recommended" | "with-photos">("all");
+  const [givenReviews, setGivenReviews] = useState<any[]>([]);
+  const [receivedReviews, setReceivedReviews] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredGivenReviews = mockClientReviews.filter((review) => {
-    if (filter === "recommended") return review.isRecommended;
-    if (filter === "with-photos") return review.photos && review.photos.length > 0;
-    return true;
-  });
+  // Vérifier l'authentification au montage
+  useEffect(() => {
+    const verifyAuth = async () => {
+      if (!isAuthenticated) {
+        try {
+          await checkAuth();
+        } catch (error) {
+          console.warn("Authentification échouée, redirection vers la page de connexion");
+          router.push("/auth/login");
+        }
+      }
+    };
 
-  const averageGivenRating =
-    mockClientReviews.length > 0
-      ? mockClientReviews.reduce((sum, r) => sum + r.rating, 0) / mockClientReviews.length
+    if (!isAuthLoading) {
+      verifyAuth();
+    }
+  }, [isAuthenticated, checkAuth, router, isAuthLoading]);
+
+  // Charger les avis depuis l'API
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (isAuthLoading) return;
+      if (!isAuthenticated || !user) return;
+
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Charger les avis donnés (avis que le client a écrits pour les cuisiniers)
+        const givenReviewsData = await apiClient.getMyReviews();
+        
+        // Charger les avis reçus (avis que les cuisiniers ont écrits pour le client)
+        const receivedReviewsData = await apiClient.getReviewsByUser(user.id);
+
+        // Enrichir les avis donnés avec les données des cuisiniers et des bookings
+        // Le backend enrichit déjà avec reviewee (le cuisinier)
+        const enrichedGivenReviews = await Promise.all(
+          givenReviewsData.reviews.map(async (review: any) => {
+            // Le reviewee est le cuisinier (car le client a écrit l'avis)
+            const reviewee = review.reviewee;
+            const bookingId = review.booking_id;
+
+            // Charger les infos de la réservation
+            let bookingData = null;
+            if (bookingId) {
+              try {
+                const bookingsData = await apiClient.getBookings({ limit: 1000 });
+                bookingData = bookingsData.bookings.find((b: any) => b.id === bookingId);
+              } catch (err) {
+                console.warn("Impossible de charger la réservation:", err);
+              }
+            }
+
+            const cookName = reviewee?.first_name && reviewee?.last_name
+              ? `${reviewee.first_name} ${reviewee.last_name}`
+              : reviewee?.first_name || "Cuisinier";
+
+            return {
+              id: review.id,
+              cookName,
+              cookAvatar: reviewee?.avatar_url,
+              rating: review.rating,
+              detailedRatings: {
+                // TODO: Les notes détaillées ne sont pas encore dans le schéma de la DB
+                // Pour l'instant, on utilise des valeurs par défaut
+                quality: review.rating,
+                punctuality: review.rating,
+                cleanliness: review.rating,
+                communication: review.rating,
+              },
+              comment: review.comment || "",
+              photos: [], // TODO: Les photos ne sont pas encore dans le schéma de la DB
+              isRecommended: review.rating >= 4, // Considérer comme recommandé si note >= 4
+              createdAt: review.created_at,
+              bookingDate: bookingData?.booking_date || bookingData?.date || review.created_at,
+            };
+          })
+        );
+
+        // Enrichir les avis reçus avec les données des cuisiniers et des bookings
+        // Le backend enrichit déjà avec reviewer (le cuisinier)
+        const enrichedReceivedReviews = await Promise.all(
+          receivedReviewsData.reviews.map(async (review: any) => {
+            // Le reviewer est le cuisinier (car le cuisinier a écrit l'avis pour le client)
+            const reviewer = review.reviewer;
+            const bookingId = review.booking_id;
+
+            // Charger les infos de la réservation
+            let bookingData = null;
+            if (bookingId) {
+              try {
+                const bookingsData = await apiClient.getBookings({ limit: 1000 });
+                bookingData = bookingsData.bookings.find((b: any) => b.id === bookingId);
+              } catch (err) {
+                console.warn("Impossible de charger la réservation:", err);
+              }
+            }
+
+            const cookName = reviewer?.first_name && reviewer?.last_name
+              ? `${reviewer.first_name} ${reviewer.last_name}`
+              : reviewer?.first_name || "Cuisinier";
+
+            return {
+              id: review.id,
+              cookName,
+              cookAvatar: reviewer?.avatar_url,
+              rating: review.rating,
+              comment: review.comment || "",
+              createdAt: review.created_at,
+              bookingDate: bookingData?.booking_date || bookingData?.date || review.created_at,
+            };
+          })
+        );
+
+        setGivenReviews(enrichedGivenReviews);
+        setReceivedReviews(enrichedReceivedReviews);
+        
+        // Debug: vérifier les données chargées
+        console.log("Avis donnés chargés:", enrichedGivenReviews.length);
+        console.log("Avis reçus chargés:", enrichedReceivedReviews.length);
+        console.log("Avis reçus avec rating >= 4:", enrichedReceivedReviews.filter((r) => r.rating >= 4).length);
+      } catch (err: any) {
+        console.error("Erreur lors du chargement des avis:", err);
+        
+        // Si l'erreur est 401, rediriger vers la connexion
+        if (err.response?.status === 401 || err.message?.includes("Jeton d'authentification manquant")) {
+          router.push("/auth/login");
+          return;
+        }
+        
+        setError(err.response?.data?.message || "Impossible de charger les avis");
+        setGivenReviews([]);
+        setReceivedReviews([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadReviews();
+  }, [isAuthenticated, isAuthLoading, user, router]);
+
+  // Filtrer les avis donnés
+  const filteredGivenReviews = useMemo(() => {
+    return givenReviews.filter((review) => {
+      if (filter === "recommended") return review.isRecommended;
+      if (filter === "with-photos") return review.photos && review.photos.length > 0;
+      return true;
+    });
+  }, [givenReviews, filter]);
+
+  // Calculer les statistiques
+  const averageGivenRating = useMemo(() => {
+    return givenReviews.length > 0
+      ? givenReviews.reduce((sum, r) => sum + r.rating, 0) / givenReviews.length
       : 0;
+  }, [givenReviews]);
 
-  const averageReceivedRating =
-    mockReceivedReviews.length > 0
-      ? mockReceivedReviews.reduce((sum, r) => sum + r.rating, 0) / mockReceivedReviews.length
+  const averageReceivedRating = useMemo(() => {
+    return receivedReviews.length > 0
+      ? receivedReviews.reduce((sum, r) => sum + r.rating, 0) / receivedReviews.length
       : 0;
+  }, [receivedReviews]);
+
+  const recommendedCount = useMemo(() => {
+    return givenReviews.filter((r) => r.isRecommended).length;
+  }, [givenReviews]);
+
+  const positiveReceivedCount = useMemo(() => {
+    return receivedReviews.filter((r) => r.rating >= 4).length;
+  }, [receivedReviews]);
 
   return (
     <div className="space-y-6">
@@ -123,7 +226,7 @@ export default function ClientReviewsPage() {
         >
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
-            Avis donnés ({mockClientReviews.length})
+            Avis donnés ({givenReviews.length})
           </div>
           {activeTab === "given" && (
             <motion.div
@@ -148,7 +251,7 @@ export default function ClientReviewsPage() {
         >
           <div className="flex items-center gap-2">
             <MessageCircle className="w-4 h-4" />
-            Avis reçus ({mockReceivedReviews.length})
+            Avis reçus ({receivedReviews.length})
           </div>
           {activeTab === "received" && (
             <motion.div
@@ -191,8 +294,8 @@ export default function ClientReviewsPage() {
           </div>
           <p className="text-2xl font-bold text-foreground">
             {activeTab === "given"
-              ? mockClientReviews.length
-              : mockReceivedReviews.length}
+              ? givenReviews.length
+              : receivedReviews.length}
           </p>
         </motion.div>
         <motion.div
@@ -204,13 +307,15 @@ export default function ClientReviewsPage() {
           <div className="flex items-center gap-2 mb-2">
             <Star className="w-5 h-5 text-green-600 dark:text-green-400" />
             <p className="text-sm text-muted-foreground">
-              {activeTab === "given" ? "Recommandations" : "Avis positifs (4+)"}
+              {activeTab === "given" 
+                ? "Recommandations (4+ étoiles)" 
+                : "Avis positifs (4+ étoiles)"}
             </p>
           </div>
           <p className="text-2xl font-bold text-foreground">
             {activeTab === "given"
-              ? mockClientReviews.filter((r) => r.isRecommended).length
-              : mockReceivedReviews.filter((r) => r.rating >= 4).length}
+              ? recommendedCount
+              : positiveReceivedCount}
           </p>
         </motion.div>
       </div>
@@ -242,11 +347,21 @@ export default function ClientReviewsPage() {
       )}
 
       {/* Liste des avis */}
-      {activeTab === "given" ? (
+      {isAuthLoading || isLoading ? (
+        <div className="flex items-center justify-center py-16 bg-card border border-border rounded-xl">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 bg-card border border-border rounded-xl">
+          <p className="text-destructive">{error}</p>
+        </div>
+      ) : activeTab === "given" ? (
         filteredGivenReviews.length === 0 ? (
           <div className="text-center py-12 bg-card border border-border rounded-xl">
             <p className="text-muted-foreground">
-              Aucun avis ne correspond à ce filtre
+              {givenReviews.length === 0
+                ? "Vous n'avez pas encore laissé d'avis"
+                : "Aucun avis ne correspond à ce filtre"}
             </p>
           </div>
         ) : (
@@ -256,7 +371,7 @@ export default function ClientReviewsPage() {
             ))}
           </div>
         )
-      ) : mockReceivedReviews.length === 0 ? (
+      ) : receivedReviews.length === 0 ? (
         <div className="text-center py-12 bg-card border border-border rounded-xl">
           <p className="text-muted-foreground">
             Aucun avis reçu pour le moment
@@ -264,7 +379,7 @@ export default function ClientReviewsPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {mockReceivedReviews.map((review) => (
+          {receivedReviews.map((review) => (
             <ReceivedReviewCard key={review.id} review={review} />
           ))}
         </div>
@@ -272,4 +387,3 @@ export default function ClientReviewsPage() {
     </div>
   );
 }
-

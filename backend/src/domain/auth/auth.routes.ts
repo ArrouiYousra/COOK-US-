@@ -16,6 +16,7 @@ import {
   oauthGoogle,
   oauthApple,
 } from './auth.controllers';
+import twoFactorRoutes from './two-factor.routes';
 import { authGuard } from '@core/middleware';
 
 const router = Router();
@@ -479,6 +480,9 @@ router.post('/oauth/google', oauthGoogle);
  *         description: OAuth initiation failed
  */
 router.post('/oauth/apple', oauthApple);
+
+// 2FA routes
+router.use('/2fa', twoFactorRoutes);
 
 export default router;
 

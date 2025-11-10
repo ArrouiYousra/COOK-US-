@@ -54,7 +54,7 @@ export const registerClientSchema = z
     confirmPassword: z.string(),
     phone: z
       .string()
-      .regex(/^(\+33|0)[1-9](\d{2}){4}$/, "Numéro de téléphone invalide")
+      .regex(/^[1-9](\s\d{2}){4}$|^$/, "Numéro de téléphone invalide")
       .optional()
       .or(z.literal("")),
   })
@@ -123,7 +123,7 @@ export const registerCookSchema = z
     confirmPassword: z.string(),
     phone: z
       .string()
-      .regex(/^(\+33|0)[1-9](\d{2}){4}$/, "Numéro de téléphone invalide")
+      .regex(/^[1-9](\s\d{2}){4}$|^$/, "Numéro de téléphone invalide")
       .optional()
       .or(z.literal("")),
         employmentStatus: z.enum(

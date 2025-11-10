@@ -1,12 +1,14 @@
 "use client";
 
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
-import { Calendar, Clock, Euro, ChevronRight, CheckCircle, XCircle, Hourglass } from "lucide-react";
+import { Calendar, Clock, Euro, ChevronRight, CheckCircle, XCircle, Hourglass, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatDateTime } from "@/lib/utils";
-import { mockCooks, mockBookings } from "@/mockData";
+import { useBookingStore } from "@/stores/bookingStore";
+import { apiClient } from "@/lib/api/client";
 
 type BookingStatusFilter = "all" | "pending" | "confirmed" | "completed" | "cancelled";
 
@@ -19,11 +21,117 @@ interface BookingsListProps {
  * Affiche les réservations selon leur statut
  */
 export function BookingsList({ statusFilter }: BookingsListProps) {
+  const { bookings, fetchBookings, isLoadingBookings } = useBookingStore();
+  const [enrichedBookings, setEnrichedBookings] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Charger les bookings au montage
+  useEffect(() => {
+    const loadBookings = async () => {
+      setIsLoading(true);
+      try {
+        await fetchBookings({ limit: 1000 });
+      } catch (error) {
+        console.error("Erreur lors du chargement des réservations:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadBookings();
+  }, [fetchBookings]);
+
+  // Enrichir les bookings avec les données des cuisiniers
+  useEffect(() => {
+    const enrichBookings = async () => {
+      if (bookings.length === 0) {
+        setEnrichedBookings([]);
+        return;
+      }
+
+      try {
+        // Enrichir avec les données des cuisiniers
+        const cookIds = new Set<string>();
+        bookings.forEach((booking: any) => {
+          const cookId = booking.cookId || booking.cook?.id;
+          if (cookId) cookIds.add(cookId);
+        });
+
+        // Charger tous les profils de cuisiniers en une seule fois
+        let cooksMap = new Map();
+        if (cookIds.size > 0) {
+          try {
+            const allCooks = await apiClient.getCookProfiles({ limit: 1000 });
+            allCooks.profiles.forEach((cook: any) => {
+              const id = cook.id || cook.user?.id;
+              if (id) cooksMap.set(id, cook);
+            });
+          } catch (error) {
+            console.warn("Impossible de charger les profils des cuisiniers:", error);
+          }
+        }
+
+        // Enrichir les bookings
+        const enriched = bookings.map((booking: any) => {
+          const cookId = booking.cookId || booking.cook?.id;
+          const cookData = cookId ? cooksMap.get(cookId) : null;
+
+          // Mapper le statut
+          let mappedStatus: "pending" | "confirmed" | "completed" | "cancelled" = "pending";
+          if (booking.status === "confirmed" || booking.status === "proposition_accepted") {
+            mappedStatus = "confirmed";
+          } else if (booking.status === "completed" || booking.status === "done") {
+            mappedStatus = "completed";
+          } else if (booking.status === "cancelled") {
+            mappedStatus = "cancelled";
+          } else {
+            mappedStatus = "pending";
+          }
+
+          return {
+            ...booking,
+            mappedStatus,
+            cook: cookData
+              ? {
+                  id: cookData.id || cookData.user?.id,
+                  name: cookData.user?.first_name && cookData.user?.last_name
+                    ? `${cookData.user.first_name} ${cookData.user.last_name}`
+                    : cookData.user?.first_name || "Cuisinier",
+                  avatarUrl: cookData.user?.avatar_url,
+                  rating: cookData.average_rating,
+                }
+              : booking.cook || {
+                  id: cookId,
+                  name: "Cuisinier",
+                  avatarUrl: null,
+                  rating: null,
+                },
+          };
+        });
+
+        setEnrichedBookings(enriched);
+      } catch (error) {
+        console.error("Erreur lors de l'enrichissement des réservations:", error);
+        setEnrichedBookings([]);
+      }
+    };
+
+    enrichBookings();
+  }, [bookings]);
+
   // Filtrer les réservations selon le statut
-  const filteredBookings = mockBookings.filter((booking) => {
-    if (statusFilter === "all") return true;
-    return booking.status === statusFilter;
-  });
+  const filteredBookings = useMemo(() => {
+    if (statusFilter === "all") return enrichedBookings;
+    return enrichedBookings.filter((booking) => booking.mappedStatus === statusFilter);
+  }, [enrichedBookings, statusFilter]);
+
+  if (isLoading || isLoadingBookings) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (filteredBookings.length === 0) {
     return (
@@ -38,11 +146,10 @@ export function BookingsList({ statusFilter }: BookingsListProps) {
   return (
     <div className="grid gap-4">
       {filteredBookings.map((booking, index) => {
-        const cook = mockCooks.find((c) => c.id === booking.cookId);
-        if (!cook) return null;
+        if (!booking.cook) return null;
 
         return (
-          <BookingCard key={booking.id} booking={booking} cook={cook} index={index} />
+          <BookingCard key={booking.id} booking={booking} cook={booking.cook} index={index} />
         );
       })}
     </div>
@@ -50,8 +157,13 @@ export function BookingsList({ statusFilter }: BookingsListProps) {
 }
 
 interface BookingCardProps {
-  booking: typeof mockBookings[0];
-  cook: typeof mockCooks[0];
+  booking: any;
+  cook: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    rating?: number | null;
+  };
   index: number;
 }
 
@@ -71,7 +183,7 @@ function BookingCard({ booking, cook, index }: BookingCardProps) {
       borderColor: "border-green-500/20",
       icon: CheckCircle,
     },
-    done: {
+    completed: {
       label: "Terminée",
       color: "text-blue-600 dark:text-blue-400",
       bgColor: "bg-blue-500/10 dark:bg-blue-500/20",
@@ -87,8 +199,16 @@ function BookingCard({ booking, cook, index }: BookingCardProps) {
     },
   };
 
-  const config = statusConfig[booking.status] || statusConfig.pending;
+  const status = booking.mappedStatus || booking.status || "pending";
+  const config = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending;
   const StatusIcon = config.icon;
+
+  // Formater l'heure
+  const timeSlot = booking.time
+    ? booking.time.includes(":")
+      ? booking.time
+      : `${booking.time}h`
+    : "Non spécifié";
 
   return (
     <motion.div
@@ -107,6 +227,7 @@ function BookingCard({ booking, cook, index }: BookingCardProps) {
                 alt={cook.name}
                 fill
                 className="object-cover"
+                unoptimized
               />
             ) : (
               <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -134,20 +255,20 @@ function BookingCard({ booking, cook, index }: BookingCardProps) {
                 <div className="w-8 h-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center">
                   <Calendar className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span>{formatDate(booking.date)}</span>
+                <span>{formatDate(booking.date || booking.booking_date)}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <div className="w-8 h-8 rounded-lg bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center">
                   <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 </div>
-                <span>{booking.time}</span>
+                <span>{timeSlot}</span>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <div className="w-8 h-8 rounded-lg bg-green-500/10 dark:bg-green-500/20 flex items-center justify-center">
                   <Euro className="w-4 h-4 text-green-600 dark:text-green-400" />
                 </div>
                 <span className="font-semibold text-foreground">
-                  {booking.totalPrice} €
+                  {booking.totalPrice || booking.total_price || 0} €
                 </span>
               </div>
             </div>
@@ -170,4 +291,3 @@ function BookingCard({ booking, cook, index }: BookingCardProps) {
     </motion.div>
   );
 }
-

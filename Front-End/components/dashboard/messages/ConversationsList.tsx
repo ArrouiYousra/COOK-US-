@@ -1,46 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { Search, MessageSquare } from "lucide-react";
+import { Search, MessageSquare, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { mockCooks } from "@/mockData";
-
-// Fonction pour générer les conversations mock
-function getMockConversations() {
-  if (!mockCooks || mockCooks.length === 0) return [];
-  
-  return [
-    {
-      id: "1",
-      cookId: mockCooks[0]?.id || "",
-      cook: mockCooks[0],
-      lastMessage: "Je serais ravie de cuisiner pour vous ce week-end !",
-      lastMessageTime: new Date(Date.now() - 2 * 60 * 60 * 1000), // Il y a 2h
-      unreadCount: 2,
-      isOnline: true,
-    },
-    {
-      id: "2",
-      cookId: mockCooks[1]?.id || "",
-      cook: mockCooks[1],
-      lastMessage: "Parfait pour votre dîner romantique !",
-      lastMessageTime: new Date(Date.now() - 5 * 60 * 60 * 1000), // Il y a 5h
-      unreadCount: 0,
-      isOnline: false,
-    },
-    {
-      id: "3",
-      cookId: mockCooks[2]?.id || "",
-      cook: mockCooks[2],
-      lastMessage: "Je peux préparer un menu sur-mesure selon vos goûts.",
-      lastMessageTime: new Date(Date.now() - 24 * 60 * 60 * 1000), // Il y a 1 jour
-      unreadCount: 1,
-      isOnline: true,
-    },
-  ].filter((conv) => conv.cook); // Filtrer les conversations sans cuisinier
-}
+import { apiClient } from "@/lib/api/client";
 
 interface ConversationsListProps {
   selectedConversationId: string | null;
@@ -56,40 +21,76 @@ export function ConversationsList({
   onSelectConversation,
 }: ConversationsListProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const mockConversations = useMemo(() => getMockConversations(), []);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock messages pour la recherche dans le contenu
-  const mockMessagesByConversation: Record<string, Array<{ text: string }>> = {
-    "1": [
-      { text: "Bonjour ! Je serais ravie de cuisiner pour vous ce week-end." },
-      { text: "Mon tarif est de 35€ par personne." },
-      { text: "Avez-vous des allergies ou restrictions alimentaires ?" },
-    ],
-    "2": [
-      { text: "Parfait pour votre dîner romantique !" },
-      { text: "Je peux préparer un menu sur-mesure." },
-    ],
-    "3": [
-      { text: "Je peux préparer un menu sur-mesure selon vos goûts." },
-    ],
-  };
+  // Charger les conversations depuis l'API
+  useEffect(() => {
+    const loadConversations = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const data = await apiClient.getConversations({ limit: 100 });
+        
+        // Transformer les conversations pour correspondre au format attendu
+        const transformedConversations = data.conversations.map((conv: any) => {
+          const otherUser = conv.other_user;
+          const cookName = otherUser?.first_name && otherUser?.last_name
+            ? `${otherUser.first_name} ${otherUser.last_name}`
+            : otherUser?.first_name || "Cuisinier";
+
+          return {
+            id: conv.id,
+            cookId: otherUser?.id,
+            cook: {
+              id: otherUser?.id,
+              name: cookName,
+              avatarUrl: otherUser?.avatar_url,
+            },
+            lastMessage: conv.last_message_content || "Aucun message",
+            lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at) : new Date(conv.created_at),
+            unreadCount: conv.unread_count || 0,
+            isOnline: false, // TODO: Implémenter le statut en ligne via WebSocket
+          };
+        });
+
+        // Trier par date du dernier message (plus récent en premier)
+        transformedConversations.sort((a: any, b: any) => 
+          b.lastMessageTime.getTime() - a.lastMessageTime.getTime()
+        );
+
+        setConversations(transformedConversations);
+      } catch (err) {
+        console.error("Erreur lors du chargement des conversations:", err);
+        setError("Impossible de charger les conversations");
+        setConversations([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadConversations();
+    
+    // Rafraîchir les conversations toutes les 30 secondes
+    const interval = setInterval(loadConversations, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const filteredConversations = useMemo(() => {
-    if (!searchQuery.trim()) return mockConversations;
+    if (!searchQuery.trim()) return conversations;
     
     const query = searchQuery.toLowerCase();
-    return mockConversations.filter((conv) => {
+    return conversations.filter((conv) => {
       // Recherche dans le nom du cuisinier
       if (conv.cook?.name?.toLowerCase().includes(query)) return true;
       
       // Recherche dans le dernier message
       if (conv.lastMessage?.toLowerCase().includes(query)) return true;
       
-      // Recherche dans le contenu des messages de la conversation
-      const messages = mockMessagesByConversation[conv.id] || [];
-      return messages.some((msg) => msg.text.toLowerCase().includes(query));
+      return false;
     });
-  }, [searchQuery, mockConversations]);
+  }, [searchQuery, conversations]);
 
   const formatTime = (date: Date) => {
     const now = new Date();
@@ -141,7 +142,16 @@ export function ConversationsList({
 
       {/* Liste des conversations */}
       <div className="flex-1 overflow-y-auto">
-        {filteredConversations.length === 0 ? (
+        {isLoading ? (
+          <div className="p-8 text-center">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">Chargement des conversations...</p>
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center">
+            <p className="text-destructive">{error}</p>
+          </div>
+        ) : filteredConversations.length === 0 ? (
           <div className="p-8 text-center">
             <div className="w-16 h-16 rounded-full bg-green-500/10 dark:bg-green-500/20 flex items-center justify-center mx-auto mb-4">
               <MessageSquare className="w-8 h-8 text-green-600 dark:text-green-400" />
@@ -174,7 +184,11 @@ export function ConversationsList({
 interface Conversation {
   id: string;
   cookId: string;
-  cook: typeof mockCooks[0];
+  cook: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+  };
   lastMessage: string;
   lastMessageTime: Date;
   unreadCount: number;
@@ -217,6 +231,7 @@ function ConversationItem({
                 alt={conversation.cook.name}
                 fill
                 className="object-cover"
+                unoptimized
               />
             ) : (
               <div className="w-full h-full bg-muted flex items-center justify-center">
@@ -268,4 +283,3 @@ function ConversationItem({
     </motion.button>
   );
 }
-

@@ -17,11 +17,21 @@ import {
   Send,
   Star,
   BarChart3,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // Organisation logique de la sidebar pour une UX optimale
 const menuSections = [
@@ -117,12 +127,22 @@ const menuSections = [
 export function DashboardSidebar() {
   const pathname = usePathname();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const { user, logout } = useAuthStore();
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { logout } = useAuthStore();
   const router = useRouter();
 
   const handleLogout = async () => {
-    await logout();
-    router.push("/");
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      router.push("/");
+    } catch (error) {
+      console.error("Erreur lors de la déconnexion:", error);
+      alert("Une erreur est survenue lors de la déconnexion. Veuillez réessayer.");
+      setIsLoggingOut(false);
+      setShowLogoutDialog(false);
+    }
   };
 
   return (
@@ -216,22 +236,10 @@ export function DashboardSidebar() {
 
           {/* Section bas de sidebar */}
           <div className="pt-4 border-t border-border mt-auto">
-            {/* Informations utilisateur */}
-            {user && (
-              <div className="px-4 py-3 mb-3 rounded-lg bg-accent">
-                <p className="text-sm font-semibold text-foreground truncate">
-                  {user.firstName} {user.lastName}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {user.email}
-                </p>
-              </div>
-            )}
-
             {/* Bouton déconnexion */}
             <Button
               variant="ghost"
-              onClick={handleLogout}
+              onClick={() => setShowLogoutDialog(true)}
               className="w-full justify-start text-muted-foreground hover:text-foreground hover:bg-accent"
             >
               <LogOut className="w-5 h-5 mr-3" />
@@ -240,7 +248,53 @@ export function DashboardSidebar() {
           </div>
         </div>
       </aside>
+
+      {/* Dialog de confirmation de déconnexion */}
+      <Dialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 dark:bg-red-500/20 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+              </div>
+              <DialogTitle className="text-xl font-bold text-foreground">
+                Confirmer la déconnexion
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-base text-muted-foreground pt-2">
+              Êtes-vous sûr de vouloir vous déconnecter ? Vous devrez vous reconnecter pour accéder à votre compte.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-0 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setShowLogoutDialog(false)}
+              disabled={isLoggingOut}
+              className="flex-1"
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="flex-1"
+            >
+              {isLoggingOut ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Déconnexion...
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Se déconnecter
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
-

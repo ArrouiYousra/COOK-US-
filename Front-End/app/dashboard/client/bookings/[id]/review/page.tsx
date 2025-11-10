@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Star, Upload, X, ArrowLeft } from "lucide-react";
+import { Star, Upload, X, ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import Image from "next/image";
-import { mockBookings } from "@/mockData";
+import { apiClient } from "@/lib/api/client";
 
 /**
  * Page de création d'avis après réservation
@@ -31,9 +31,64 @@ export default function ReviewPage() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [isRecommending, setIsRecommending] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [booking, setBooking] = useState<any>(null);
+  const [cook, setCook] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Trouver la réservation
-  const booking = mockBookings.find((b) => b.id === bookingId);
+  // Charger la réservation
+  useEffect(() => {
+    const loadBooking = async () => {
+      setIsLoading(true);
+      try {
+        const bookingsData = await apiClient.getBookings({ limit: 1000 });
+        const foundBooking = bookingsData.bookings.find((b: any) => b.id === bookingId);
+
+        if (!foundBooking) {
+          setIsLoading(false);
+          return;
+        }
+
+        setBooking(foundBooking);
+
+        // Charger les infos du cuisinier
+        const cookId = foundBooking.cookId || foundBooking.cook?.id;
+        if (cookId) {
+          try {
+            const cookProfiles = await apiClient.getCookProfiles({ limit: 1000 });
+            const cookProfile = cookProfiles.profiles.find(
+              (p: any) => p.id === cookId || p.user?.id === cookId
+            );
+            if (cookProfile?.user) {
+              setCook({
+                id: cookProfile.user.id,
+                name: cookProfile.user.first_name && cookProfile.user.last_name
+                  ? `${cookProfile.user.first_name} ${cookProfile.user.last_name}`
+                  : cookProfile.user.first_name || "Cuisinier",
+              });
+            }
+          } catch (err) {
+            console.warn("Impossible de charger le profil du cuisinier:", err);
+          }
+        }
+      } catch (err) {
+        console.error("Erreur lors du chargement de la réservation:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (bookingId) {
+      loadBooking();
+    }
+  }, [bookingId]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!booking) {
     return (
@@ -45,6 +100,8 @@ export default function ReviewPage() {
       </div>
     );
   }
+
+  const cookName = cook?.name || booking.cookName || "Cuisinier";
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -109,7 +166,7 @@ export default function ReviewPage() {
             Laisser un avis
           </h1>
           <p className="text-muted-foreground">
-            Partagez votre expérience avec {booking.cookName}
+            Partagez votre expérience avec {cookName}
           </p>
         </div>
       </div>
@@ -211,7 +268,7 @@ export default function ReviewPage() {
                 Recommander ce cuisinier
               </Label>
               <p className="text-sm text-muted-foreground">
-                Recommandez {booking.cookName} à d'autres clients
+                Recommandez {cookName} à d'autres clients
               </p>
             </div>
             <button
@@ -324,4 +381,3 @@ export default function ReviewPage() {
     </div>
   );
 }
-

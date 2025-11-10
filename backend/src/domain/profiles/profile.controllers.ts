@@ -4,6 +4,7 @@ import { type AuthRequest } from '@core/middleware';
 import { UserStore } from '@stores/user.store';
 import { ProfileStore } from '@stores/profile.store';
 import { DocumentService } from '@domain/documents/document.service';
+import { AvatarService } from '@core/services/avatar.service';
 import { supabaseAdmin } from '@config/supabaseClient';
 import type { CookStatus, EmploymentStatus } from '../../types/database.types';
 
@@ -136,6 +137,21 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
+    // Handle avatar upload if it's a base64 string
+    let finalAvatarUrl = avatar_url;
+    if (avatar_url && typeof avatar_url === 'string' && avatar_url.startsWith('data:')) {
+      try {
+        finalAvatarUrl = await AvatarService.uploadAvatarFromBase64(req.user.id, avatar_url);
+      } catch (error) {
+        console.error('Erreur lors de l\'upload de l\'avatar:', error);
+        res.status(400).json({
+          error: 'AvatarUploadFailed',
+          message: error instanceof Error ? error.message : 'Échec de l\'upload de l\'avatar',
+        });
+        return;
+      }
+    }
+
     // Update user fields
     const userUpdates: Record<string, unknown> = {};
     if (first_name !== undefined) userUpdates.first_name = first_name;
@@ -146,7 +162,7 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     if (city !== undefined) userUpdates.city = city;
     if (postal_code !== undefined) userUpdates.postal_code = postal_code;
     if (country !== undefined) userUpdates.country = country;
-    if (avatar_url !== undefined) userUpdates.avatar_url = avatar_url;
+    if (finalAvatarUrl !== undefined) userUpdates.avatar_url = finalAvatarUrl;
     if (language !== undefined) userUpdates.language = language;
     if (currency !== undefined) userUpdates.currency = currency;
     if (notifications_enabled !== undefined) userUpdates.notifications_enabled = notifications_enabled;
@@ -400,6 +416,16 @@ export const getUserProfile = async (req: Request, res: Response): Promise<void>
 };
 
 export const getCookProfiles = async (req: Request, res: Response): Promise<void> => {
+  // Déclarer filters en dehors du try-catch pour qu'il soit accessible dans le catch
+  const filters: {
+    status?: CookStatus;
+    city?: string;
+    minRating?: number;
+    maxHourlyRate?: number;
+    limit?: number;
+    offset?: number;
+  } = {};
+
   try {
     const {
       status,
@@ -409,15 +435,6 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
       limit,
       offset,
     } = req.query;
-
-    const filters: {
-      status?: CookStatus;
-      city?: string;
-      minRating?: number;
-      maxHourlyRate?: number;
-      limit?: number;
-      offset?: number;
-    } = {};
 
     if (status) {
       filters.status = status as CookStatus;
@@ -445,8 +462,25 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
 
     const result = await ProfileStore.getCookProfiles(filters);
 
-    // Remove sensitive data from cook profiles
-    const publicProfiles = result.profiles.map((profile) => {
+    // Enrich profiles with user data
+    // Use Promise.allSettled to handle errors gracefully for each profile
+    const enrichedProfilesResults = await Promise.allSettled(
+      result.profiles.map(async (profile) => {
+        // Get user data
+        const user = await UserStore.getUserById(profile.user_id);
+        
+        if (!user) {
+          // Skip profiles without user (shouldn't happen, but handle gracefully)
+          console.warn(`User not found for cook profile ${profile.id} (user_id: ${profile.user_id})`);
+          return null;
+        }
+
+        // Filter by city if specified (after getting user data)
+        if (filters.city && user.city !== filters.city) {
+          return null;
+        }
+
+        // Remove sensitive data from cook profile
       const {
         siret_number,
         insurance_number,
@@ -455,22 +489,55 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
         insurance_cert_url,
         kbis_url,
         total_earnings,
-        ...publicData
+          ...publicCookData
       } = profile;
-      return publicData;
-    });
 
+        // Remove sensitive data from user
+        const { password, two_factor_secret, email, phone, ...safeUser } = user;
+
+        return {
+          ...publicCookData,
+          user: {
+            id: safeUser.id,
+            first_name: safeUser.first_name,
+            last_name: safeUser.last_name,
+            avatar_url: safeUser.avatar_url,
+            city: safeUser.city,
+          },
+        };
+      })
+    );
+
+    // Extract successful results and filter out nulls
+    const publicProfiles = enrichedProfilesResults
+      .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+      .map((result) => result.value)
+      .filter((profile) => profile !== null) as any[];
+
+    // Log any rejected promises for debugging
+    const rejected = enrichedProfilesResults.filter((result) => result.status === 'rejected');
+    if (rejected.length > 0) {
+      console.warn(`Failed to enrich ${rejected.length} cook profile(s):`, rejected.map((r) => r.status === 'rejected' ? r.reason : null));
+    }
+    
+    // Update count if we filtered by city (since we filtered after fetching)
+    const finalCount = filters.city ? publicProfiles.length : result.count;
+
+    // Always return a valid response, even if no profiles were found
     res.status(200).json({
-      profiles: publicProfiles,
-      count: result.count,
+      profiles: publicProfiles || [],
+      count: finalCount || 0,
       limit: filters.limit || 10,
       offset: filters.offset || 0,
     });
   } catch (error) {
     console.error('Get cook profiles error:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get cook profiles',
+    // Return empty array instead of error to prevent frontend crashes
+    res.status(200).json({
+      profiles: [],
+      count: 0,
+      limit: filters.limit || 10,
+      offset: filters.offset || 0,
     });
   }
 };
