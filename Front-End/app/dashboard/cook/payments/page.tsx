@@ -1,14 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Euro, Download, Calendar, Filter, Search } from "lucide-react";
+import { Euro, Download, Calendar, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
-import { mockBookings } from "@/mockData";
+import { apiClient } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/authStore";
 
-type PaymentStatusFilter = "all" | "pending" | "paid" | "refunded";
+type PaymentStatusFilter = "all" | "pending" | "completed" | "failed" | "cancelled";
+
+interface Payment {
+  id: string;
+  bookingId: string | null;
+  clientName: string;
+  amount: number;
+  status: string;
+  type: string;
+  date: string;
+  createdAt: string;
+  description?: string;
+}
 
 /**
  * Page "Paiements"
@@ -17,33 +30,156 @@ type PaymentStatusFilter = "all" | "pending" | "paid" | "refunded";
 export default function CookPaymentsPage() {
   const [statusFilter, setStatusFilter] = useState<PaymentStatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuthStore();
 
-  // Simuler les paiements à partir des réservations
-  const payments = mockBookings.map((booking) => ({
-    id: booking.id,
-    bookingId: booking.id,
-    clientName: booking.clientName || "Client",
-    amount: booking.totalPrice,
-    status: booking.status === "done" ? "paid" : booking.status === "cancelled" ? "refunded" : "pending",
-    date: booking.date,
-    createdAt: booking.createdAt || new Date().toISOString(),
-  }));
+  // Charger les transactions depuis l'API
+  useEffect(() => {
+    const loadPayments = async () => {
+      if (!user?.id) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Charger les transactions et les réservations en parallèle
+        const [transactionsResponse, bookingsResponse] = await Promise.allSettled([
+          apiClient.getMyTransactions(),
+          apiClient.getBookings({ limit: 1000 }),
+        ]);
+
+        const transactions = transactionsResponse.status === "fulfilled" 
+          ? transactionsResponse.value.transactions 
+          : [];
+        const bookings = bookingsResponse.status === "fulfilled"
+          ? bookingsResponse.value.bookings
+          : [];
+
+        // Créer un map des réservations par ID pour accès rapide
+        const bookingsMap = new Map(bookings.map((b: any) => [b.id, b]));
+
+        // Transformer les transactions en paiements
+        // Pour un cuisinier, on affiche seulement les transactions où il est le destinataire (to_user_id)
+        // ou les transactions où il est l'expéditeur (from_user_id) pour les REFUND
+        const transformedPayments: Payment[] = transactions
+          .filter((transaction: any) => {
+            // Exclure les transactions où le cuisinier est l'expéditeur (sauf REFUND)
+            if (transaction.from_user_id === user.id && transaction.type !== "REFUND") {
+              return false;
+            }
+            
+            // Inclure les transactions où le cuisinier est le destinataire
+            if (transaction.to_user_id === user.id) {
+              // Exclure les PLATFORM_FEE où le cuisinier est le destinataire (ce sont des débits)
+              if (transaction.type === "PLATFORM_FEE") {
+                return false;
+              }
+              return true;
+            }
+            
+            // Inclure les REFUND où le cuisinier est l'expéditeur
+            if (transaction.from_user_id === user.id && transaction.type === "REFUND") {
+              return true;
+            }
+            
+            return false;
+          })
+          .map((transaction: any) => {
+            const booking = transaction.booking_id ? bookingsMap.get(transaction.booking_id) : null;
+            const clientName = booking?.client?.first_name && booking?.client?.last_name
+              ? `${booking.client.first_name} ${booking.client.last_name}`
+              : booking?.client?.first_name || "Client";
+
+            // Déterminer le statut pour l'affichage
+            let displayStatus = transaction.status.toLowerCase();
+            if (transaction.type === "REFUND") {
+              displayStatus = "refunded";
+            } else if (transaction.status === "COMPLETED") {
+              displayStatus = "paid";
+            } else if (transaction.status === "PENDING") {
+              displayStatus = "pending";
+            }
+
+            // Pour les REFUND où le cuisinier est l'expéditeur, c'est un débit (montant négatif)
+            // Pour les autres, c'est un crédit (montant positif)
+            const isDebit = transaction.type === "REFUND" && transaction.from_user_id === user.id;
+            const amount = isDebit 
+              ? -(transaction.amount / 100) // Débit (négatif)
+              : transaction.amount / 100;   // Crédit (positif)
+
+            return {
+              id: transaction.id,
+              bookingId: transaction.booking_id,
+              clientName,
+              amount,
+              status: displayStatus,
+              type: transaction.type,
+              date: booking?.date || transaction.created_at,
+              createdAt: transaction.created_at,
+              description: transaction.description,
+            };
+          });
+
+        // Trier par date (plus récent en premier)
+        transformedPayments.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        setPayments(transformedPayments);
+      } catch (err: any) {
+        console.error("Erreur lors du chargement des paiements:", err);
+        setError(err.response?.data?.message || "Impossible de charger les paiements");
+        setPayments([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPayments();
+  }, [user?.id]);
 
   const filteredPayments = payments.filter((payment) => {
-    if (statusFilter !== "all" && payment.status !== statusFilter) return false;
-    if (searchQuery && !payment.clientName.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false;
+    // Filtrer par statut
+    if (statusFilter !== "all") {
+      if (statusFilter === "pending" && payment.status !== "pending") return false;
+      if (statusFilter === "completed" && payment.status !== "paid") return false;
+      if (statusFilter === "failed" && payment.status !== "failed") return false;
+      if (statusFilter === "cancelled" && payment.status !== "cancelled") return false;
     }
+    
+    // Filtrer par recherche
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      if (
+        !payment.clientName.toLowerCase().includes(query) &&
+        !payment.bookingId?.toLowerCase().includes(query) &&
+        !payment.description?.toLowerCase().includes(query)
+      ) {
+        return false;
+      }
+    }
+    
     return true;
   });
 
+  // Calculer les revenus totaux (seulement les crédits payés)
   const totalRevenue = payments
-    .filter((p) => p.status === "paid")
+    .filter((p) => p.status === "paid" && p.amount > 0)
     .reduce((sum, p) => sum + p.amount, 0);
 
+  // Calculer le montant en attente (seulement les crédits en attente)
   const pendingAmount = payments
-    .filter((p) => p.status === "pending")
+    .filter((p) => p.status === "pending" && p.amount > 0)
     .reduce((sum, p) => sum + p.amount, 0);
+
+  const handleDownloadInvoice = async (paymentId: string) => {
+    // TODO: Implémenter le téléchargement de facture
+    console.log("Télécharger la facture pour:", paymentId);
+  };
 
   return (
     <div className="space-y-6">
@@ -70,7 +206,9 @@ export default function CookPaymentsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Revenus totaux</p>
-              <p className="text-2xl font-bold text-foreground">{totalRevenue} €</p>
+              <p className="text-2xl font-bold text-foreground">
+                {isLoading ? "..." : `${totalRevenue.toFixed(2)} €`}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -87,7 +225,9 @@ export default function CookPaymentsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">En attente</p>
-              <p className="text-2xl font-bold text-foreground">{pendingAmount} €</p>
+              <p className="text-2xl font-bold text-foreground">
+                {isLoading ? "..." : `${pendingAmount.toFixed(2)} €`}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -104,7 +244,9 @@ export default function CookPaymentsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Transactions</p>
-              <p className="text-2xl font-bold text-foreground">{payments.length}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {isLoading ? "..." : payments.length}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -127,8 +269,9 @@ export default function CookPaymentsPage() {
             {[
               { id: "all" as PaymentStatusFilter, label: "Tous" },
               { id: "pending" as PaymentStatusFilter, label: "En attente" },
-              { id: "paid" as PaymentStatusFilter, label: "Payés" },
-              { id: "refunded" as PaymentStatusFilter, label: "Remboursés" },
+              { id: "completed" as PaymentStatusFilter, label: "Payés" },
+              { id: "failed" as PaymentStatusFilter, label: "Échoués" },
+              { id: "cancelled" as PaymentStatusFilter, label: "Annulés" },
             ].map((filter) => (
               <button
                 key={filter.id}
@@ -150,14 +293,28 @@ export default function CookPaymentsPage() {
       </div>
 
       {/* Liste des paiements */}
-      {filteredPayments.length === 0 ? (
+      {isLoading ? (
+        <div className="text-center py-12 bg-card border border-border rounded-xl">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Chargement des paiements...</p>
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 bg-card border border-border rounded-xl">
+          <p className="text-destructive">{error}</p>
+        </div>
+      ) : filteredPayments.length === 0 ? (
         <div className="text-center py-12 bg-card border border-border rounded-xl">
           <p className="text-muted-foreground">Aucun paiement trouvé</p>
         </div>
       ) : (
         <div className="grid gap-4">
           {filteredPayments.map((payment, index) => (
-            <PaymentCard key={payment.id} payment={payment} index={index} />
+            <PaymentCard 
+              key={payment.id} 
+              payment={payment} 
+              index={index}
+              onDownload={() => handleDownloadInvoice(payment.id)}
+            />
           ))}
         </div>
       )}
@@ -166,20 +323,13 @@ export default function CookPaymentsPage() {
 }
 
 interface PaymentCardProps {
-  payment: {
-    id: string;
-    bookingId: string;
-    clientName: string;
-    amount: number;
-    status: string;
-    date: string;
-    createdAt: string;
-  };
+  payment: Payment;
   index: number;
+  onDownload: () => void;
 }
 
-function PaymentCard({ payment, index }: PaymentCardProps) {
-  const statusConfig = {
+function PaymentCard({ payment, index, onDownload }: PaymentCardProps) {
+  const statusConfig: Record<string, { label: string; color: string }> = {
     pending: {
       label: "En attente",
       color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
@@ -188,13 +338,34 @@ function PaymentCard({ payment, index }: PaymentCardProps) {
       label: "Payé",
       color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
     },
+    completed: {
+      label: "Complété",
+      color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+    },
     refunded: {
       label: "Remboursé",
       color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
     },
+    failed: {
+      label: "Échoué",
+      color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+    },
+    cancelled: {
+      label: "Annulé",
+      color: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
+    },
   };
 
-  const config = statusConfig[payment.status as keyof typeof statusConfig] || statusConfig.pending;
+  const config = statusConfig[payment.status] || statusConfig.pending;
+
+  // Déterminer le type de transaction pour l'affichage
+  const typeLabels: Record<string, string> = {
+    BOOKING_PAYMENT: "Paiement réservation",
+    PAYOUT: "Virement",
+    REFUND: "Remboursement",
+    BONUS: "Bonus",
+    PLATFORM_FEE: "Frais plateforme",
+  };
 
   return (
     <motion.div
@@ -215,20 +386,38 @@ function PaymentCard({ payment, index }: PaymentCardProps) {
               {config.label}
             </span>
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>Réservation #{payment.bookingId.slice(0, 8)}</span>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+            {payment.bookingId && (
+              <>
+                <span>Réservation #{payment.bookingId.slice(0, 8)}</span>
+                <span>•</span>
+              </>
+            )}
+            <span>{typeLabels[payment.type] || payment.type}</span>
             <span>•</span>
             <span>{formatDate(payment.date)}</span>
+            {payment.description && (
+              <>
+                <span>•</span>
+                <span className="truncate max-w-xs">{payment.description}</span>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-2xl font-bold text-foreground">{payment.amount} €</p>
+            <p className={`text-2xl font-bold ${
+              payment.amount < 0 
+                ? "text-red-600 dark:text-red-400" 
+                : "text-foreground"
+            }`}>
+              {payment.amount >= 0 ? "+" : ""}{payment.amount.toFixed(2)} €
+            </p>
             <p className="text-xs text-muted-foreground">
               {formatDate(payment.createdAt)}
             </p>
           </div>
-          <Button variant="outline" size="icon">
+          <Button variant="outline" size="icon" onClick={onDownload}>
             <Download className="w-4 h-4" />
           </Button>
         </div>
@@ -236,4 +425,3 @@ function PaymentCard({ payment, index }: PaymentCardProps) {
     </motion.div>
   );
 }
-

@@ -1,40 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Star, Filter, Search } from "lucide-react";
+import { Star, Search, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { formatDate } from "@/lib/utils";
-
-// Mock data - À remplacer par les vraies données
-const mockReviews = [
-  {
-    id: "1",
-    clientName: "Sophie Martin",
-    rating: 5,
-    comment: "Excellent cuisinier ! Le repas était délicieux et le service impeccable.",
-    date: "2024-12-20",
-    bookingId: "booking-1",
-  },
-  {
-    id: "2",
-    clientName: "Pierre Dubois",
-    rating: 4,
-    comment: "Très bon repas, je recommande !",
-    date: "2024-12-18",
-    bookingId: "booking-2",
-  },
-  {
-    id: "3",
-    clientName: "Marie Laurent",
-    rating: 5,
-    comment: "Un chef exceptionnel, nous avons passé un moment merveilleux.",
-    date: "2024-12-15",
-    bookingId: "booking-3",
-  },
-];
+import { apiClient } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/authStore";
 
 type RatingFilter = "all" | "5" | "4" | "3" | "2" | "1";
+
+interface Review {
+  id: string;
+  clientName: string;
+  rating: number;
+  comment: string | null;
+  date: string;
+  bookingId: string | null;
+  createdAt: string;
+}
 
 /**
  * Page "Mes Avis"
@@ -43,30 +27,120 @@ type RatingFilter = "all" | "5" | "4" | "3" | "2" | "1";
 export default function CookReviewsPage() {
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [averageRating, setAverageRating] = useState<number | null>(null);
+  const { user } = useAuthStore();
 
-  const filteredReviews = mockReviews.filter((review) => {
+  // Charger les avis depuis l'API
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (!user?.id) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+      try {
+        // Charger les avis reçus par le cuisinier et les réservations en parallèle
+        const [reviewsResponse, bookingsResponse] = await Promise.allSettled([
+          apiClient.getReviewsByUser(user.id),
+          apiClient.getBookings({ limit: 1000 }),
+        ]);
+
+        const reviewsData = reviewsResponse.status === "fulfilled"
+          ? reviewsResponse.value.reviews
+          : [];
+        const bookings = bookingsResponse.status === "fulfilled"
+          ? bookingsResponse.value.bookings
+          : [];
+
+        // Créer un map des réservations par ID pour accès rapide
+        const bookingsMap = new Map(bookings.map((b: any) => [b.id, b]));
+
+        // Transformer les avis pour correspondre au format attendu
+        const transformedReviews: Review[] = reviewsData.map((review: any) => {
+          const booking = review.booking_id ? bookingsMap.get(review.booking_id) : null;
+          
+          // Priorité : booking.client > reviewer (celui qui a écrit l'avis)
+          let clientName = "Client";
+          if (booking?.client?.first_name && booking?.client?.last_name) {
+            clientName = `${booking.client.first_name} ${booking.client.last_name}`;
+          } else if (booking?.client?.first_name) {
+            clientName = booking.client.first_name;
+          } else if (review.reviewer?.first_name && review.reviewer?.last_name) {
+            clientName = `${review.reviewer.first_name} ${review.reviewer.last_name}`;
+          } else if (review.reviewer?.first_name) {
+            clientName = review.reviewer.first_name;
+          }
+
+          return {
+            id: review.id,
+            clientName,
+            rating: review.rating,
+            comment: review.comment,
+            date: booking?.date || review.created_at,
+            bookingId: review.booking_id,
+            createdAt: review.created_at,
+          };
+        });
+
+        // Trier par date (plus récent en premier)
+        transformedReviews.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        setReviews(transformedReviews);
+
+        // Mettre à jour la note moyenne
+        if (reviewsResponse.status === "fulfilled") {
+          setAverageRating(reviewsResponse.value.average_rating);
+        } else if (transformedReviews.length > 0) {
+          // Calculer la moyenne si l'API ne la fournit pas
+          const sum = transformedReviews.reduce((acc, r) => acc + r.rating, 0);
+          setAverageRating(sum / transformedReviews.length);
+        }
+      } catch (err: any) {
+        console.error("Erreur lors du chargement des avis:", err);
+        setError(err.response?.data?.message || "Impossible de charger les avis");
+        setReviews([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadReviews();
+  }, [user?.id]);
+
+  const filteredReviews = reviews.filter((review) => {
+    // Filtrer par note
     if (ratingFilter !== "all" && review.rating !== parseInt(ratingFilter)) {
       return false;
     }
-    if (
-      searchQuery &&
-      !review.clientName.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      !review.comment.toLowerCase().includes(searchQuery.toLowerCase())
-    ) {
-      return false;
+    
+    // Filtrer par recherche
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      if (
+        !review.clientName.toLowerCase().includes(query) &&
+        !review.comment?.toLowerCase().includes(query) &&
+        !review.bookingId?.toLowerCase().includes(query)
+      ) {
+        return false;
+      }
     }
+    
     return true;
   });
 
-  const averageRating =
-    mockReviews.reduce((sum, r) => sum + r.rating, 0) / mockReviews.length;
-
   const ratingDistribution = {
-    5: mockReviews.filter((r) => r.rating === 5).length,
-    4: mockReviews.filter((r) => r.rating === 4).length,
-    3: mockReviews.filter((r) => r.rating === 3).length,
-    2: mockReviews.filter((r) => r.rating === 2).length,
-    1: mockReviews.filter((r) => r.rating === 1).length,
+    5: reviews.filter((r) => r.rating === 5).length,
+    4: reviews.filter((r) => r.rating === 4).length,
+    3: reviews.filter((r) => r.rating === 3).length,
+    2: reviews.filter((r) => r.rating === 2).length,
+    1: reviews.filter((r) => r.rating === 1).length,
   };
 
   return (
@@ -95,7 +169,7 @@ export default function CookReviewsPage() {
             <div>
               <p className="text-sm text-muted-foreground">Note moyenne</p>
               <p className="text-2xl font-bold text-foreground">
-                {averageRating.toFixed(1)} / 5
+                {isLoading ? "..." : averageRating !== null ? `${averageRating.toFixed(1)} / 5` : "N/A"}
               </p>
             </div>
           </div>
@@ -113,7 +187,9 @@ export default function CookReviewsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total d'avis</p>
-              <p className="text-2xl font-bold text-foreground">{mockReviews.length}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {isLoading ? "..." : reviews.length}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -130,7 +206,9 @@ export default function CookReviewsPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Avis 5 étoiles</p>
-              <p className="text-2xl font-bold text-foreground">{ratingDistribution[5]}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {isLoading ? "..." : ratingDistribution[5]}
+              </p>
             </div>
           </div>
         </motion.div>
@@ -178,9 +256,22 @@ export default function CookReviewsPage() {
       </div>
 
       {/* Liste des avis */}
-      {filteredReviews.length === 0 ? (
+      {isLoading ? (
         <div className="text-center py-12 bg-card border border-border rounded-xl">
-          <p className="text-muted-foreground">Aucun avis trouvé</p>
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Chargement des avis...</p>
+        </div>
+      ) : error ? (
+        <div className="text-center py-12 bg-card border border-border rounded-xl">
+          <p className="text-destructive">{error}</p>
+        </div>
+      ) : filteredReviews.length === 0 ? (
+        <div className="text-center py-12 bg-card border border-border rounded-xl">
+          <p className="text-muted-foreground">
+            {reviews.length === 0
+              ? "Aucun avis pour le moment"
+              : "Aucun avis ne correspond à vos critères de recherche"}
+          </p>
         </div>
       ) : (
         <div className="grid gap-4">
@@ -194,7 +285,7 @@ export default function CookReviewsPage() {
 }
 
 interface ReviewCardProps {
-  review: typeof mockReviews[0];
+  review: Review;
   index: number;
 }
 
@@ -225,15 +316,20 @@ function ReviewCard({ review, index }: ReviewCardProps) {
               ))}
             </div>
           </div>
-          <p className="text-muted-foreground mb-2">{review.comment}</p>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          {review.comment && (
+            <p className="text-muted-foreground mb-2">{review.comment}</p>
+          )}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
             <span>{formatDate(review.date)}</span>
-            <span>•</span>
-            <span>Réservation #{review.bookingId.slice(0, 8)}</span>
+            {review.bookingId && (
+              <>
+                <span>•</span>
+                <span>Réservation #{review.bookingId.slice(0, 8)}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
     </motion.div>
   );
 }
-

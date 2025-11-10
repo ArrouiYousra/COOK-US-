@@ -13,7 +13,7 @@ interface ConversationsListProps {
 }
 
 /**
- * Liste des conversations avec les cuisiniers
+ * Liste des conversations avec les clients (pour les cuisiniers)
  * Affiche les conversations actives avec état en ligne/hors ligne
  */
 export function ConversationsList({
@@ -34,18 +34,19 @@ export function ConversationsList({
         const data = await apiClient.getConversations({ limit: 100 });
         
         // Transformer les conversations pour correspondre au format attendu
+        // Pour un cuisinier, other_user est le client
         const transformedConversations = data.conversations.map((conv: any) => {
           const otherUser = conv.other_user;
-          const cookName = otherUser?.first_name && otherUser?.last_name
+          const clientName = otherUser?.first_name && otherUser?.last_name
             ? `${otherUser.first_name} ${otherUser.last_name}`
-            : otherUser?.first_name || "Cuisinier";
+            : otherUser?.first_name || "Client";
 
           return {
             id: conv.id,
-            cookId: otherUser?.id,
-            cook: {
+            clientId: otherUser?.id,
+            client: {
               id: otherUser?.id,
-              name: cookName,
+              name: clientName,
               avatarUrl: otherUser?.avatar_url,
             },
             lastMessage: conv.last_message_content || "Aucun message",
@@ -82,8 +83,8 @@ export function ConversationsList({
     
     const query = searchQuery.toLowerCase();
     return conversations.filter((conv) => {
-      // Recherche dans le nom du cuisinier
-      if (conv.cook?.name?.toLowerCase().includes(query)) return true;
+      // Recherche dans le nom du client
+      if (conv.client?.name?.toLowerCase().includes(query)) return true;
       
       // Recherche dans le dernier message
       if (conv.lastMessage?.toLowerCase().includes(query)) return true;
@@ -183,8 +184,8 @@ export function ConversationsList({
 
 interface Conversation {
   id: string;
-  cookId: string;
-  cook: {
+  clientId: string;
+  client: {
     id: string;
     name: string;
     avatarUrl?: string | null;
@@ -225,17 +226,17 @@ function ConversationItem({
         {/* Avatar avec indicateur en ligne */}
         <div className="relative flex-shrink-0">
           <div className="relative w-12 h-12 rounded-full overflow-hidden">
-            {conversation.cook.avatarUrl ? (
+            {conversation.client.avatarUrl ? (
               <Image
-                src={conversation.cook.avatarUrl}
-                alt={conversation.cook.name}
+                src={conversation.client.avatarUrl}
+                alt={conversation.client.name}
                 fill
                 className="object-cover"
                 unoptimized
               />
             ) : (
               <div className="w-full h-full bg-muted flex items-center justify-center">
-                <span className="text-lg">👨‍🍳</span>
+                <span className="text-lg">👤</span>
               </div>
             )}
           </div>
@@ -256,7 +257,7 @@ function ConversationItem({
                 isSelected ? "text-foreground" : "text-foreground"
               }`}
             >
-              {conversation.cook.name}
+              {conversation.client.name}
             </h3>
             <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
               {formatTime(conversation.lastMessageTime)}

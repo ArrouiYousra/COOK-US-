@@ -337,6 +337,14 @@ class ApiClient {
   }
 
   /**
+   * Récupérer une réservation par son ID
+   */
+  async getBookingById(bookingId: string): Promise<{ booking: any }> {
+    const response = await this.client.get<{ booking: any }>(`/bookings/${bookingId}`);
+    return response.data;
+  }
+
+  /**
    * Accepter une réservation
    */
   async acceptBooking(bookingId: string): Promise<{ message: string; booking: any }> {
@@ -913,6 +921,34 @@ class ApiClient {
     return response.data;
   }
 
+  // ========== TRANSACTIONS ==========
+
+  /**
+   * Récupérer mes transactions
+   */
+  async getMyTransactions(): Promise<{
+    transactions: any[];
+    count: number;
+  }> {
+    const response = await this.client.get<{
+      transactions: any[];
+      count: number;
+    }>("/transactions/me");
+    return response.data;
+  }
+
+  /**
+   * Récupérer une transaction par ID
+   */
+  async getTransactionById(transactionId: string): Promise<{
+    transaction: any;
+  }> {
+    const response = await this.client.get<{
+      transaction: any;
+    }>(`/transactions/${transactionId}`);
+    return response.data;
+  }
+
   // ========== PAYMENT METHODS (STRIPE) ==========
 
   /**
@@ -1016,6 +1052,85 @@ class ApiClient {
     preferences: any;
   }> {
     const response = await this.client.put("/notifications/preferences", preferences);
+    return response.data;
+  }
+
+  // ========== AVAILABILITIES ==========
+
+  /**
+   * Récupérer mes disponibilités (cook)
+   */
+  async getMyAvailabilities(): Promise<{ availabilities: any[]; count: number }> {
+    const response = await this.client.get<{ availabilities: any[]; count: number }>("/availabilities/me");
+    return response.data;
+  }
+
+  /**
+   * Créer une disponibilité
+   */
+  async createAvailability(data: {
+    day_of_week: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+    meal_type: "BREAKFAST" | "LUNCH" | "DINNER" | "BRUNCH";
+    start_time: string; // HH:MM:SS
+    end_time: string; // HH:MM:SS
+    is_active?: boolean;
+  }): Promise<{ message: string; availability: any }> {
+    const response = await this.client.post<{ message: string; availability: any }>("/availabilities", data);
+    return response.data;
+  }
+
+  /**
+   * Mettre à jour une disponibilité
+   */
+  async updateAvailability(
+    availabilityId: string,
+    data: {
+      day_of_week?: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+      meal_type?: "BREAKFAST" | "LUNCH" | "DINNER" | "BRUNCH";
+      start_time?: string;
+      end_time?: string;
+      is_active?: boolean;
+    }
+  ): Promise<{ message: string; availability: any }> {
+    const response = await this.client.put<{ message: string; availability: any }>(`/availabilities/${availabilityId}`, data);
+    return response.data;
+  }
+
+  /**
+   * Supprimer une disponibilité
+   */
+  async deleteAvailability(availabilityId: string): Promise<{ message: string }> {
+    const response = await this.client.delete<{ message: string }>(`/availabilities/${availabilityId}`);
+    return response.data;
+  }
+
+  /**
+   * Récupérer mes dates bloquées
+   */
+  async getMyBlockedDates(params?: { from_date?: string; to_date?: string }): Promise<{ blocked_dates: any[]; count: number }> {
+    const queryParams = new URLSearchParams();
+    if (params?.from_date) queryParams.append("from_date", params.from_date);
+    if (params?.to_date) queryParams.append("to_date", params.to_date);
+
+    const queryString = queryParams.toString();
+    const url = `/availabilities/blocked-dates/me${queryString ? `?${queryString}` : ""}`;
+    const response = await this.client.get<{ blocked_dates: any[]; count: number }>(url);
+    return response.data;
+  }
+
+  /**
+   * Bloquer une date
+   */
+  async createBlockedDate(data: { date: string; reason?: string }): Promise<{ message: string; blocked_date: any }> {
+    const response = await this.client.post<{ message: string; blocked_date: any }>("/availabilities/blocked-dates", data);
+    return response.data;
+  }
+
+  /**
+   * Débloquer une date
+   */
+  async deleteBlockedDate(blockedDateId: string): Promise<{ message: string }> {
+    const response = await this.client.delete<{ message: string }>(`/availabilities/blocked-dates/${blockedDateId}`);
     return response.data;
   }
 }

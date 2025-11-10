@@ -98,10 +98,10 @@ export default function CookRequestsPage() {
       }
     };
 
-    if (!isAuthLoading && isAuthenticated && user) {
+    if (!isAuthLoading && isAuthenticated && user?.id) {
       loadRequests();
     }
-  }, [isAuthenticated, user, isAuthLoading]);
+  }, [isAuthenticated, user?.id, isAuthLoading]);
 
   // Filtrer les demandes
   const filteredBookings = bookings.filter((booking) => {
@@ -190,23 +190,8 @@ export default function CookRequestsPage() {
     );
   }
 
-  // Afficher une erreur si nécessaire
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <AlertCircle className="w-8 h-8 text-destructive" />
-          <p className="text-destructive">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-          >
-            Réessayer
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Note: Les erreurs sont affichées dans le message d'erreur en haut de la page
+  // Pas besoin de bloquer toute la page pour une erreur
 
   return (
     <div className="space-y-6">

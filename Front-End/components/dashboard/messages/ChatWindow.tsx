@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MessageInput } from "./MessageInput";
@@ -47,15 +48,16 @@ function formatMessageTime(timestamp: Date): string {
 
 export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [cook, setCook] = useState<any>(null);
+  const [client, setClient] = useState<any>(null);
   const { user } = useAuthStore();
 
-  // Charger les messages et les infos du cuisinier
+  // Charger les messages et les infos du client (pour un cuisinier)
   useEffect(() => {
     const loadMessages = async () => {
       setIsLoading(true);
@@ -68,43 +70,41 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
         );
 
         let actualConversationId = conversationId;
-        let cookData = null;
+        let clientData = null;
 
         if (existingConv) {
           // C'est une conversation existante
           actualConversationId = existingConv.id;
           if (existingConv.other_user) {
-            cookData = {
+            // Pour un cuisinier, other_user est le client
+            clientData = {
               id: existingConv.other_user.id,
               name: existingConv.other_user.first_name && existingConv.other_user.last_name
                 ? `${existingConv.other_user.first_name} ${existingConv.other_user.last_name}`
-                : existingConv.other_user.first_name || "Cuisinier",
+                : existingConv.other_user.first_name || "Client",
               avatarUrl: existingConv.other_user.avatar_url,
             };
           }
         } else {
-          // C'est probablement un cookId, charger les infos du cuisinier
+          // C'est probablement un clientId, charger les infos du client
           try {
-            const cookProfiles = await apiClient.getCookProfiles({ limit: 1000 });
-            const cookProfile = cookProfiles.profiles.find(
-              (p: any) => p.id === conversationId || p.user?.id === conversationId
-            );
-            if (cookProfile?.user) {
-              cookData = {
-                id: cookProfile.user.id,
-                name: cookProfile.user.first_name && cookProfile.user.last_name
-                  ? `${cookProfile.user.first_name} ${cookProfile.user.last_name}`
-                  : cookProfile.user.first_name || "Cuisinier",
-                avatarUrl: cookProfile.user.avatar_url,
+            const clientProfile = await apiClient.getUserProfile(conversationId);
+            if (clientProfile?.user) {
+              clientData = {
+                id: clientProfile.user.id,
+                name: clientProfile.user.first_name && clientProfile.user.last_name
+                  ? `${clientProfile.user.first_name} ${clientProfile.user.last_name}`
+                  : clientProfile.user.first_name || "Client",
+                avatarUrl: clientProfile.user.avatar_url,
               };
             }
           } catch (err) {
-            console.warn("Impossible de charger le profil du cuisinier:", err);
+            console.warn("Impossible de charger le profil du client:", err);
           }
         }
 
-        if (cookData) {
-          setCook(cookData);
+        if (clientData) {
+          setClient(clientData);
         }
 
         // Essayer de charger les messages si c'est une conversation existante
@@ -119,7 +119,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                 ? "Vous" 
                 : msg.sender?.first_name && msg.sender?.last_name
                 ? `${msg.sender.first_name} ${msg.sender.last_name}`
-                : msg.sender?.first_name || "Cuisinier";
+                : msg.sender?.first_name || "Client";
 
               return {
                 id: msg.id,
@@ -161,14 +161,14 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
       }
     };
 
-    if (conversationId && user) {
+    if (conversationId && user?.id) {
       loadMessages();
       
       // Rafraîchir les messages toutes les 10 secondes
       const interval = setInterval(loadMessages, 10000);
       return () => clearInterval(interval);
     }
-  }, [conversationId, user]);
+  }, [conversationId, user?.id]);
 
   useEffect(() => {
     // Scroll vers le bas à chaque nouveau message
@@ -176,7 +176,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !cook || !user || isSending) return;
+    if (!newMessage.trim() || !client || !user?.id || isSending) return;
 
     const messageText = newMessage;
     setNewMessage(""); // Vider immédiatement pour meilleure UX
@@ -186,7 +186,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     try {
       // Envoyer le message via l'API (cela créera automatiquement la conversation si elle n'existe pas)
       const response = await apiClient.sendMessage({
-        recipient_id: cook.id,
+        recipient_id: client.id,
         content: messageText,
         message_type: "TEXT",
       });
@@ -209,11 +209,36 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
         try {
           const conversationsData = await apiClient.getConversations({ limit: 100 });
           const newConv = conversationsData.conversations.find(
-            (c: any) => c.other_user?.id === cook.id
+            (c: any) => c.other_user?.id === client.id
           );
           if (newConv && newConv.id !== conversationId) {
-            // La conversation a été créée, on peut recharger les messages
-            window.location.href = `/dashboard/client/messages?cook=${cook.id}`;
+            // La conversation a été créée, rediriger vers la nouvelle conversation
+            router.push(`/dashboard/cook/messages?conversation=${newConv.id}`);
+          } else if (conversationId || newConv?.id) {
+            // Recharger les messages de la conversation actuelle
+            const updatedData = await apiClient.getMessages(conversationId || newConv!.id, { limit: 100 });
+            const updatedMessages = updatedData.messages.map((msg: any) => {
+              const isOwnMessage = msg.sender_id === user?.id;
+              const senderName = isOwnMessage 
+                ? "Vous" 
+                : msg.sender?.first_name && msg.sender?.last_name
+                ? `${msg.sender.first_name} ${msg.sender.last_name}`
+                : msg.sender?.first_name || "Client";
+
+              return {
+                id: msg.id,
+                senderId: msg.sender_id,
+                senderName,
+                text: msg.content,
+                timestamp: new Date(msg.created_at),
+                isRead: msg.is_read || false,
+                sender: msg.sender,
+              };
+            });
+            updatedMessages.sort((a: any, b: any) => 
+              a.timestamp.getTime() - b.timestamp.getTime()
+            );
+            setMessages(updatedMessages);
           }
         } catch (err) {
           console.warn("Erreur lors du rafraîchissement:", err);
@@ -244,7 +269,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     );
   }
 
-  if (!cook) {
+  if (!client) {
     return (
       <div className="flex-1 flex items-center justify-center bg-card border border-border rounded-xl">
         <p className="text-muted-foreground">Conversation introuvable</p>
@@ -270,17 +295,17 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
           )}
           <div className="relative">
             <div className="relative w-10 h-10 rounded-full overflow-hidden">
-              {cook.avatarUrl ? (
+              {client.avatarUrl ? (
                 <Image
-                  src={cook.avatarUrl}
-                  alt={cook.name}
+                  src={client.avatarUrl}
+                  alt={client.name}
                   fill
                   className="object-cover"
                   unoptimized
                 />
               ) : (
                 <div className="w-full h-full bg-muted flex items-center justify-center">
-                  <span>👨‍🍳</span>
+                  <span>👤</span>
                 </div>
               )}
             </div>
@@ -288,7 +313,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
             <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-gray-400 border-2 border-background" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-foreground">{cook.name}</h3>
+            <h3 className="font-semibold text-foreground">{client.name}</h3>
             <p className="text-xs text-muted-foreground">Hors ligne</p>
           </div>
         </div>
@@ -298,7 +323,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <AnimatePresence>
           {messages.map((message, index) => {
-            const isOwnMessage = message.senderId === "client";
+            const isOwnMessage = message.senderId === user?.id;
             const showAvatar = index === 0 || messages[index - 1].senderId !== message.senderId;
 
             return (
@@ -312,17 +337,17 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                 {/* Avatar */}
                 {showAvatar && !isOwnMessage && (
                   <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
-                    {cook.avatarUrl ? (
+                    {client.avatarUrl ? (
                       <Image
-                        src={cook.avatarUrl}
-                        alt={cook.name}
+                        src={client.avatarUrl}
+                        alt={client.name}
                         fill
                         className="object-cover"
                         unoptimized
                       />
                     ) : (
                       <div className="w-full h-full bg-muted flex items-center justify-center text-xs">
-                        👨‍🍳
+                        👤
                       </div>
                     )}
                   </div>

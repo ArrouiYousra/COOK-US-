@@ -61,7 +61,7 @@ export default function CookDashboardPage() {
         // Charger les bookings, les avis et les demandes en parallèle
         const [bookingsResponse, reviewsResponse, pendingBookingsResponse] = await Promise.allSettled([
           apiClient.getBookings({ limit: 1000 }), // Récupérer tous les bookings pour les stats
-          apiClient.getMyReviews(),
+          user?.id ? apiClient.getReviewsByUser(user.id) : Promise.resolve({ reviews: [], count: 0, average_rating: null }), // Avis reçus par le cuisinier
           apiClient.getBookings({ status: "PENDING", limit: 100 }), // Demandes en attente
         ]);
 
@@ -79,8 +79,15 @@ export default function CookDashboardPage() {
 
         // Traiter les avis
         let reviewsData: any[] = [];
+        let averageRating = 0;
         if (reviewsResponse.status === "fulfilled") {
           reviewsData = reviewsResponse.value.reviews || [];
+          // Utiliser la note moyenne de l'API si disponible, sinon calculer
+          if (reviewsResponse.value.average_rating !== null) {
+            averageRating = reviewsResponse.value.average_rating;
+          } else if (reviewsData.length > 0) {
+            averageRating = reviewsData.reduce((sum, r) => sum + (r.rating || 0), 0) / reviewsData.length;
+          }
         }
 
         // Calculer les statistiques
@@ -108,13 +115,6 @@ export default function CookDashboardPage() {
           );
         });
 
-        // Note moyenne (basée sur les avis reçus par le cuisinier)
-        const cookReviews = reviewsData.filter((r) => r.reviewed_user_id === user.id);
-        const averageRating =
-          cookReviews.length > 0
-            ? cookReviews.reduce((sum, r) => sum + (r.rating || 0), 0) / cookReviews.length
-            : 0;
-
         // Mettre à jour les statistiques
         setStats({
           totalRevenue,
@@ -131,7 +131,7 @@ export default function CookDashboardPage() {
           .slice(0, 3);
 
         setUpcomingBookings(sortedUpcoming);
-        setReviews(cookReviews);
+        setReviews(reviewsData);
       } catch (err: any) {
         console.error("Erreur lors du chargement du dashboard:", err);
         setError(err.response?.data?.message || "Impossible de charger les données du dashboard");
@@ -140,10 +140,10 @@ export default function CookDashboardPage() {
       }
     };
 
-    if (!isAuthLoading && isAuthenticated && user) {
+    if (!isAuthLoading && isAuthenticated && user?.id) {
       loadDashboardData();
     }
-  }, [isAuthenticated, user, isAuthLoading]);
+  }, [isAuthenticated, user?.id, isAuthLoading]);
 
   // Afficher un loader pendant le chargement
   if (isLoading || isAuthLoading) {
@@ -157,35 +157,45 @@ export default function CookDashboardPage() {
     );
   }
 
-  // Afficher une erreur si nécessaire
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <AlertCircle className="w-8 h-8 text-destructive" />
-          <p className="text-destructive">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-          >
-            Réessayer
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Note: Les erreurs sont affichées dans le message d'erreur en haut de la page
+  // Pas besoin de bloquer toute la page pour une erreur
+
+  /**
+   * Détermine la salutation selon l'heure de la journée
+   * Bonjour : 0h - 17h59
+   * Bonsoir : 18h - 23h59
+   */
+  const getGreeting = (): string => {
+    const hour = new Date().getHours();
+    return hour >= 18 ? "Bonsoir" : "Bonjour";
+  };
+
+  const firstName = user?.firstName || user?.first_name || "chef";
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
+      {/* Message de bienvenue stylé */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="bg-gradient-to-r from-blue-600/10 via-blue-500/10 to-blue-600/10 dark:from-blue-600/20 dark:via-blue-500/20 dark:to-blue-600/20 rounded-2xl p-6 lg:p-8 border border-blue-500/20"
+      >
         <h1 className="font-trebuchet text-3xl lg:text-4xl font-bold text-foreground mb-2">
-          Tableau de bord
+          {getGreeting()}, chef {firstName} 👨‍🍳
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-lg text-muted-foreground">
           Bienvenue dans votre espace cuisinier
         </p>
-      </div>
+      </motion.div>
+
+      {/* Messages d'erreur */}
+      {error && (
+        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        </div>
+      )}
 
       {/* Statistiques rapides */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

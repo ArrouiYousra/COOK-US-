@@ -1,15 +1,29 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { ConversationsList } from "@/components/dashboard/messages/ConversationsList";
 import { ChatWindow } from "@/components/dashboard/messages/ChatWindow";
 
 function MessagesContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const conversationParam = searchParams.get("conversation");
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(
-    searchParams.get("conversation") || null
+    conversationParam || null
   );
+
+  // Synchroniser avec le paramètre d'URL
+  useEffect(() => {
+    if (conversationParam) {
+      setSelectedConversationId(conversationParam);
+    }
+  }, [conversationParam]);
+
+  const handleSelectConversation = (conversationId: string) => {
+    setSelectedConversationId(conversationId);
+    router.push(`/dashboard/cook/messages?conversation=${conversationId}`);
+  };
 
   return (
     <div className="h-[calc(100vh-12rem)] flex border border-border rounded-xl overflow-hidden bg-card">
@@ -17,7 +31,7 @@ function MessagesContent() {
       <div className="w-full md:w-80 lg:w-96 flex-shrink-0">
         <ConversationsList
           selectedConversationId={selectedConversationId}
-          onSelectConversation={setSelectedConversationId}
+          onSelectConversation={handleSelectConversation}
         />
       </div>
 
@@ -26,7 +40,10 @@ function MessagesContent() {
         {selectedConversationId ? (
           <ChatWindow
             conversationId={selectedConversationId}
-            onBack={() => setSelectedConversationId(null)}
+            onBack={() => {
+              setSelectedConversationId(null);
+              router.push("/dashboard/cook/messages");
+            }}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-card border-l border-border">
@@ -44,7 +61,10 @@ function MessagesContent() {
         <div className="md:hidden absolute inset-0 bg-card z-10">
           <ChatWindow
             conversationId={selectedConversationId}
-            onBack={() => setSelectedConversationId(null)}
+            onBack={() => {
+              setSelectedConversationId(null);
+              router.push("/dashboard/cook/messages");
+            }}
           />
         </div>
       )}

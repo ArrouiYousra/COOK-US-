@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
 import {
   LayoutDashboard,
   FileText,
@@ -12,13 +11,10 @@ import {
   CreditCard,
   Star,
   BarChart3,
-  Settings,
   Menu,
   X,
   LogOut,
-  ChefHat,
   Clock,
-  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
@@ -95,25 +91,6 @@ const menuSections = [
         href: "/dashboard/cook/stats",
         color: "text-pink-600 dark:text-pink-400",
         bgColor: "bg-pink-500/10 dark:bg-pink-500/20",
-      },
-    ],
-  },
-  {
-    title: "Paramètres",
-    items: [
-      {
-        label: "Mon profil",
-        icon: ChefHat,
-        href: "/dashboard/cook/profile",
-        color: "text-red-600 dark:text-red-400",
-        bgColor: "bg-red-500/10 dark:bg-red-500/20",
-      },
-      {
-        label: "Paramètres",
-        icon: Settings,
-        href: "/dashboard/cook/settings",
-        color: "text-gray-600 dark:text-gray-400",
-        bgColor: "bg-gray-500/10 dark:bg-gray-500/20",
       },
     ],
   },
@@ -225,18 +202,6 @@ export function CookDashboardSidebar() {
 
           {/* Section bas de sidebar */}
           <div className="pt-4 border-t border-border mt-auto">
-            {/* Informations utilisateur */}
-            {user && (
-              <div className="px-4 py-3 mb-3 rounded-lg bg-accent">
-                <p className="text-sm font-semibold text-foreground truncate">
-                  {user.firstName} {user.lastName}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {user.email}
-                </p>
-              </div>
-            )}
-
             {/* Bouton déconnexion */}
             <Button
               variant="ghost"
