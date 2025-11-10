@@ -2,6 +2,7 @@ import { type Request, type Response } from 'express';
 import { StripeService } from '@core/services/stripe.service';
 import { BookingStore } from '@stores/booking.store';
 import { TransactionStore } from '@stores/transaction.store';
+import { NotificationService } from '@core/services/notification.service';
 import { supabaseAdmin } from '@config/supabaseClient';
 
 /**
@@ -136,18 +137,20 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
     // Continue even if transaction creation fails
   }
 
-  // Create notification for client
-  await supabaseAdmin.from('notifications').insert({
-    user_id: paymentIntent.metadata?.client_id || '',
-    type: 'PAYMENT_RECEIVED',
-    title: 'Paiement confirmé',
-    message: `Votre paiement pour la réservation du ${booking.booking_date} a été confirmé.`,
-    action_url: `/bookings/${bookingId}`,
-    metadata: {
-      booking_id: bookingId,
-      payment_intent_id: paymentIntent.id,
-    },
-  });
+  // Send notification to client (DB + Push + Email + SMS)
+  const clientUserId = paymentIntent.metadata?.client_id;
+  if (clientUserId) {
+    try {
+      await NotificationService.sendPaymentReceivedNotification(clientUserId, {
+        bookingId: bookingId,
+        amount: paymentIntent.amount / 100, // Convert from cents
+        date: booking.booking_date,
+      });
+    } catch (notificationError) {
+      console.error('Failed to send payment notification:', notificationError);
+      // Continue even if notification fails
+    }
+  }
 
   // Create notification for cook
   if (booking.cook_profile_id) {
@@ -158,17 +161,16 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
       .single();
 
     if (cookProfile) {
-      await supabaseAdmin.from('notifications').insert({
-        user_id: cookProfile.user_id,
-        type: 'PAYMENT_RECEIVED',
-        title: 'Paiement reçu',
-        message: `Un paiement a été reçu pour votre réservation du ${booking.booking_date}.`,
-        action_url: `/bookings/${bookingId}`,
-        metadata: {
-          booking_id: bookingId,
-          payment_intent_id: paymentIntent.id,
-        },
-      });
+      try {
+        await NotificationService.sendPaymentReceivedNotification(cookProfile.user_id, {
+          bookingId: bookingId,
+          amount: paymentIntent.amount / 100, // Convert from cents
+          date: booking.booking_date,
+        });
+      } catch (notificationError) {
+        console.error('Failed to send payment notification to cook:', notificationError);
+        // Continue even if notification fails
+      }
     }
   }
 
@@ -194,18 +196,25 @@ async function handlePaymentIntentFailed(paymentIntent: any): Promise<void> {
     })
     .eq('id', bookingId);
 
-  // Create notification for client
-  await supabaseAdmin.from('notifications').insert({
-    user_id: paymentIntent.metadata?.client_id || '',
-    type: 'SYSTEM',
-    title: 'Échec du paiement',
-    message: `Le paiement pour votre réservation a échoué. Veuillez réessayer.`,
-    action_url: `/bookings/${bookingId}`,
-    metadata: {
-      booking_id: bookingId,
-      payment_intent_id: paymentIntent.id,
-    },
-  });
+  // Send notification to client about payment failure
+  const clientUserId = paymentIntent.metadata?.client_id;
+  if (clientUserId) {
+    try {
+      await NotificationService.sendNotification(clientUserId, {
+        user_id: clientUserId,
+        type: 'SYSTEM',
+        title: 'Échec du paiement',
+        message: `Le paiement pour votre réservation a échoué. Veuillez réessayer.`,
+        action_url: `/bookings/${bookingId}`,
+        metadata: {
+          booking_id: bookingId,
+          payment_intent_id: paymentIntent.id,
+        },
+      });
+    } catch (notificationError) {
+      console.error('Failed to send payment failure notification:', notificationError);
+    }
+  }
 
   console.log(`Payment failed for booking: ${bookingId}`);
 }
@@ -288,18 +297,25 @@ async function handleChargeRefunded(charge: any): Promise<void> {
     // Continue even if transaction creation fails
   }
 
-  // Create notification for client
-  await supabaseAdmin.from('notifications').insert({
-    user_id: paymentIntent.metadata?.client_id || '',
-    type: 'SYSTEM',
-    title: 'Remboursement effectué',
-    message: `Un remboursement de ${refundAmount}€ a été effectué pour votre réservation.`,
-    action_url: `/bookings/${bookingId}`,
-    metadata: {
-      booking_id: bookingId,
-      refund_amount: refundAmount,
-    },
-  });
+  // Send notification to client about refund
+  const clientUserId = paymentIntent.metadata?.client_id;
+  if (clientUserId) {
+    try {
+      await NotificationService.sendNotification(clientUserId, {
+        user_id: clientUserId,
+        type: 'SYSTEM',
+        title: 'Remboursement effectué',
+        message: `Un remboursement de ${refundAmount}€ a été effectué pour votre réservation.`,
+        action_url: `/bookings/${bookingId}`,
+        metadata: {
+          booking_id: bookingId,
+          refund_amount: refundAmount,
+        },
+      });
+    } catch (notificationError) {
+      console.error('Failed to send refund notification:', notificationError);
+    }
+  }
 
   console.log(`Refund processed for booking: ${bookingId}`);
 }

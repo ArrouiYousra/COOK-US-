@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Loader2, ArrowLeft, Info, Home } from "lucide-react";
 import Link from "next/link";
@@ -24,6 +23,7 @@ import { apiClient } from "@/lib/api/client";
 import {
   registerCookSchema,
   type RegisterCookFormData,
+  createTypedResolver,
 } from "@/lib/validations/auth";
 
 /**
@@ -33,7 +33,7 @@ import {
  */
 export default function RegisterCookPage() {
   const router = useRouter();
-  const { setUser, setSelectedRole, selectedRole } = useAuthStore();
+  const { applyAuthResponse, setSelectedRole, selectedRole } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,18 +46,75 @@ export default function RegisterCookPage() {
     watch,
     setValue,
   } = useForm<RegisterCookFormData>({
-    resolver: zodResolver(registerCookSchema),
+    resolver: createTypedResolver<RegisterCookFormData>(registerCookSchema),
     mode: "onChange",
   });
 
-  // Vérifier que le rôle est sélectionné
+  // Vérifier que le rôle est sélectionné (redirection dans useEffect pour éviter l'erreur React)
+  useEffect(() => {
+    if (!selectedRole || selectedRole !== "COOK") {
+      router.push("/auth/role");
+    }
+  }, [selectedRole, router]);
+
   if (!selectedRole || selectedRole !== "COOK") {
-    router.push("/auth/role");
     return null;
   }
 
   const employmentStatus = watch("employmentStatus");
   const siretNumber = watch("siretNumber");
+  const hourlyRate = watch("hourlyRate");
+
+  // Fonction pour formater le numéro de téléphone français
+  const formatPhoneNumber = (value: string): string => {
+    if (!value) return '';
+    
+    // Retirer tous les espaces existants pour nettoyer
+    let cleaned = value.replace(/\s/g, '');
+    
+    // Si ça commence par +33, on garde +33 et on nettoie le reste
+    if (cleaned.startsWith('+33')) {
+      cleaned = '+33' + cleaned.slice(3).replace(/\D/g, '');
+    } else if (cleaned.startsWith('33') && cleaned.length > 2) {
+      cleaned = '+33' + cleaned.slice(2).replace(/\D/g, '');
+    } else if (cleaned.startsWith('0') && cleaned.length > 1) {
+      cleaned = '+33' + cleaned.slice(1).replace(/\D/g, '');
+    } else if (cleaned && !cleaned.startsWith('+')) {
+      // Si c'est juste des chiffres, on ajoute +33
+      const digits = cleaned.replace(/\D/g, '');
+      if (digits.length > 0) {
+        cleaned = '+33' + digits;
+      } else {
+        return '';
+      }
+    } else {
+      // Si ça commence par + mais pas +33, on nettoie
+      cleaned = cleaned.replace(/\D/g, '');
+      if (cleaned.length > 0) {
+        cleaned = '+33' + cleaned;
+      } else {
+        return '';
+      }
+    }
+    
+    // Limiter à 9 chiffres après +33 (format français)
+    const digits = cleaned.slice(3);
+    if (digits.length > 9) {
+      cleaned = '+33' + digits.slice(0, 9);
+    }
+    
+    // Formater avec des espaces : +33 X XX XX XX XX
+    const finalDigits = cleaned.slice(3);
+    if (finalDigits.length > 0) {
+      // Format: premier chiffre seul, puis groupes de 2
+      const first = finalDigits[0];
+      const rest = finalDigits.slice(1);
+      const groups = rest.match(/.{1,2}/g) || [];
+      return '+33 ' + first + (groups.length > 0 ? ' ' + groups.join(' ') : '');
+    }
+    
+    return cleaned;
+  };
 
   const onSubmit = async (data: RegisterCookFormData) => {
     try {
@@ -65,19 +122,30 @@ export default function RegisterCookPage() {
       setSubmitError(null);
 
       const { confirmPassword, ...registerData } = data;
-      // Nettoyer les champs optionnels vides
+      // Nettoyer le numéro de téléphone : retirer les espaces et garder uniquement +33XXXXXXXXX
+      let normalizedPhone = registerData.phone?.trim().replace(/\s/g, '');
+      // Si le numéro est vide ou contient seulement +33, on le met à undefined
+      if (!normalizedPhone || normalizedPhone === "+33" || normalizedPhone === "") {
+        normalizedPhone = undefined;
+      }
       const cleanedData = {
         ...registerData,
-        phone: registerData.phone || undefined,
-        siretNumber: registerData.siretNumber || undefined,
+        phone: normalizedPhone,
+        siretNumber:
+          registerData.siretNumber && registerData.siretNumber.trim() !== ""
+            ? registerData.siretNumber.trim()
+            : undefined,
+        hourlyRate: Number(registerData.hourlyRate),
+        // Note: Les champs PORTAGE_SALARIAL ne sont plus envoyés à l'inscription
+        // Ils seront complétés via updateMyProfile après l'inscription
       };
       const response = await apiClient.registerCook(cleanedData);
 
-      setUser(response.user);
+      applyAuthResponse(response);
       setSelectedRole(null);
       
-      // Redirection vers le dashboard cuisinier
-      router.push("/dashboard/cook");
+      const role = useAuthStore.getState().user?.role;
+      router.push(role === "COOK" ? "/dashboard/cook" : "/dashboard/client");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Une erreur est survenue lors de l'inscription";
       setSubmitError(message);
@@ -223,15 +291,14 @@ export default function RegisterCookPage() {
                   id="phone"
                   type="tel"
                   placeholder="6 12 34 56 78"
-                  defaultValue="+33"
-                  {...register("phone")}
+                  {...register("phone", {
+                    onChange: (e) => {
+                      const formatted = formatPhoneNumber(e.target.value);
+                      setValue("phone", formatted, { shouldValidate: true });
+                    },
+                  })}
                   className={errors.phone ? "border-destructive pl-16" : "pl-16"}
                   aria-invalid={!!errors.phone}
-                  onFocus={(e) => {
-                    if (e.target.value === "+33") {
-                      e.target.setSelectionRange(4, 4);
-                    }
-                  }}
                 />
               </div>
               {errors.phone && (
@@ -283,30 +350,101 @@ export default function RegisterCookPage() {
                 {errors.employmentStatus.message}
               </p>
             )}
+            {employmentStatus === "AUTO_ENTREPRENEUR" || employmentStatus === "MICRO_ENTREPRISE" ? (
+              <div className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
+                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <p>
+                  Le numéro SIRET (14 chiffres) ou SIREN (9 chiffres) est obligatoire pour ce statut. 
+                  Il sera vérifié via l'API INSEE. Si vous entrez un SIREN, le SIRET principal sera recherché automatiquement.
+                </p>
+              </div>
+            ) : employmentStatus === "PORTAGE_SALARIAL" ? (
             <div className="mt-2 flex items-start gap-2 text-xs text-muted-foreground">
               <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
               <p>
-                Le numéro SIRET est recommandé pour les auto-entrepreneurs et micro-entreprises.
-                Vous pourrez le compléter plus tard dans votre profil.
+                  Pour le portage salarial, vous devrez fournir vos informations personnelles et bancaires.
+                  Ces données seront transmises à notre partenaire (PayFit/Silae) pour la gestion de votre contrat.
               </p>
             </div>
+            ) : null}
           </div>
 
-          {/* Numéro SIRET (optionnel mais recommandé) */}
+          {/* Accroche professionnelle */}
           <div>
             <label
-              htmlFor="siretNumber"
+              htmlFor="headline"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Numéro SIRET{" "}
-              <span className="text-muted-foreground">
-                (optionnel, recommandé)
-              </span>
+              Votre accroche professionnelle *
             </label>
             <Input
-              id="siretNumber"
+              id="headline"
               type="text"
-              placeholder="12345678901234"
+              placeholder="Chef à domicile spécialisé en cuisine méditerranéenne"
+              {...register("headline")}
+              className={errors.headline ? "border-destructive" : ""}
+              aria-invalid={!!errors.headline}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Décrivez en une phrase votre style ou spécialité (visible sur votre profil).
+            </p>
+            {errors.headline && (
+              <p className="mt-1 text-sm text-destructive">
+                {errors.headline.message}
+              </p>
+            )}
+          </div>
+
+          {/* Tarif horaire */}
+          <div>
+            <label
+              htmlFor="hourlyRate"
+              className="block text-sm font-medium text-foreground mb-2"
+            >
+              Tarif horaire (en €) *
+            </label>
+            <Input
+              id="hourlyRate"
+              type="number"
+              step="1"
+              min={10}
+              max={500}
+              placeholder="45"
+              {...register("hourlyRate")}
+              className={errors.hourlyRate ? "border-destructive" : ""}
+              aria-invalid={!!errors.hourlyRate}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Indiquez le tarif qui sera affiché aux clients (entre 10€ et 500€ par heure).
+            </p>
+            {errors.hourlyRate && (
+              <p className="mt-1 text-sm text-destructive">
+                {errors.hourlyRate.message}
+              </p>
+            )}
+            {hourlyRate && !errors.hourlyRate && Number(hourlyRate) > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tarif sélectionné&nbsp;: {Number(hourlyRate).toFixed(0)} €/heure
+              </p>
+            )}
+          </div>
+
+          {/* Numéro SIRET (obligatoire pour AUTO_ENTREPRENEUR et MICRO_ENTREPRISE) */}
+          {(employmentStatus === "AUTO_ENTREPRENEUR" || employmentStatus === "MICRO_ENTREPRISE" || employmentStatus === "ASSOCIATION") && (
+            <div>
+              <label
+                htmlFor="siretNumber"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
+                Numéro SIRET{" "}
+                {(employmentStatus === "AUTO_ENTREPRENEUR" || employmentStatus === "MICRO_ENTREPRISE") && (
+                  <span className="text-destructive">*</span>
+                )}
+              </label>
+              <Input
+                id="siretNumber"
+                type="text"
+                placeholder="123456789 (SIREN) ou 12345678901234 (SIRET)"
               maxLength={14}
               {...register("siretNumber")}
               className={errors.siretNumber ? "border-destructive" : ""}
@@ -322,12 +460,35 @@ export default function RegisterCookPage() {
                 {errors.siretNumber.message}
               </p>
             )}
-            {siretNumber && siretNumber.length > 0 && siretNumber.length < 14 && (
+              {siretNumber && siretNumber.length > 0 && siretNumber.length < 9 && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {siretNumber.length < 9
+                    ? `${9 - siretNumber.length} chiffre(s) restant(s) pour un SIREN (minimum 9)`
+                    : siretNumber.length < 14
+                    ? `${14 - siretNumber.length} chiffre(s) restant(s) pour un SIRET complet`
+                    : ""}
+                </p>
+              )}
+              {siretNumber && siretNumber.length >= 9 && siretNumber.length < 14 && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {14 - siretNumber.length} chiffre(s) restant(s)
+                  SIREN détecté (9 chiffres). Le SIRET principal sera recherché automatiquement.
               </p>
             )}
           </div>
+          )}
+
+          {/* Note pour PORTAGE_SALARIAL */}
+          {employmentStatus === "PORTAGE_SALARIAL" && (
+            <div className="mt-2 flex items-start gap-2 text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-3 rounded-md border border-blue-200 dark:border-blue-800">
+              <Info className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+              <p className="text-blue-800 dark:text-blue-200">
+                <strong>Note importante :</strong> Pour le portage salarial, vous devrez compléter vos informations 
+                personnelles et bancaires (lieu de naissance, numéro de sécurité sociale, IBAN, BIC, document RIB) 
+                dans votre profil après l'inscription. Ces données seront transmises à notre partenaire (PayFit/Silae) 
+                pour la gestion de votre contrat de travail.
+              </p>
+            </div>
+          )}
 
           {/* Mot de passe et Confirmation sur la même ligne */}
           <div className="grid grid-cols-2 gap-4">

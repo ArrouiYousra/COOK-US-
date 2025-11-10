@@ -7,6 +7,7 @@ import {
   deleteNotification,
   getUnreadCount,
 } from './notification.controllers';
+import { registerFcmToken, removeFcmToken } from './fcm-token.controllers';
 import { authGuard } from '@core/middleware';
 
 const router = Router();
@@ -134,6 +135,45 @@ router.put('/read-all', authGuard, markAllAsRead);
  *         description: Notification deleted successfully
  */
 router.delete('/:notificationId', authGuard, deleteNotification);
+
+/**
+ * @swagger
+ * /api/notifications/fcm-token:
+ *   post:
+ *     summary: Register FCM token for push notifications
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fcm_token
+ *             properties:
+ *               fcm_token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: FCM token registered successfully
+ */
+router.post('/fcm-token', authGuard, registerFcmToken);
+
+/**
+ * @swagger
+ * /api/notifications/fcm-token:
+ *   delete:
+ *     summary: Remove FCM token (logout, app uninstall)
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: FCM token removed successfully
+ */
+router.delete('/fcm-token', authGuard, removeFcmToken);
 
 export default router;
 

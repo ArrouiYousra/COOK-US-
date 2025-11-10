@@ -1,16 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
-import { Eye, EyeOff, Loader2, ArrowLeft, Home } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowLeft, Home, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useAuthStore } from "@/stores/authStore";
+import { apiClient } from "@/lib/api/client";
 import { loginSchema, type LoginFormData } from "@/lib/validations/auth";
 
 /**
@@ -19,25 +20,43 @@ import { loginSchema, type LoginFormData } from "@/lib/validations/auth";
  */
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { login, isLoading, error, clearError } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+
+  // Récupérer l'email depuis les paramètres de l'URL
+  const emailFromUrl = searchParams.get("email");
+  const isRegistered = searchParams.get("registered") === "true";
 
   const {
     register,
     handleSubmit,
     formState: { errors },
+    setValue,
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     mode: "onChange",
+    defaultValues: {
+      email: emailFromUrl || "",
+    },
   });
+
+  // Pré-remplir l'email si présent dans l'URL
+  useEffect(() => {
+    if (emailFromUrl) {
+      setValue("email", emailFromUrl);
+      setShowSuccessMessage(isRegistered);
+    }
+  }, [emailFromUrl, isRegistered, setValue]);
 
   const onSubmit = async (data: LoginFormData) => {
     try {
       clearError();
       await login(data.email, data.password);
       
-      // Redirection selon le rôle
-      router.push("/dashboard");
+      const role = useAuthStore.getState().user?.role;
+      router.push(role === "COOK" ? "/dashboard/cook" : "/dashboard/client");
     } catch (error) {
       // L'erreur est gérée par le store
     }
@@ -88,6 +107,27 @@ export default function LoginPage() {
               Connectez-vous à votre compte Cook US
             </p>
           </div>
+
+          {/* Message de succès après inscription */}
+          {showSuccessMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800"
+            >
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                    Compte créé avec succès !
+                  </p>
+                  <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                    Connectez-vous avec votre email et mot de passe.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
         {/* Formulaire */}
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -199,9 +239,15 @@ export default function LoginPage() {
             variant="outline"
             size="lg"
             className="w-full"
-            onClick={() => {
-              // TODO: Implémenter OAuth Google
-              console.log("OAuth Google");
+            onClick={async () => {
+              try {
+                const role = useAuthStore.getState().selectedRole || "CLIENT";
+                const { redirectUrl } = await apiClient.loginWithGoogle(role as "CLIENT" | "COOK");
+                window.location.href = redirectUrl;
+              } catch (error) {
+                console.error("Erreur OAuth Google:", error);
+                // L'erreur sera gérée par le store si nécessaire
+              }
             }}
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -230,9 +276,15 @@ export default function LoginPage() {
             variant="outline"
             size="lg"
             className="w-full"
-            onClick={() => {
-              // TODO: Implémenter OAuth Apple
-              console.log("OAuth Apple");
+            onClick={async () => {
+              try {
+                const role = useAuthStore.getState().selectedRole || "CLIENT";
+                const { redirectUrl } = await apiClient.loginWithApple(role as "CLIENT" | "COOK");
+                window.location.href = redirectUrl;
+              } catch (error) {
+                console.error("Erreur OAuth Apple:", error);
+                // L'erreur sera gérée par le store si nécessaire
+              }
             }}
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">

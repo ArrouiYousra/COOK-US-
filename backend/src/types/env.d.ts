@@ -20,6 +20,24 @@ declare namespace NodeJS {
 
     // Mapbox
     MAPBOX_ACCESS_TOKEN: string;
+
+    // Resend (Email)
+    RESEND_API_KEY: string;
+    RESEND_FROM_EMAIL?: string;
+    RESEND_FROM_NAME?: string;
+
+    // Twilio (SMS)
+    TWILIO_ACCOUNT_SID?: string;
+    TWILIO_AUTH_TOKEN?: string;
+    TWILIO_PHONE_NUMBER?: string;
+
+    // Firebase (Push Notifications)
+    FIREBASE_PROJECT_ID?: string;
+    FIREBASE_PRIVATE_KEY?: string;
+    FIREBASE_CLIENT_EMAIL?: string;
+
+    // Frontend URL (for links in notifications)
+    FRONTEND_URL?: string;
   }
 }
 

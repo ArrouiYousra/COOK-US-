@@ -1,8 +1,33 @@
 import { type Request, type Response } from 'express';
+import { z } from 'zod';
 import { type AuthRequest } from '@core/middleware';
 import { UserStore } from '@stores/user.store';
 import { ProfileStore } from '@stores/profile.store';
+import { DocumentService } from '@domain/documents/document.service';
+import { supabaseAdmin } from '@config/supabaseClient';
 import type { CookStatus, EmploymentStatus } from '../../types/database.types';
+
+// Schéma de validation pour la complétion du profil PORTAGE_SALARIAL
+const completePortageSalarialSchema = z.object({
+  birthPlace: z
+    .string()
+    .min(2, 'Le lieu de naissance doit contenir au moins 2 caractères')
+    .max(100, 'Le lieu de naissance ne peut pas dépasser 100 caractères'),
+  socialSecurityNumber: z
+    .string()
+    .regex(/^[12][0-9]{2}(0[1-9]|1[0-2])([0-9]{2}|2[AB])[0-9]{3}[0-9]{3}[0-9]{2}$/, 'Numéro de sécurité sociale invalide'),
+  iban: z
+    .string()
+    .regex(/^FR[0-9]{2}[A-Z0-9]{23}$/i, 'IBAN invalide (format FR requis)'),
+  bic: z
+    .string()
+    .regex(/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/i, 'Code BIC invalide'),
+  ribDocument: z
+    .string()
+    .regex(/^data:(application\/pdf|image\/jpeg|image\/png);base64,/i, 'Format de fichier RIB invalide (PDF, JPEG ou PNG attendu)')
+    .max(15_000_000, 'Le document RIB est trop volumineux'),
+  ribDocumentName: z.string().max(255).optional(),
+});
 
 export const getMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -88,6 +113,13 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       kbis_url,
       is_available,
       availability_note,
+      // Champs PORTAGE_SALARIAL
+      birth_place,
+      social_security_number,
+      iban,
+      bic,
+      rib_document,
+      rib_document_name,
       // Client profile fields
       household_size,
       pet_friendly,
@@ -131,6 +163,42 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     let updatedClientProfile;
 
     if (user.role === 'COOK') {
+      // Récupérer le profil cuisinier actuel pour vérifier le statut d'emploi
+      const currentCookProfile = await ProfileStore.getCookProfileByUserId(req.user.id);
+      const isPortageSalarial = currentCookProfile?.employment_status === 'PORTAGE_SALARIAL';
+
+      // Validation conditionnelle pour PORTAGE_SALARIAL
+      // Si au moins un champ est fourni, tous doivent être présents
+      if (isPortageSalarial && (birth_place || social_security_number || iban || bic || rib_document)) {
+        const hasAllFields = birth_place && social_security_number && iban && bic && rib_document;
+        if (!hasAllFields) {
+          res.status(400).json({
+            error: 'ValidationError',
+            message: 'Pour le portage salarial, tous les champs sont requis : lieu de naissance, numéro de sécurité sociale, IBAN, BIC et document RIB',
+          });
+          return;
+        }
+        
+        try {
+          completePortageSalarialSchema.parse({
+            birthPlace: birth_place,
+            socialSecurityNumber: social_security_number,
+            iban,
+            bic,
+            ribDocument: rib_document,
+            ribDocumentName: rib_document_name,
+          });
+        } catch (validationError) {
+          if (validationError instanceof z.ZodError) {
+            res.status(400).json({
+              error: 'ValidationError',
+              details: validationError.flatten(),
+            });
+            return;
+          }
+        }
+      }
+
       const cookProfileUpdates: Record<string, unknown> = {};
       if (headline !== undefined) cookProfileUpdates.headline = headline;
       if (bio !== undefined) cookProfileUpdates.bio = bio;
@@ -155,6 +223,79 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       if (kbis_url !== undefined) cookProfileUpdates.kbis_url = kbis_url;
       if (is_available !== undefined) cookProfileUpdates.is_available = is_available;
       if (availability_note !== undefined) cookProfileUpdates.availability_note = availability_note;
+
+      // Gestion des champs PORTAGE_SALARIAL
+      let ribDocumentPath: string | undefined;
+      if (rib_document) {
+        try {
+          // Supprimer l'ancien RIB si existant
+          if (currentCookProfile?.rib_document_url) {
+            try {
+              await DocumentService.deleteRibDocument(currentCookProfile.rib_document_url);
+            } catch (deleteError) {
+              console.warn('Erreur lors de la suppression de l\'ancien RIB:', deleteError);
+            }
+          }
+          // Upload du nouveau RIB
+          ribDocumentPath = await DocumentService.uploadRibDocumentFromBase64(
+            req.user.id,
+            rib_document,
+            rib_document_name
+          );
+          cookProfileUpdates.rib_document_url = ribDocumentPath;
+        } catch (uploadError) {
+          res.status(400).json({
+            error: 'RibUploadFailed',
+            message: uploadError instanceof Error ? uploadError.message : 'Échec de l\'upload du document RIB',
+          });
+          return;
+        }
+      }
+
+      if (birth_place !== undefined) cookProfileUpdates.birth_place = birth_place;
+      
+      // Chiffrer les données sensibles
+      if (social_security_number !== undefined) {
+        const { data: ssnResult, error: ssnError } = await supabaseAdmin.rpc('encrypt_sensitive_data', {
+          data: social_security_number,
+        });
+        if (ssnError || !ssnResult) {
+          res.status(500).json({
+            error: 'EncryptionError',
+            message: 'Échec du chiffrement du numéro de sécurité sociale',
+          });
+          return;
+        }
+        cookProfileUpdates.social_security_number_encrypted = ssnResult;
+      }
+
+      if (iban !== undefined) {
+        const { data: ibanResult, error: ibanError } = await supabaseAdmin.rpc('encrypt_sensitive_data', {
+          data: iban.toUpperCase().replace(/\s/g, ''),
+        });
+        if (ibanError || !ibanResult) {
+          res.status(500).json({
+            error: 'EncryptionError',
+            message: 'Échec du chiffrement de l\'IBAN',
+          });
+          return;
+        }
+        cookProfileUpdates.iban_encrypted = ibanResult;
+      }
+
+      if (bic !== undefined) {
+        const { data: bicResult, error: bicError } = await supabaseAdmin.rpc('encrypt_sensitive_data', {
+          data: bic.toUpperCase().replace(/\s/g, ''),
+        });
+        if (bicError || !bicResult) {
+          res.status(500).json({
+            error: 'EncryptionError',
+            message: 'Échec du chiffrement du code BIC',
+          });
+          return;
+        }
+        cookProfileUpdates.bic_encrypted = bicResult;
+      }
 
       if (Object.keys(cookProfileUpdates).length > 0) {
         updatedCookProfile = await ProfileStore.updateCookProfile(req.user.id, cookProfileUpdates);

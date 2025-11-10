@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from '@config/swagger';
@@ -31,7 +32,15 @@ dotenv.config();
 const app: Express = express();
 
 // Middleware
-app.use(cors());
+const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+app.use(
+  cors({
+    origin: frontendOrigin,
+    credentials: true,
+  })
+);
+app.use(cookieParser());
 
 // IMPORTANT: Stripe webhook needs raw body for signature verification
 // Configure raw body parser for webhook endpoint only

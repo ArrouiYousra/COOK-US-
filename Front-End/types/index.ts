@@ -138,7 +138,7 @@ export interface AuthUser {
 
 export interface AuthResponse {
   user: AuthUser;
-  token: string;
+  token?: string;
   refreshToken?: string;
 }
 
@@ -151,13 +151,87 @@ export interface RegisterClientInput {
 }
 
 export interface RegisterCookInput {
+  // Champs de base
   firstName: string;
   lastName: string;
   email: string;
   password: string;
   phone?: string;
-  siretNumber?: string;
+  // Champs cuisinier
   employmentStatus: "AUTO_ENTREPRENEUR" | "PORTAGE_SALARIAL" | "MICRO_ENTREPRISE" | "ASSOCIATION";
+  headline: string;
+  hourlyRate: number;
+  siretNumber?: string;
+  // Champs PORTAGE_SALARIAL
+  birthPlace?: string;
+  socialSecurityNumber?: string;
+  iban?: string;
+  bic?: string;
+  ribDocument?: string;
+  ribDocumentName?: string;
+}
+
+// Types pour les réponses API
+export interface ClientProfile {
+  id: string;
+  user_id: string;
+  household_size: number | null;
+  pet_friendly: boolean;
+  smoking_allowed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CookProfile {
+  id: string;
+  user_id: string;
+  status: string;
+  headline: string;
+  bio: string | null;
+  hourly_rate: number;
+  average_rating: number | null;
+  total_bookings: number;
+  is_verified: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserProfile {
+  user: AuthUser;
+  cookProfile?: CookProfile | null;
+  clientProfile?: ClientProfile | null;
+}
+
+export interface BookingResponse {
+  bookings: Booking[];
+  count: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface ProposalsResponse {
+  bookings: Booking[];
+  count: number;
+  stats: {
+    pending: number;
+    accepted: number;
+    rejected: number;
+  };
+  filter: "all" | "pending" | "accepted" | "rejected";
+  limit: number;
+  offset: number;
+}
+
+export interface GetBookingsParams {
+  status?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface GetMyProposalsParams {
+  filter?: "pending" | "accepted" | "rejected";
+  limit?: number;
+  offset?: number;
 }
 
 export interface LoginInput {
@@ -170,13 +244,14 @@ export interface ForgotPasswordInput {
 }
 
 export interface ResetPasswordInput {
-  token: string;
   password: string;
   confirmPassword: string;
+  token: string;
 }
 
 export interface AuthState {
   user: AuthUser | null;
+  refreshToken?: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;

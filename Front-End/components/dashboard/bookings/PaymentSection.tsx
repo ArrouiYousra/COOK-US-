@@ -18,7 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatPrice, formatDateTime } from "@/lib/utils";
-import { confirmBookingAfterPayment } from "@/lib/api/bookings";
+import { apiClient } from "@/lib/api/client";
+import { StripeProvider } from "@/components/payments/StripeProvider";
 
 interface PaymentSectionProps {
   booking: {
@@ -66,6 +67,9 @@ export function PaymentSection({ booking }: PaymentSectionProps) {
     type: "percentage" | "fixed";
   } | null>(null);
   const [isValidatingPromo, setIsValidatingPromo] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
 
   // Calculer les montants
   const baseAmount = booking.totalPrice;
@@ -136,28 +140,43 @@ export function PaymentSection({ booking }: PaymentSectionProps) {
     try {
       setIsProcessing(true);
       
-      // TODO: Intégration Stripe
-      // const response = await stripeClient.createPaymentIntent({
-      //   amount: remaining,
-      //   bookingId: booking.id,
-      // });
-      // window.location.href = response.checkoutUrl;
+      // Créer le Payment Intent via l'API
+      const response = await apiClient.createPaymentIntent(booking.id);
       
-      // Simulation
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      
-      // Après paiement réussi, mettre à jour le statut du booking
-      // TODO: Appel API pour mettre à jour le statut
-      // await apiClient.confirmBookingAfterPayment(booking.id, paymentIntentId);
-      // Le backend mettra automatiquement le statut à "confirmed"
-      
-      console.log("Paiement simulé:", remaining);
-      console.log("Booking mis à jour: payment_pending → confirmed");
+      // Stocker le client secret et afficher le checkout
+      setClientSecret(response.paymentIntent.client_secret);
+      setPaymentAmount(response.paymentIntent.amount);
+      setShowCheckout(true);
     } catch (error) {
-      console.error("Erreur lors du paiement:", error);
+      console.error("Erreur lors de la création du paiement:", error);
+      alert(error instanceof Error ? error.message : "Une erreur est survenue");
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handlePaymentSuccess = async (paymentIntentId: string) => {
+    try {
+      // Le webhook Stripe mettra automatiquement à jour le statut
+      // On peut juste fermer le checkout et recharger la page
+      setShowCheckout(false);
+      setClientSecret(null);
+      
+      // Recharger la page pour voir les mises à jour
+      window.location.reload();
+    } catch (error) {
+      console.error("Erreur après paiement:", error);
+    }
+  };
+
+  const handlePaymentError = (error: string) => {
+    console.error("Erreur de paiement:", error);
+    alert(error);
+  };
+
+  const handlePaymentCancel = () => {
+    setShowCheckout(false);
+    setClientSecret(null);
   };
 
   const handlePartialPayment = async () => {
@@ -203,6 +222,26 @@ export function PaymentSection({ booking }: PaymentSectionProps) {
     setAppliedPromo(null);
     setPromoCode("");
   };
+
+  // Afficher le checkout Stripe si activé
+  if (showCheckout && clientSecret) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full"
+      >
+        <StripeProvider
+          clientSecret={clientSecret}
+          amount={paymentAmount}
+          currency="eur"
+          onSuccess={handlePaymentSuccess}
+          onError={handlePaymentError}
+          onCancel={handlePaymentCancel}
+        />
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

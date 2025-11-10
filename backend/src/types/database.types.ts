@@ -50,6 +50,8 @@ export interface User {
   sms_notifications: boolean;
   two_factor_enabled: boolean;
   two_factor_secret: string | null;
+  fcm_token: string | null;
+  fcm_token_updated_at: string | null;
   last_login_at: string | null;
   last_login_ip: string | null;
   created_at: string;
@@ -77,6 +79,15 @@ export interface CookProfile {
   siret_number: string | null;
   siret_verified: boolean;
   siret_verified_at: string | null;
+  // Champs pour PORTAGE_SALARIAL
+  birth_place: string | null;
+  social_security_number_encrypted: Buffer | null; // Chiffré, utiliser decrypt_sensitive_data() pour déchiffrer
+  iban_encrypted: Buffer | null; // Chiffré, utiliser decrypt_sensitive_data() pour déchiffrer
+  bic_encrypted: Buffer | null; // Chiffré, utiliser decrypt_sensitive_data() pour déchiffrer
+  rib_document_url: string | null;
+  employment_details_verified: boolean;
+  employment_details_verified_at: string | null;
+  // Fin champs PORTAGE_SALARIAL
   insurance_number: string | null;
   insurance_expiry_date: string | null;
   id_card_url: string | null;
@@ -113,7 +124,7 @@ export interface ClientProfile {
 // DTOs for creating users
 export interface CreateUserDTO {
   email: string;
-  password: string;
+  passwordHash: string;
   first_name: string;
   last_name: string;
   role?: UserRole;
@@ -130,6 +141,16 @@ export interface CreateCookProfileDTO {
   headline: string;
   hourly_rate: number;
   employment_status: EmploymentStatus;
+  siret_number?: string;
+  siret_verified?: boolean;
+  siret_verified_at?: string;
+  // Champs pour PORTAGE_SALARIAL (optionnels dans le DTO, validation conditionnelle dans le schéma)
+  birth_place?: string;
+  social_security_number?: string; // Sera chiffré avant insertion
+  iban?: string; // Sera chiffré avant insertion
+  bic?: string; // Sera chiffré avant insertion
+  rib_document_url?: string;
+  // Fin champs PORTAGE_SALARIAL
   bio?: string;
   service_radius?: number;
   minimum_booking_hours?: number;

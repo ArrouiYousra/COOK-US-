@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import {
   register,
+  registerClient,
+  registerCook,
   login,
   logout,
   getCurrentUser,
@@ -11,6 +13,8 @@ import {
   updateEmail,
   deleteAccount,
   resendVerification,
+  oauthGoogle,
+  oauthApple,
 } from './auth.controllers';
 import { authGuard } from '@core/middleware';
 
@@ -69,6 +73,46 @@ const router = Router();
  *         description: Bad request
  */
 router.post('/register', register);
+
+/**
+ * @swagger
+ * /api/auth/register/client:
+ *   post:
+ *     summary: Register a new client
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterClientInput'
+ *     responses:
+ *       201:
+ *         description: Client registered successfully
+ *       400:
+ *         description: Bad request
+ */
+router.post('/register/client', registerClient);
+
+/**
+ * @swagger
+ * /api/auth/register/cook:
+ *   post:
+ *     summary: Register a new cook
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterCookInput'
+ *     responses:
+ *       201:
+ *         description: Cook registered successfully
+ *       400:
+ *         description: Bad request
+ */
+router.post('/register/cook', registerCook);
 
 /**
  * @swagger
@@ -369,6 +413,72 @@ router.put('/update-email', authGuard, updateEmail);
  *         description: Bad request
  */
 router.delete('/delete-account', authGuard, deleteAccount);
+
+/**
+ * @swagger
+ * /api/auth/oauth/google:
+ *   post:
+ *     summary: Initiate Google OAuth login
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [CLIENT, COOK]
+ *                 example: CLIENT
+ *     responses:
+ *       200:
+ *         description: OAuth redirect URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 redirectUrl:
+ *                   type: string
+ *                   example: "https://accounts.google.com/oauth/authorize?..."
+ *       500:
+ *         description: OAuth initiation failed
+ */
+router.post('/oauth/google', oauthGoogle);
+
+/**
+ * @swagger
+ * /api/auth/oauth/apple:
+ *   post:
+ *     summary: Initiate Apple OAuth login
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               role:
+ *                 type: string
+ *                 enum: [CLIENT, COOK]
+ *                 example: CLIENT
+ *     responses:
+ *       200:
+ *         description: OAuth redirect URL
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 redirectUrl:
+ *                   type: string
+ *                   example: "https://appleid.apple.com/auth/authorize?..."
+ *       500:
+ *         description: OAuth initiation failed
+ */
+router.post('/oauth/apple', oauthApple);
 
 export default router;
 

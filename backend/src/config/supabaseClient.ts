@@ -26,3 +26,11 @@ export const supabaseAdmin: SupabaseClient = createClient(
   }
 );
 
+export const createSupabaseAuthClient = (): SupabaseClient =>
+  createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+

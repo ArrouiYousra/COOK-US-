@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { AuthUser, UserRole } from "@/types";
+import type { AuthResponse, AuthUser, UserRole } from "@/types";
 import { apiClient } from "@/lib/api/client";
 
 interface AuthStore {
@@ -15,6 +15,7 @@ interface AuthStore {
   setUser: (user: AuthUser | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  applyAuthResponse: (auth: AuthResponse) => void;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -27,7 +28,7 @@ interface AuthStore {
  */
 export const useAuthStore = create<AuthStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       isAuthenticated: false,
       isLoading: false,
@@ -39,10 +40,10 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setUser: (user) => {
-        set({ 
-          user, 
+        set({
+          user,
           isAuthenticated: !!user,
-          error: null 
+          error: null,
         });
       },
 
@@ -58,23 +59,28 @@ export const useAuthStore = create<AuthStore>()(
         set({ error: null });
       },
 
+      applyAuthResponse: (auth) => {
+        set({
+          user: auth.user,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+          selectedRole: null,
+        });
+      },
+
       login: async (email: string, password: string) => {
         try {
           set({ isLoading: true, error: null });
           const response = await apiClient.login({ email, password });
-          set({ 
-            user: response.user, 
-            isAuthenticated: true,
-            isLoading: false,
-            error: null 
-          });
+          get().applyAuthResponse(response);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Erreur de connexion";
-          set({ 
-            error: message, 
+          set({
+            error: message,
             isLoading: false,
             isAuthenticated: false,
-            user: null 
+            user: null,
           });
           throw error;
         }
@@ -86,11 +92,11 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error) {
           // Ignorer les erreurs de déconnexion
         } finally {
-          set({ 
-            user: null, 
+          set({
+            user: null,
             isAuthenticated: false,
             error: null,
-            selectedRole: null 
+            selectedRole: null,
           });
         }
       },
@@ -99,18 +105,21 @@ export const useAuthStore = create<AuthStore>()(
         try {
           set({ isLoading: true });
           const response = await apiClient.getCurrentUser();
-          set({ 
-            user: response.user, 
-            isAuthenticated: true,
-            isLoading: false 
-          });
+          get().applyAuthResponse(response);
         } catch (error) {
-          set({ 
-            user: null, 
+            try {
+              const refreshResponse = await apiClient.refreshSession();
+              get().applyAuthResponse(refreshResponse);
+              return;
+            } catch (refreshError) {
+          set({
+            user: null,
             isAuthenticated: false,
-            isLoading: false 
+            error: null,
           });
-          apiClient.removeToken();
+          }
+        } finally {
+          set({ isLoading: false });
         }
       },
     }),

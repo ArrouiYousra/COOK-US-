@@ -15,22 +15,19 @@ export const authGuard = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const cookieToken = (req as unknown as { cookies?: Record<string, string> }).cookies?.access_token;
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const tokenFromHeader = authHeader?.startsWith('Bearer ')
+      ? authHeader.substring(7)
+      : undefined;
+
+    const token = (tokenFromHeader ?? cookieToken)?.trim();
+
+    if (!token) {
       res.status(401).json({
         error: 'Unauthorized',
-        message: 'Missing or invalid authorization header',
-      });
-      return;
-    }
-
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-    if (!token || token.trim().length === 0) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Token is empty',
+        message: 'Jeton d’authentification manquant',
       });
       return;
     }

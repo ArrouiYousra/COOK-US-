@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,7 +24,7 @@ import { FR } from "country-flag-icons/react/3x2";
  */
 export default function RegisterClientPage() {
   const router = useRouter();
-  const { setUser, setSelectedRole, selectedRole } = useAuthStore();
+  const { applyAuthResponse, setSelectedRole, selectedRole } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,14 +35,71 @@ export default function RegisterClientPage() {
     handleSubmit,
     formState: { errors, isDirty },
     watch,
+    setValue,
   } = useForm<RegisterClientFormData>({
     resolver: zodResolver(registerClientSchema),
     mode: "onChange",
   });
 
-  // Vérifier que le rôle est sélectionné
+  // Fonction pour formater le numéro de téléphone français
+  const formatPhoneNumber = (value: string): string => {
+    if (!value) return '';
+    
+    // Retirer tous les espaces existants pour nettoyer
+    let cleaned = value.replace(/\s/g, '');
+    
+    // Si ça commence par +33, on garde +33 et on nettoie le reste
+    if (cleaned.startsWith('+33')) {
+      cleaned = '+33' + cleaned.slice(3).replace(/\D/g, '');
+    } else if (cleaned.startsWith('33') && cleaned.length > 2) {
+      cleaned = '+33' + cleaned.slice(2).replace(/\D/g, '');
+    } else if (cleaned.startsWith('0') && cleaned.length > 1) {
+      cleaned = '+33' + cleaned.slice(1).replace(/\D/g, '');
+    } else if (cleaned && !cleaned.startsWith('+')) {
+      // Si c'est juste des chiffres, on ajoute +33
+      const digits = cleaned.replace(/\D/g, '');
+      if (digits.length > 0) {
+        cleaned = '+33' + digits;
+      } else {
+        return '';
+      }
+    } else {
+      // Si ça commence par + mais pas +33, on nettoie
+      cleaned = cleaned.replace(/\D/g, '');
+      if (cleaned.length > 0) {
+        cleaned = '+33' + cleaned;
+      } else {
+        return '';
+      }
+    }
+    
+    // Limiter à 9 chiffres après +33 (format français)
+    const digits = cleaned.slice(3);
+    if (digits.length > 9) {
+      cleaned = '+33' + digits.slice(0, 9);
+    }
+    
+    // Formater avec des espaces : +33 X XX XX XX XX
+    const finalDigits = cleaned.slice(3);
+    if (finalDigits.length > 0) {
+      // Format: premier chiffre seul, puis groupes de 2
+      const first = finalDigits[0];
+      const rest = finalDigits.slice(1);
+      const groups = rest.match(/.{1,2}/g) || [];
+      return '+33 ' + first + (groups.length > 0 ? ' ' + groups.join(' ') : '');
+    }
+    
+    return cleaned;
+  };
+
+  // Vérifier que le rôle est sélectionné (redirection dans useEffect pour éviter l'erreur React)
+  useEffect(() => {
+    if (!selectedRole || selectedRole !== "CLIENT") {
+      router.push("/auth/role");
+    }
+  }, [selectedRole, router]);
+
   if (!selectedRole || selectedRole !== "CLIENT") {
-    router.push("/auth/role");
     return null;
   }
 
@@ -52,15 +109,26 @@ export default function RegisterClientPage() {
       setSubmitError(null);
 
       const { confirmPassword, ...registerData } = data;
-      const response = await apiClient.registerClient(registerData);
+      // Nettoyer le numéro de téléphone : retirer les espaces et garder uniquement +33XXXXXXXXX
+      let normalizedPhone = registerData.phone?.trim().replace(/\s/g, '');
+      // Si le numéro est vide ou contient seulement +33, on le met à undefined
+      if (!normalizedPhone || normalizedPhone === "+33" || normalizedPhone === "") {
+        normalizedPhone = undefined;
+      }
+      const cleanedData = {
+        ...registerData,
+        phone: normalizedPhone,
+      };
+      const response = await apiClient.registerClient(cleanedData);
 
-      setUser(response.user);
       setSelectedRole(null);
       
-      // Redirection vers le dashboard client
-      router.push("/dashboard/client");
+      // Rediriger vers la page de connexion avec l'email pré-rempli
+      const emailParam = encodeURIComponent(cleanedData.email);
+      router.push(`/auth/login?email=${emailParam}&registered=true`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Une erreur est survenue lors de l'inscription";
+      const message =
+        error instanceof Error ? error.message : "Une erreur est survenue lors de l'inscription";
       setSubmitError(message);
     } finally {
       setIsSubmitting(false);
@@ -203,15 +271,14 @@ export default function RegisterClientPage() {
                 id="phone"
                 type="tel"
                 placeholder="6 12 34 56 78"
-                defaultValue="+33"
-                {...register("phone")}
+                {...register("phone", {
+                  onChange: (e) => {
+                    const formatted = formatPhoneNumber(e.target.value);
+                    setValue("phone", formatted, { shouldValidate: true });
+                  },
+                })}
                 className={errors.phone ? "border-destructive pl-16" : "pl-16"}
                 aria-invalid={!!errors.phone}
-                onFocus={(e) => {
-                  if (e.target.value === "+33") {
-                    e.target.setSelectionRange(4, 4);
-                  }
-                }}
               />
             </div>
             {errors.phone && (
