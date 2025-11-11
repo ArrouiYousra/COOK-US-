@@ -60,6 +60,11 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       applyAuthResponse: (auth) => {
+        // Stocker le token dans localStorage pour l'utiliser dans les requêtes
+        if (auth.token && typeof window !== 'undefined') {
+          localStorage.setItem('access_token', auth.token);
+        }
+        
         set({
           user: auth.user,
           isAuthenticated: true,
@@ -92,6 +97,11 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error) {
           // Ignorer les erreurs de déconnexion
         } finally {
+          // Supprimer le token du localStorage
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('access_token');
+          }
+          
           set({
             user: null,
             isAuthenticated: false,
@@ -116,6 +126,10 @@ export const useAuthStore = create<AuthStore>()(
             } catch (refreshError) {
               // Si le refresh échoue aussi, l'utilisateur n'est plus authentifié
               // C'est un comportement normal après déconnexion, ne pas logger d'erreur
+              // Supprimer le token du localStorage
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('access_token');
+              }
               set({
                 user: null,
                 isAuthenticated: false,
@@ -130,6 +144,10 @@ export const useAuthStore = create<AuthStore>()(
             if (error?.code !== 'ECONNABORTED' && error?.code !== 'ERR_NETWORK') {
               // Ne logger que les erreurs inattendues, pas les erreurs normales de déconnexion
               console.warn('Erreur lors de la vérification de l\'authentification:', error?.message || 'Erreur inconnue');
+            }
+            // Supprimer le token du localStorage en cas d'erreur
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('access_token');
             }
             set({
               user: null,
