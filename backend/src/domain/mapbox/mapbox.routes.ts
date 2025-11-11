@@ -1,12 +1,12 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   geocodeAddress,
   reverseGeocode,
   searchAddresses,
   calculateDistance,
-} from './mapbox.controllers';
-import { authGuard, type AuthRequest } from '@core/middleware';
-import { type Response } from 'express';
+} from "./mapbox.controllers";
+import { authGuard, type AuthRequest } from "@core/middleware";
+import { type Response } from "express";
 
 const router = Router();
 
@@ -110,7 +110,7 @@ const router = Router();
  *       404:
  *         description: Address not found
  */
-router.get('/geocode', authGuard, geocodeAddress);
+router.get("/geocode", authGuard, geocodeAddress);
 
 /**
  * @swagger
@@ -143,7 +143,7 @@ router.get('/geocode', authGuard, geocodeAddress);
  *       404:
  *         description: Address not found
  */
-router.get('/reverse-geocode', authGuard, reverseGeocode);
+router.get("/reverse-geocode", authGuard, reverseGeocode);
 
 /**
  * @swagger
@@ -183,7 +183,7 @@ router.get('/reverse-geocode', authGuard, reverseGeocode);
  *       401:
  *         description: Unauthorized
  */
-router.get('/search', authGuard, searchAddresses);
+router.get("/search", authGuard, searchAddresses);
 
 /**
  * @swagger
@@ -235,7 +235,7 @@ router.get('/search', authGuard, searchAddresses);
  *       404:
  *         description: Route not found
  */
-router.get('/distance', authGuard, calculateDistance);
+router.get("/distance", authGuard, calculateDistance);
 
 /**
  * @swagger
@@ -253,46 +253,50 @@ router.get('/distance', authGuard, calculateDistance);
  *       500:
  *         description: Mapbox token not configured
  */
-router.get('/token', authGuard, async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
-      });
-      return;
-    }
+router.get(
+  "/token",
+  authGuard,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+      if (!req.user) {
+        res.status(401).json({
+          error: "Unauthorized",
+          message: "User not authenticated",
+        });
+        return;
+      }
 
-    // Retourner le token Mapbox (public token, sécurisé côté backend)
-    const token = process.env.MAPBOX_ACCESS_TOKEN;
-    if (!token || token === 'votre_token_mapbox' || token.trim() === '') {
+      // Retourner le token Mapbox (public token, sécurisé côté backend)
+      const token = process.env.MAPBOX_ACCESS_TOKEN;
+      if (!token || token === "votre_token_mapbox" || token.trim() === "") {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message:
+            "Mapbox token not configured. Please set MAPBOX_ACCESS_TOKEN in your .env file with a valid Mapbox token (starts with pk.)",
+        });
+        return;
+      }
+
+      // Vérifier que le token a le bon format
+      if (!token.startsWith("pk.")) {
+        res.status(500).json({
+          error: "Internal Server Error",
+          message: 'Invalid Mapbox token format. Token must start with "pk."',
+        });
+        return;
+      }
+
+      res.status(200).json({
+        token,
+      });
+    } catch (error) {
+      console.error("Get Mapbox token error:", error);
       res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Mapbox token not configured. Please set MAPBOX_ACCESS_TOKEN in your .env file with a valid Mapbox token (starts with pk.)',
+        error: "Internal Server Error",
+        message: "Failed to get Mapbox token",
       });
-      return;
     }
-
-    // Vérifier que le token a le bon format
-    if (!token.startsWith('pk.')) {
-      res.status(500).json({
-        error: 'Internal Server Error',
-        message: 'Invalid Mapbox token format. Token must start with "pk."',
-      });
-      return;
-    }
-
-    res.status(200).json({
-      token,
-    });
-  } catch (error) {
-    console.error('Get Mapbox token error:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get Mapbox token',
-    });
-  }
-});
+  },
+);
 
 export default router;
-

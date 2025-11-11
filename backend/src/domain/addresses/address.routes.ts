@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   getMyAddresses,
   getClientAddresses,
@@ -8,8 +8,8 @@ import {
   deleteAddress,
   setDefaultAddress,
   getBookingAddress,
-} from './address.controllers';
-import { authGuard } from '@core/middleware';
+} from "./address.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -27,7 +27,7 @@ const router = Router();
  *       403:
  *         description: Forbidden (only clients)
  */
-router.get('/me', authGuard, getMyAddresses);
+router.get("/me", authGuard, getMyAddresses);
 
 /**
  * @swagger
@@ -47,7 +47,7 @@ router.get('/me', authGuard, getMyAddresses);
  *       200:
  *         description: List of addresses (default only for non-owners)
  */
-router.get('/client/:clientId', authGuard, getClientAddresses);
+router.get("/client/:clientId", authGuard, getClientAddresses);
 
 /**
  * @swagger
@@ -69,7 +69,7 @@ router.get('/client/:clientId', authGuard, getClientAddresses);
  *       403:
  *         description: Forbidden (can only view own or default addresses)
  */
-router.get('/:addressId', authGuard, getAddressById);
+router.get("/:addressId", authGuard, getAddressById);
 
 /**
  * @swagger
@@ -137,7 +137,7 @@ router.get('/:addressId', authGuard, getAddressById);
  *       201:
  *         description: Address created successfully
  */
-router.post('/', authGuard, createAddress);
+router.post("/", authGuard, createAddress);
 
 /**
  * @swagger
@@ -198,7 +198,7 @@ router.post('/', authGuard, createAddress);
  *       200:
  *         description: Address updated successfully
  */
-router.put('/:addressId', authGuard, updateAddress);
+router.put("/:addressId", authGuard, updateAddress);
 
 /**
  * @swagger
@@ -218,7 +218,7 @@ router.put('/:addressId', authGuard, updateAddress);
  *       200:
  *         description: Address deleted successfully
  */
-router.delete('/:addressId', authGuard, deleteAddress);
+router.delete("/:addressId", authGuard, deleteAddress);
 
 /**
  * @swagger
@@ -238,7 +238,7 @@ router.delete('/:addressId', authGuard, deleteAddress);
  *       200:
  *         description: Default address set successfully
  */
-router.put('/:addressId/set-default', authGuard, setDefaultAddress);
+router.put("/:addressId/set-default", authGuard, setDefaultAddress);
 
 /**
  * @swagger
@@ -260,7 +260,6 @@ router.put('/:addressId/set-default', authGuard, setDefaultAddress);
  *       403:
  *         description: Forbidden (only participants can view)
  */
-router.get('/:bookingId/address', authGuard, getBookingAddress);
+router.get("/:bookingId/address", authGuard, getBookingAddress);
 
 export default router;
-

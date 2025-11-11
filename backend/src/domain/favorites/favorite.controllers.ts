@@ -1,65 +1,75 @@
-import { type Response } from 'express';
-import { type AuthRequest } from '@core/middleware';
-import { FavoriteStore } from '@stores/favorite.store';
-import { ProfileStore } from '@stores/profile.store';
-import { UserStore } from '@stores/user.store';
+import { type Response } from "express";
+import { type AuthRequest } from "@core/middleware";
+import { FavoriteStore } from "@stores/favorite.store";
+import { ProfileStore } from "@stores/profile.store";
+import { UserStore } from "@stores/user.store";
 
-export const getMyFavorites = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getMyFavorites = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
 
     // Only clients can view their favorites
     const user = await UserStore.getUserById(req.user.id);
-    if (!user || user.role !== 'CLIENT') {
+    if (!user || user.role !== "CLIENT") {
       res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only clients can view their favorites',
+        error: "Forbidden",
+        message: "Only clients can view their favorites",
       });
       return;
     }
 
-    const clientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+    const clientProfile = await ProfileStore.getClientProfileByUserId(
+      req.user.id,
+    );
     if (!clientProfile) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Client profile not found',
+        error: "Not Found",
+        message: "Client profile not found",
       });
       return;
     }
 
-    const favorites = await FavoriteStore.getFavoritesByClient(clientProfile.id);
+    const favorites = await FavoriteStore.getFavoritesByClient(
+      clientProfile.id,
+    );
 
     // Enrich with cook profile info
     const favoritesWithCooks = await Promise.all(
       favorites.map(async (favorite) => {
-        const cookProfile = await ProfileStore.getCookProfileById(favorite.cook_profile_id);
+        const cookProfile = await ProfileStore.getCookProfileById(
+          favorite.cook_profile_id,
+        );
         const cookUser = cookProfile
           ? await UserStore.getUserById(cookProfile.user_id)
           : null;
 
         return {
           ...favorite,
-          cook: cookUser && cookProfile
-            ? {
-                profile_id: cookProfile.id,
-                user_id: cookUser.id,
-                first_name: cookUser.first_name,
-                last_name: cookUser.last_name,
-                avatar_url: cookUser.avatar_url,
-                headline: cookProfile.headline,
-                hourly_rate: cookProfile.hourly_rate,
-                average_rating: cookProfile.average_rating,
-                city: cookUser.city,
-              }
-            : null,
+          cook:
+            cookUser && cookProfile
+              ? {
+                  profile_id: cookProfile.id,
+                  user_id: cookUser.id,
+                  first_name: cookUser.first_name,
+                  last_name: cookUser.last_name,
+                  avatar_url: cookUser.avatar_url,
+                  headline: cookProfile.headline,
+                  hourly_rate: cookProfile.hourly_rate,
+                  average_rating: cookProfile.average_rating,
+                  city: cookUser.city,
+                }
+              : null,
         };
-      })
+      }),
     );
 
     res.status(200).json({
@@ -67,39 +77,44 @@ export const getMyFavorites = async (req: AuthRequest, res: Response): Promise<v
       count: favoritesWithCooks.length,
     });
   } catch (error) {
-    console.error('Get favorites error:', error);
+    console.error("Get favorites error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get favorites',
+      error: "Internal Server Error",
+      message: "Failed to get favorites",
     });
   }
 };
 
-export const addFavorite = async (req: AuthRequest, res: Response): Promise<void> => {
+export const addFavorite = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
 
     // Only clients can add favorites
     const user = await UserStore.getUserById(req.user.id);
-    if (!user || user.role !== 'CLIENT') {
+    if (!user || user.role !== "CLIENT") {
       res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only clients can add favorites',
+        error: "Forbidden",
+        message: "Only clients can add favorites",
       });
       return;
     }
 
-    const clientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+    const clientProfile = await ProfileStore.getClientProfileByUserId(
+      req.user.id,
+    );
     if (!clientProfile) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Client profile not found',
+        error: "Not Found",
+        message: "Client profile not found",
       });
       return;
     }
@@ -107,8 +122,8 @@ export const addFavorite = async (req: AuthRequest, res: Response): Promise<void
     const { cookId } = req.params;
     if (!cookId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Cook ID is required',
+        error: "Bad Request",
+        message: "Cook ID is required",
       });
       return;
     }
@@ -117,8 +132,8 @@ export const addFavorite = async (req: AuthRequest, res: Response): Promise<void
     const cookProfile = await ProfileStore.getCookProfileById(cookId);
     if (!cookProfile) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Cook profile not found',
+        error: "Not Found",
+        message: "Cook profile not found",
       });
       return;
     }
@@ -126,53 +141,59 @@ export const addFavorite = async (req: AuthRequest, res: Response): Promise<void
     const favorite = await FavoriteStore.addFavorite(clientProfile.id, cookId);
 
     res.status(201).json({
-      message: 'Cook added to favorites successfully',
+      message: "Cook added to favorites successfully",
       favorite,
     });
   } catch (error) {
-    console.error('Add favorite error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to add favorite';
-    
-    if (errorMessage.includes('already in your favorites')) {
+    console.error("Add favorite error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to add favorite";
+
+    if (errorMessage.includes("already in your favorites")) {
       res.status(400).json({
-        error: 'Bad Request',
+        error: "Bad Request",
         message: errorMessage,
       });
       return;
     }
 
     res.status(500).json({
-      error: 'Internal Server Error',
+      error: "Internal Server Error",
       message: errorMessage,
     });
   }
 };
 
-export const removeFavorite = async (req: AuthRequest, res: Response): Promise<void> => {
+export const removeFavorite = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
 
     // Only clients can remove favorites
     const user = await UserStore.getUserById(req.user.id);
-    if (!user || user.role !== 'CLIENT') {
+    if (!user || user.role !== "CLIENT") {
       res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only clients can remove favorites',
+        error: "Forbidden",
+        message: "Only clients can remove favorites",
       });
       return;
     }
 
-    const clientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+    const clientProfile = await ProfileStore.getClientProfileByUserId(
+      req.user.id,
+    );
     if (!clientProfile) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Client profile not found',
+        error: "Not Found",
+        message: "Client profile not found",
       });
       return;
     }
@@ -180,8 +201,8 @@ export const removeFavorite = async (req: AuthRequest, res: Response): Promise<v
     const { cookId } = req.params;
     if (!cookId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Cook ID is required',
+        error: "Bad Request",
+        message: "Cook ID is required",
       });
       return;
     }
@@ -189,42 +210,47 @@ export const removeFavorite = async (req: AuthRequest, res: Response): Promise<v
     await FavoriteStore.removeFavorite(clientProfile.id, cookId);
 
     res.status(200).json({
-      message: 'Cook removed from favorites successfully',
+      message: "Cook removed from favorites successfully",
     });
   } catch (error) {
-    console.error('Remove favorite error:', error);
+    console.error("Remove favorite error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to remove favorite',
+      error: "Internal Server Error",
+      message: "Failed to remove favorite",
     });
   }
 };
 
-export const checkFavorite = async (req: AuthRequest, res: Response): Promise<void> => {
+export const checkFavorite = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
 
     // Only clients can check favorites
     const user = await UserStore.getUserById(req.user.id);
-    if (!user || user.role !== 'CLIENT') {
+    if (!user || user.role !== "CLIENT") {
       res.status(403).json({
-        error: 'Forbidden',
-        message: 'Only clients can check favorites',
+        error: "Forbidden",
+        message: "Only clients can check favorites",
       });
       return;
     }
 
-    const clientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+    const clientProfile = await ProfileStore.getClientProfileByUserId(
+      req.user.id,
+    );
     if (!clientProfile) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Client profile not found',
+        error: "Not Found",
+        message: "Client profile not found",
       });
       return;
     }
@@ -232,8 +258,8 @@ export const checkFavorite = async (req: AuthRequest, res: Response): Promise<vo
     const { cookId } = req.params;
     if (!cookId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Cook ID is required',
+        error: "Bad Request",
+        message: "Cook ID is required",
       });
       return;
     }
@@ -244,11 +270,10 @@ export const checkFavorite = async (req: AuthRequest, res: Response): Promise<vo
       is_favorite: isFavorite,
     });
   } catch (error) {
-    console.error('Check favorite error:', error);
+    console.error("Check favorite error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to check favorite',
+      error: "Internal Server Error",
+      message: "Failed to check favorite",
     });
   }
 };
-

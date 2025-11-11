@@ -1,41 +1,44 @@
-import { type Response } from 'express';
-import { type AuthRequest } from '@core/middleware';
-import { MapboxService } from '@core/services/mapbox.service';
-import dotenv from 'dotenv';
+import { type Response } from "express";
+import { type AuthRequest } from "@core/middleware";
+import { MapboxService } from "@core/services/mapbox.service";
+import dotenv from "dotenv";
 
 dotenv.config();
 
 // ============ MAPBOX ============
 
-export const geocodeAddress = async (req: AuthRequest, res: Response): Promise<void> => {
+export const geocodeAddress = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
 
     const { address, country } = req.query;
 
-    if (!address || typeof address !== 'string') {
+    if (!address || typeof address !== "string") {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'address query parameter is required',
+        error: "Bad Request",
+        message: "address query parameter is required",
       });
       return;
     }
 
     const result = await MapboxService.geocodeAddress(
       address,
-      country ? (country as string) : undefined
+      country ? (country as string) : undefined,
     );
 
     if (!result) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Address not found',
+        error: "Not Found",
+        message: "Address not found",
       });
       return;
     }
@@ -44,22 +47,26 @@ export const geocodeAddress = async (req: AuthRequest, res: Response): Promise<v
       result,
     });
   } catch (error) {
-    console.error('Geocode address error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Geocode address error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to geocode address',
+      error: "Internal Server Error",
+      message: "Failed to geocode address",
       details: errorMessage,
     });
   }
 };
 
-export const reverseGeocode = async (req: AuthRequest, res: Response): Promise<void> => {
+export const reverseGeocode = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -68,8 +75,8 @@ export const reverseGeocode = async (req: AuthRequest, res: Response): Promise<v
 
     if (!latitude || !longitude) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'latitude and longitude query parameters are required',
+        error: "Bad Request",
+        message: "latitude and longitude query parameters are required",
       });
       return;
     }
@@ -79,8 +86,8 @@ export const reverseGeocode = async (req: AuthRequest, res: Response): Promise<v
 
     if (isNaN(lat) || isNaN(lng)) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'latitude and longitude must be valid numbers',
+        error: "Bad Request",
+        message: "latitude and longitude must be valid numbers",
       });
       return;
     }
@@ -89,8 +96,8 @@ export const reverseGeocode = async (req: AuthRequest, res: Response): Promise<v
 
     if (!result) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Address not found for these coordinates',
+        error: "Not Found",
+        message: "Address not found for these coordinates",
       });
       return;
     }
@@ -99,32 +106,36 @@ export const reverseGeocode = async (req: AuthRequest, res: Response): Promise<v
       result,
     });
   } catch (error) {
-    console.error('Reverse geocode error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Reverse geocode error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to reverse geocode',
+      error: "Internal Server Error",
+      message: "Failed to reverse geocode",
       details: errorMessage,
     });
   }
 };
 
-export const searchAddresses = async (req: AuthRequest, res: Response): Promise<void> => {
+export const searchAddresses = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
 
     const { query, country, proximity_lng, proximity_lat } = req.query;
 
-    if (!query || typeof query !== 'string') {
+    if (!query || typeof query !== "string") {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'query parameter is required',
+        error: "Bad Request",
+        message: "query parameter is required",
       });
       return;
     }
@@ -141,7 +152,7 @@ export const searchAddresses = async (req: AuthRequest, res: Response): Promise<
     const results = await MapboxService.searchAddresses(
       query,
       country ? (country as string) : undefined,
-      proximity
+      proximity,
     );
 
     res.status(200).json({
@@ -149,22 +160,26 @@ export const searchAddresses = async (req: AuthRequest, res: Response): Promise<
       count: results.length,
     });
   } catch (error) {
-    console.error('Search addresses error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Search addresses error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to search addresses',
+      error: "Internal Server Error",
+      message: "Failed to search addresses",
       details: errorMessage,
     });
   }
 };
 
-export const calculateDistance = async (req: AuthRequest, res: Response): Promise<void> => {
+export const calculateDistance = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -173,8 +188,8 @@ export const calculateDistance = async (req: AuthRequest, res: Response): Promis
 
     if (!origin_lat || !origin_lng || !dest_lat || !dest_lng) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'origin_lat, origin_lng, dest_lat, and dest_lng are required',
+        error: "Bad Request",
+        message: "origin_lat, origin_lng, dest_lat, and dest_lng are required",
       });
       return;
     }
@@ -184,26 +199,32 @@ export const calculateDistance = async (req: AuthRequest, res: Response): Promis
     const destLat = parseFloat(dest_lat as string);
     const destLng = parseFloat(dest_lng as string);
 
-    if (isNaN(originLat) || isNaN(originLng) || isNaN(destLat) || isNaN(destLng)) {
+    if (
+      isNaN(originLat) ||
+      isNaN(originLng) ||
+      isNaN(destLat) ||
+      isNaN(destLng)
+    ) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'All coordinates must be valid numbers',
+        error: "Bad Request",
+        message: "All coordinates must be valid numbers",
       });
       return;
     }
 
-    const validProfile = profile === 'walking' || profile === 'cycling' ? profile : 'driving';
+    const validProfile =
+      profile === "walking" || profile === "cycling" ? profile : "driving";
 
     const result = await MapboxService.calculateDistance(
       [originLng, originLat],
       [destLng, destLat],
-      validProfile
+      validProfile,
     );
 
     if (!result) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Could not calculate route',
+        error: "Not Found",
+        message: "Could not calculate route",
       });
       return;
     }
@@ -217,13 +238,13 @@ export const calculateDistance = async (req: AuthRequest, res: Response): Promis
       },
     });
   } catch (error) {
-    console.error('Calculate distance error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error("Calculate distance error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to calculate distance',
+      error: "Internal Server Error",
+      message: "Failed to calculate distance",
       details: errorMessage,
     });
   }
 };
-

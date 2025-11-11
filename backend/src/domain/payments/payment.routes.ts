@@ -1,19 +1,19 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createPaymentIntent,
   getPaymentIntent,
   createRefund,
   getRefund,
-} from './payment.controllers';
+} from "./payment.controllers";
 import {
   getMyPaymentMethods,
   createSetupIntent,
   confirmPaymentMethod,
   setDefaultPaymentMethod,
   deletePaymentMethod,
-} from './payment-method.controllers';
-import { handleStripeWebhook } from './payment.webhook';
-import { authGuard } from '@core/middleware';
+} from "./payment-method.controllers";
+import { handleStripeWebhook } from "./payment.webhook";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -67,7 +67,7 @@ const router = Router();
  *       403:
  *         description: Forbidden
  */
-router.post('/intent', authGuard, createPaymentIntent);
+router.post("/intent", authGuard, createPaymentIntent);
 
 /**
  * @swagger
@@ -91,7 +91,7 @@ router.post('/intent', authGuard, createPaymentIntent);
  *       403:
  *         description: Forbidden
  */
-router.get('/intent/:paymentIntentId', authGuard, getPaymentIntent);
+router.get("/intent/:paymentIntentId", authGuard, getPaymentIntent);
 
 /**
  * @swagger
@@ -127,7 +127,7 @@ router.get('/intent/:paymentIntentId', authGuard, getPaymentIntent);
  *       403:
  *         description: Forbidden - Only admins can create refunds
  */
-router.post('/refund', authGuard, createRefund);
+router.post("/refund", authGuard, createRefund);
 
 /**
  * @swagger
@@ -151,19 +151,23 @@ router.post('/refund', authGuard, createRefund);
  *       403:
  *         description: Forbidden - Only admins can view refunds
  */
-router.get('/refund/:refundId', authGuard, getRefund);
+router.get("/refund/:refundId", authGuard, getRefund);
 
 /**
  * Webhook endpoint for Stripe (no auth required, uses signature verification)
  * IMPORTANT: This route should be placed before other routes to avoid conflicts
  */
-router.post('/webhook', handleStripeWebhook);
+router.post("/webhook", handleStripeWebhook);
 
 // Payment Methods routes
-router.get('/methods', authGuard, getMyPaymentMethods);
-router.post('/methods/setup-intent', authGuard, createSetupIntent);
-router.post('/methods/confirm', authGuard, confirmPaymentMethod);
-router.put('/methods/:paymentMethodId/default', authGuard, setDefaultPaymentMethod);
-router.delete('/methods/:paymentMethodId', authGuard, deletePaymentMethod);
+router.get("/methods", authGuard, getMyPaymentMethods);
+router.post("/methods/setup-intent", authGuard, createSetupIntent);
+router.post("/methods/confirm", authGuard, confirmPaymentMethod);
+router.put(
+  "/methods/:paymentMethodId/default",
+  authGuard,
+  setDefaultPaymentMethod,
+);
+router.delete("/methods/:paymentMethodId", authGuard, deletePaymentMethod);
 
 export default router;

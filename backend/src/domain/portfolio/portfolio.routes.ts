@@ -1,12 +1,12 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   getMyPortfolio,
   getCookPortfolio,
   createPortfolioItem,
   updatePortfolioItem,
   deletePortfolioItem,
-} from './portfolio.controllers';
-import { authGuard } from '@core/middleware';
+} from "./portfolio.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -66,7 +66,7 @@ const router = Router();
  *       403:
  *         description: Forbidden - Only cooks can access
  */
-router.get('/me', authGuard, getMyPortfolio);
+router.get("/me", authGuard, getMyPortfolio);
 
 /**
  * @swagger
@@ -87,7 +87,7 @@ router.get('/me', authGuard, getMyPortfolio);
  *       404:
  *         description: Cook profile not found
  */
-router.get('/cook/:cookId', getCookPortfolio);
+router.get("/cook/:cookId", getCookPortfolio);
 
 /**
  * @swagger
@@ -113,7 +113,7 @@ router.get('/cook/:cookId', getCookPortfolio);
  *       403:
  *         description: Forbidden - Only cooks can create
  */
-router.post('/', authGuard, createPortfolioItem);
+router.post("/", authGuard, createPortfolioItem);
 
 /**
  * @swagger
@@ -155,7 +155,7 @@ router.post('/', authGuard, createPortfolioItem);
  *       404:
  *         description: Portfolio item not found
  */
-router.put('/:itemId', authGuard, updatePortfolioItem);
+router.put("/:itemId", authGuard, updatePortfolioItem);
 
 /**
  * @swagger
@@ -182,9 +182,8 @@ router.put('/:itemId', authGuard, updatePortfolioItem);
  *       404:
  *         description: Portfolio item not found
  */
-router.delete('/:itemId', authGuard, deletePortfolioItem);
+router.delete("/:itemId", authGuard, deletePortfolioItem);
 
 // Reorder route removed - no display_order in SQL schema
 
 export default router;
-

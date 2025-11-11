@@ -1,6 +1,11 @@
-import { Router } from 'express';
-import { getMyProfile, updateMyProfile, getUserProfile, getCookProfiles } from './profile.controllers';
-import { authGuard } from '@core/middleware';
+import { Router } from "express";
+import {
+  getMyProfile,
+  updateMyProfile,
+  getUserProfile,
+  getCookProfiles,
+} from "./profile.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -31,7 +36,7 @@ const router = Router();
  *       401:
  *         description: Unauthorized
  */
-router.get('/me', authGuard, getMyProfile);
+router.get("/me", authGuard, getMyProfile);
 
 /**
  * @swagger
@@ -155,7 +160,7 @@ router.get('/me', authGuard, getMyProfile);
  *       400:
  *         description: Bad request
  */
-router.put('/me', authGuard, updateMyProfile);
+router.put("/me", authGuard, updateMyProfile);
 
 /**
  * @swagger
@@ -216,7 +221,7 @@ router.put('/me', authGuard, updateMyProfile);
  *                 offset:
  *                   type: integer
  */
-router.get('/cooks', getCookProfiles);
+router.get("/cooks", getCookProfiles);
 
 /**
  * @swagger
@@ -237,7 +242,6 @@ router.get('/cooks', getCookProfiles);
  *       404:
  *         description: User not found
  */
-router.get('/:id', getUserProfile);
+router.get("/:id", getUserProfile);
 
 export default router;
-

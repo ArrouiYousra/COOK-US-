@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   sendMessage,
   getConversations,
@@ -6,8 +6,8 @@ import {
   markAsRead,
   updateMessage,
   deleteMessage,
-} from './message.controllers';
-import { authGuard } from '@core/middleware';
+} from "./message.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -52,7 +52,7 @@ const router = Router();
  *       404:
  *         description: Recipient not found
  */
-router.post('/', authGuard, sendMessage);
+router.post("/", authGuard, sendMessage);
 
 /**
  * @swagger
@@ -85,7 +85,7 @@ router.post('/', authGuard, sendMessage);
  *       404:
  *         description: Message not found or unauthorized
  */
-router.put('/:messageId', authGuard, updateMessage);
+router.put("/:messageId", authGuard, updateMessage);
 
 /**
  * @swagger
@@ -107,7 +107,7 @@ router.put('/:messageId', authGuard, updateMessage);
  *       404:
  *         description: Message not found or unauthorized
  */
-router.delete('/:messageId', authGuard, deleteMessage);
+router.delete("/:messageId", authGuard, deleteMessage);
 
 /**
  * @swagger
@@ -132,7 +132,7 @@ router.delete('/:messageId', authGuard, deleteMessage);
  *       200:
  *         description: List of conversations with other user info and unread count
  */
-router.get('/conversations', authGuard, getConversations);
+router.get("/conversations", authGuard, getConversations);
 
 /**
  * @swagger
@@ -164,7 +164,7 @@ router.get('/conversations', authGuard, getConversations);
  *       404:
  *         description: Conversation not found or unauthorized
  */
-router.get('/conversations/:conversationId', authGuard, getMessages);
+router.get("/conversations/:conversationId", authGuard, getMessages);
 
 /**
  * @swagger
@@ -186,6 +186,6 @@ router.get('/conversations/:conversationId', authGuard, getMessages);
  *       404:
  *         description: Conversation not found or unauthorized
  */
-router.put('/conversations/:conversationId/read', authGuard, markAsRead);
+router.put("/conversations/:conversationId/read", authGuard, markAsRead);
 
 export default router;

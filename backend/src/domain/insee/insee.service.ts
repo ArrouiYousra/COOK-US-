@@ -1,4 +1,4 @@
-import { fetch } from 'undici';
+import { fetch } from "undici";
 
 interface InseeSiretResponse {
   etablissement?: {
@@ -64,7 +64,7 @@ export class InseeApiError extends Error {
 
   constructor(message: string, statusCode: number, details?: unknown) {
     super(message);
-    this.name = 'InseeApiError';
+    this.name = "InseeApiError";
     this.statusCode = statusCode;
     this.details = details;
   }
@@ -72,7 +72,7 @@ export class InseeApiError extends Error {
 
 // URL de base de l'API Sirene (version 3.11)
 const INSEE_BASE_URL: string =
-  process.env.INSEE_API_BASE_URL ?? 'https://api.insee.fr/api-sirene/3.11';
+  process.env.INSEE_API_BASE_URL ?? "https://api.insee.fr/api-sirene/3.11";
 // Clé API pour l'authentification (mode public)
 const INSEE_API_KEY: string | undefined = process.env.INSEE_API_KEY;
 
@@ -82,20 +82,22 @@ const SIREN_REGEX = /^[0-9]{9}$/;
 /**
  * Service pour la validation des SIRET via l'API INSEE Sirene
  * Utilise le mode "Public" avec API Key via le header X-INSEE-Api-Key-Integration
- * 
+ *
  * Documentation: https://api.insee.fr/catalogue/
  */
 export class InseeService {
   private static ensureConfigured(): void {
     if (!INSEE_API_KEY) {
       throw new InseeApiError(
-        'INSEE API credentials are not configured. Please set INSEE_API_KEY in your .env file.',
-        500
+        "INSEE API credentials are not configured. Please set INSEE_API_KEY in your .env file.",
+        500,
       );
     }
   }
 
-  private static buildAddress(payload?: InseeSiretResponse['etablissement']): string | undefined {
+  private static buildAddress(
+    payload?: InseeSiretResponse["etablissement"],
+  ): string | undefined {
     if (!payload?.adresseEtablissement) {
       return undefined;
     }
@@ -109,10 +111,12 @@ export class InseeService {
       payload.adresseEtablissement.libelleCommuneEtablissement,
     ].filter((part) => Boolean(part));
 
-    return parts.join(' ').replace(/\s+/g, ' ').trim();
+    return parts.join(" ").replace(/\s+/g, " ").trim();
   }
 
-  private static buildCompanyName(payload?: InseeSiretResponse['etablissement']): string | undefined {
+  private static buildCompanyName(
+    payload?: InseeSiretResponse["etablissement"],
+  ): string | undefined {
     if (!payload?.uniteLegale) {
       return undefined;
     }
@@ -139,30 +143,36 @@ export class InseeService {
    */
   private static async findMainSiretFromSiren(siren: string): Promise<string> {
     this.ensureConfigured();
-    
+
     // L'API Sirene utilise le header X-INSEE-Api-Key-Integration
     const response = await fetch(`${INSEE_BASE_URL}/siren/${siren}`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'X-INSEE-Api-Key-Integration': INSEE_API_KEY!,
-        Accept: 'application/json',
+        "X-INSEE-Api-Key-Integration": INSEE_API_KEY!,
+        Accept: "application/json",
       },
     });
 
     if (response.status === 404) {
-      throw new InseeApiError('Numéro SIREN introuvable dans la base INSEE', 400);
+      throw new InseeApiError(
+        "Numéro SIREN introuvable dans la base INSEE",
+        400,
+      );
     }
 
     if (response.status === 429) {
-      throw new InseeApiError("Limite de l'API INSEE atteinte. Veuillez réessayer plus tard.", 503);
+      throw new InseeApiError(
+        "Limite de l'API INSEE atteinte. Veuillez réessayer plus tard.",
+        503,
+      );
     }
 
     if (!response.ok) {
       const errorPayload = await response.text().catch(() => undefined);
       throw new InseeApiError(
-        'Échec de la recherche du SIRET principal pour ce SIREN',
+        "Échec de la recherche du SIRET principal pour ce SIREN",
         response.status,
-        errorPayload
+        errorPayload,
       );
     }
 
@@ -170,18 +180,20 @@ export class InseeService {
     const etablissements = data.etablissements;
 
     if (!etablissements || etablissements.length === 0) {
-      throw new InseeApiError('Aucun établissement trouvé pour ce SIREN', 400);
+      throw new InseeApiError("Aucun établissement trouvé pour ce SIREN", 400);
     }
 
     // Chercher l'établissement siège
-    const siege = etablissements.find((etab) => etab.etablissementSiege === true);
+    const siege = etablissements.find(
+      (etab) => etab.etablissementSiege === true,
+    );
     if (siege?.siret) {
       return siege.siret;
     }
 
     // Si pas de siège trouvé, prendre le premier établissement actif
     const actif = etablissements.find(
-      (etab) => etab.etatAdministratifEtablissement === 'A' && etab.siret
+      (etab) => etab.etatAdministratifEtablissement === "A" && etab.siret,
     );
     if (actif?.siret) {
       return actif.siret;
@@ -192,15 +204,20 @@ export class InseeService {
       return etablissements[0].siret;
     }
 
-    throw new InseeApiError('Impossible de déterminer le SIRET principal pour ce SIREN', 400);
+    throw new InseeApiError(
+      "Impossible de déterminer le SIRET principal pour ce SIREN",
+      400,
+    );
   }
 
   /**
    * Valider un numéro SIRET ou SIREN via l'API INSEE
    * Si un SIREN (9 chiffres) est fourni, cherche le SIRET principal (siège)
    */
-  static async validateSiret(siretOrSiren: string): Promise<SiretValidationResult> {
-    const trimmed = siretOrSiren.replace(/\s/g, '');
+  static async validateSiret(
+    siretOrSiren: string,
+  ): Promise<SiretValidationResult> {
+    const trimmed = siretOrSiren.replace(/\s/g, "");
 
     let siretToValidate: string;
 
@@ -211,42 +228,51 @@ export class InseeService {
       siretToValidate = trimmed;
     } else {
       throw new InseeApiError(
-        'Le numéro doit contenir 9 chiffres (SIREN) ou 14 chiffres (SIRET)',
-        400
+        "Le numéro doit contenir 9 chiffres (SIREN) ou 14 chiffres (SIRET)",
+        400,
       );
     }
 
     this.ensureConfigured();
-    
+
     // Log pour debugging (en développement seulement)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[INSEE] Validating SIRET:', siretToValidate);
-      console.log('[INSEE] API Key configured:', INSEE_API_KEY ? 'Yes' : 'No');
-      console.log('[INSEE] API Key preview:', INSEE_API_KEY ? `${INSEE_API_KEY.substring(0, 10)}...` : 'N/A');
-      console.log('[INSEE] API URL:', `${INSEE_BASE_URL}/siret/${siretToValidate}`);
+    if (process.env.NODE_ENV === "development") {
+      console.log("[INSEE] Validating SIRET:", siretToValidate);
+      console.log("[INSEE] API Key configured:", INSEE_API_KEY ? "Yes" : "No");
+      console.log(
+        "[INSEE] API Key preview:",
+        INSEE_API_KEY ? `${INSEE_API_KEY.substring(0, 10)}...` : "N/A",
+      );
+      console.log(
+        "[INSEE] API URL:",
+        `${INSEE_BASE_URL}/siret/${siretToValidate}`,
+      );
     }
-    
+
     // L'API Sirene utilise le header X-INSEE-Api-Key-Integration (pas Authorization)
     const response = await fetch(`${INSEE_BASE_URL}/siret/${siretToValidate}`, {
-      method: 'GET',
+      method: "GET",
       headers: {
-        'X-INSEE-Api-Key-Integration': INSEE_API_KEY!,
-        Accept: 'application/json',
+        "X-INSEE-Api-Key-Integration": INSEE_API_KEY!,
+        Accept: "application/json",
       },
     });
 
     // Log de la réponse complète en développement
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[INSEE] Response status:', response.status);
-      console.log('[INSEE] Response statusText:', response.statusText);
-      console.log('[INSEE] Response headers:', Object.fromEntries(response.headers.entries()));
+    if (process.env.NODE_ENV === "development") {
+      console.log("[INSEE] Response status:", response.status);
+      console.log("[INSEE] Response statusText:", response.statusText);
+      console.log(
+        "[INSEE] Response headers:",
+        Object.fromEntries(response.headers.entries()),
+      );
     }
 
     if (response.status === 404) {
-      const errorBody = await response.text().catch(() => '');
-      console.error('[INSEE] 404 Error - SIRET not found:', siretToValidate);
-      console.error('[INSEE] Response body:', errorBody);
-      
+      const errorBody = await response.text().catch(() => "");
+      console.error("[INSEE] 404 Error - SIRET not found:", siretToValidate);
+      console.error("[INSEE] Response body:", errorBody);
+
       // Essayer de parser le JSON si possible
       let parsedError: any = null;
       try {
@@ -254,39 +280,48 @@ export class InseeService {
       } catch {
         // Pas de JSON, on garde le texte brut
       }
-      
-      throw new InseeApiError('Numéro SIRET introuvable dans la base INSEE', 400, {
-        siret: siretToValidate,
-        responseBody: errorBody,
-        parsedError,
-        possibleCauses: [
-          'Le SIRET n\'existe pas dans la base INSEE',
-          'Le SIRET correspond à un établissement fermé',
-          'Problème d\'authentification (vérifier INSEE_API_KEY)',
-          'Format du header X-INSEE-Api-Key-Integration incorrect',
-          'L\'établissement a une opposition à la diffusion',
-        ],
-      });
+
+      throw new InseeApiError(
+        "Numéro SIRET introuvable dans la base INSEE",
+        400,
+        {
+          siret: siretToValidate,
+          responseBody: errorBody,
+          parsedError,
+          possibleCauses: [
+            "Le SIRET n'existe pas dans la base INSEE",
+            "Le SIRET correspond à un établissement fermé",
+            "Problème d'authentification (vérifier INSEE_API_KEY)",
+            "Format du header X-INSEE-Api-Key-Integration incorrect",
+            "L'établissement a une opposition à la diffusion",
+          ],
+        },
+      );
     }
 
     if (response.status === 429) {
-      throw new InseeApiError("Limite de l'API INSEE atteinte. Veuillez réessayer plus tard.", 503);
+      throw new InseeApiError(
+        "Limite de l'API INSEE atteinte. Veuillez réessayer plus tard.",
+        503,
+      );
     }
 
     if (!response.ok) {
       const errorPayload = await response.text().catch(() => undefined);
-      
+
       // Log détaillé en développement
-      if (process.env.NODE_ENV === 'development') {
-        console.error('[INSEE] Request failed:', {
+      if (process.env.NODE_ENV === "development") {
+        console.error("[INSEE] Request failed:", {
           status: response.status,
           statusText: response.statusText,
           url: `${INSEE_BASE_URL}/siret/${siretToValidate}`,
-          apiKeyUsed: INSEE_API_KEY ? `${INSEE_API_KEY.substring(0, 10)}...` : 'N/A',
+          apiKeyUsed: INSEE_API_KEY
+            ? `${INSEE_API_KEY.substring(0, 10)}...`
+            : "N/A",
           errorPayload,
         });
       }
-      
+
       // Si c'est une erreur 401, c'est probablement un problème d'authentification
       if (response.status === 401) {
         throw new InseeApiError(
@@ -295,48 +330,54 @@ export class InseeService {
           {
             errorPayload,
             troubleshooting: [
-              'Vérifiez que INSEE_API_KEY est correctement configuré dans votre .env',
-              'Vérifiez que la clé API n\'est pas expirée ou révoquée',
+              "Vérifiez que INSEE_API_KEY est correctement configuré dans votre .env",
+              "Vérifiez que la clé API n'est pas expirée ou révoquée",
               'Vérifiez que vous avez bien souscrit au plan "Public" sur https://api.insee.fr/catalogue/',
-              'Vérifiez le format du header X-INSEE-Api-Key-Integration',
+              "Vérifiez le format du header X-INSEE-Api-Key-Integration",
             ],
-          }
+          },
         );
       }
-      
+
       // Si c'est une erreur 403, problème de permissions
       if (response.status === 403) {
         throw new InseeApiError(
           "Accès refusé par l'API INSEE. Vérifiez les permissions de votre clé API.",
           response.status,
-          errorPayload
+          errorPayload,
         );
       }
-      
+
       throw new InseeApiError(
         "Échec de la validation du SIRET auprès de l'API INSEE",
         response.status,
-        errorPayload
+        errorPayload,
       );
     }
 
     const data = (await response.json()) as InseeSiretResponse;
     const etablissement = data.etablissement;
 
-    if (!etablissement || etablissement.etatAdministratifEtablissement === 'F') {
+    if (
+      !etablissement ||
+      etablissement.etatAdministratifEtablissement === "F"
+    ) {
       throw new InseeApiError(
-        'Le numéro SIRET correspond à un établissement fermé ou invalide',
+        "Le numéro SIRET correspond à un établissement fermé ou invalide",
         400,
-        data
+        data,
       );
     }
 
     const uniteLegale = etablissement.uniteLegale;
-    if (uniteLegale?.etatAdministratifUniteLegale && uniteLegale.etatAdministratifUniteLegale !== 'A') {
+    if (
+      uniteLegale?.etatAdministratifUniteLegale &&
+      uniteLegale.etatAdministratifUniteLegale !== "A"
+    ) {
       throw new InseeApiError(
         "L'unité légale associée à ce SIRET n'est pas active",
         400,
-        data
+        data,
       );
     }
 

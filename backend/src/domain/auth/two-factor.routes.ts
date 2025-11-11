@@ -1,11 +1,11 @@
-import { Router } from 'express';
-import { authGuard } from '@core/middleware';
+import { Router } from "express";
+import { authGuard } from "@core/middleware";
 import {
   enable2FA,
   verifyAndEnable2FA,
   disable2FA,
   verify2FAToken,
-} from './two-factor.controllers';
+} from "./two-factor.controllers";
 
 const router = Router();
 
@@ -34,7 +34,7 @@ const router = Router();
  *       401:
  *         description: Unauthorized or invalid password
  */
-router.post('/enable', authGuard, enable2FA);
+router.post("/enable", authGuard, enable2FA);
 
 /**
  * @swagger
@@ -62,7 +62,7 @@ router.post('/enable', authGuard, enable2FA);
  *       400:
  *         description: Invalid token
  */
-router.post('/verify', authGuard, verifyAndEnable2FA);
+router.post("/verify", authGuard, verifyAndEnable2FA);
 
 /**
  * @swagger
@@ -89,7 +89,7 @@ router.post('/verify', authGuard, verifyAndEnable2FA);
  *       401:
  *         description: Unauthorized or invalid password
  */
-router.post('/disable', authGuard, disable2FA);
+router.post("/disable", authGuard, disable2FA);
 
 /**
  * @swagger
@@ -117,7 +117,6 @@ router.post('/disable', authGuard, disable2FA);
  *       400:
  *         description: Invalid token
  */
-router.post('/verify-token', authGuard, verify2FAToken);
+router.post("/verify-token", authGuard, verify2FAToken);
 
 export default router;
-

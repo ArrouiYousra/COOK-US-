@@ -1,35 +1,90 @@
 // ENUMs
-export type UserRole = 'CLIENT' | 'COOK' | 'ADMIN';
-export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'DELETED' | 'PENDING_VERIFICATION';
-export type CookStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'PAUSED' | 'SUSPENDED' | 'REJECTED';
-export type EmploymentStatus = 'AUTO_ENTREPRENEUR' | 'PORTAGE_SALARIAL' | 'MICRO_ENTREPRISE' | 'ASSOCIATION';
-export type BookingStatus = 'PENDING' | 'ACCEPTED' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'DISPUTED';
-export type CancellationReason = 'CLIENT_REQUEST' | 'COOK_UNAVAILABLE' | 'EMERGENCY' | 'WEATHER' | 'OTHER';
-export type DayOfWeek = 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY' | 'SUNDAY';
-export type MealType = 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'BRUNCH';
-export type NotificationType = 
-  | 'BOOKING_REQUEST'
-  | 'BOOKING_ACCEPTED'
-  | 'BOOKING_CONFIRMED'
-  | 'BOOKING_CANCELLED'
-  | 'BOOKING_REMINDER'
-  | 'REVIEW_RECEIVED'
-  | 'MESSAGE_RECEIVED'
-  | 'PAYMENT_RECEIVED'
-  | 'DISPUTE_OPENED'
-  | 'PROFILE_APPROVED'
-  | 'PROFILE_REJECTED'
-  | 'RESERVATION_CREATED'      // Nouvelle proposition créée (cuisinier)
-  | 'RESERVATION_ACCEPTED'     // Proposition acceptée (cuisinier)
-  | 'RESERVATION_REJECTED'     // Proposition refusée (cuisinier)
-  | 'RESERVATION_CANCELLED'    // Proposition annulée (cuisinier)
-  | 'PROPOSAL_RECEIVED'        // Nouvelle proposition reçue (client)
-  | 'PROPOSAL_ACCEPTED'         // Proposition acceptée (client)
-  | 'PROPOSAL_REJECTED'         // Proposition refusée (client)
-  | 'SYSTEM';
-export type AddressType = 'HOME' | 'VACATION_RENTAL' | 'WORK' | 'OTHER';
-export type DietaryRestriction = 'VEGETARIAN' | 'VEGAN' | 'GLUTEN_FREE' | 'LACTOSE_FREE' | 'HALAL' | 'KOSHER' | 'LOW_CARB' | 'KETO' | 'PALEO' | 'DIABETIC';
-export type Allergy = 'PEANUTS' | 'TREE_NUTS' | 'MILK' | 'EGGS' | 'FISH' | 'SHELLFISH' | 'SOY' | 'WHEAT' | 'SESAME' | 'MUSTARD' | 'CELERY' | 'LUPIN' | 'SULFITES';
+export type UserRole = "CLIENT" | "COOK" | "ADMIN";
+export type UserStatus =
+  | "ACTIVE"
+  | "SUSPENDED"
+  | "DELETED"
+  | "PENDING_VERIFICATION";
+export type CookStatus =
+  | "PENDING_APPROVAL"
+  | "ACTIVE"
+  | "PAUSED"
+  | "SUSPENDED"
+  | "REJECTED";
+export type EmploymentStatus =
+  | "AUTO_ENTREPRENEUR"
+  | "PORTAGE_SALARIAL"
+  | "MICRO_ENTREPRISE"
+  | "ASSOCIATION";
+export type BookingStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "CONFIRMED"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "DISPUTED";
+export type CancellationReason =
+  | "CLIENT_REQUEST"
+  | "COOK_UNAVAILABLE"
+  | "EMERGENCY"
+  | "WEATHER"
+  | "OTHER";
+export type DayOfWeek =
+  | "MONDAY"
+  | "TUESDAY"
+  | "WEDNESDAY"
+  | "THURSDAY"
+  | "FRIDAY"
+  | "SATURDAY"
+  | "SUNDAY";
+export type MealType = "BREAKFAST" | "LUNCH" | "DINNER" | "BRUNCH";
+export type NotificationType =
+  | "BOOKING_REQUEST"
+  | "BOOKING_ACCEPTED"
+  | "BOOKING_CONFIRMED"
+  | "BOOKING_CANCELLED"
+  | "BOOKING_REMINDER"
+  | "REVIEW_RECEIVED"
+  | "MESSAGE_RECEIVED"
+  | "PAYMENT_RECEIVED"
+  | "DISPUTE_OPENED"
+  | "PROFILE_APPROVED"
+  | "PROFILE_REJECTED"
+  | "RESERVATION_CREATED" // Nouvelle proposition créée (cuisinier)
+  | "RESERVATION_ACCEPTED" // Proposition acceptée (cuisinier)
+  | "RESERVATION_REJECTED" // Proposition refusée (cuisinier)
+  | "RESERVATION_CANCELLED" // Proposition annulée (cuisinier)
+  | "PROPOSAL_RECEIVED" // Nouvelle proposition reçue (client)
+  | "PROPOSAL_ACCEPTED" // Proposition acceptée (client)
+  | "PROPOSAL_REJECTED" // Proposition refusée (client)
+  | "SYSTEM";
+export type AddressType = "HOME" | "VACATION_RENTAL" | "WORK" | "OTHER";
+export type DietaryRestriction =
+  | "VEGETARIAN"
+  | "VEGAN"
+  | "GLUTEN_FREE"
+  | "LACTOSE_FREE"
+  | "HALAL"
+  | "KOSHER"
+  | "LOW_CARB"
+  | "KETO"
+  | "PALEO"
+  | "DIABETIC";
+export type Allergy =
+  | "PEANUTS"
+  | "TREE_NUTS"
+  | "MILK"
+  | "EGGS"
+  | "FISH"
+  | "SHELLFISH"
+  | "SOY"
+  | "WHEAT"
+  | "SESAME"
+  | "MUSTARD"
+  | "CELERY"
+  | "LUPIN"
+  | "SULFITES";
 
 // User table
 export interface User {
@@ -236,7 +291,12 @@ export interface Booking {
 }
 
 // Reservation Status ENUM (mise à jour pour correspondre à la table SQL)
-export type ReservationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+export type ReservationStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "CANCELLED"
+  | "EXPIRED";
 
 // Reservations table (for cooks to apply to public bookings)
 // Mise à jour pour correspondre à la structure SQL complète
@@ -313,7 +373,7 @@ export interface CreateReservationDTO {
 
 // DTOs for updating reservation status
 export interface UpdateReservationStatusDTO {
-  status: 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+  status: "ACCEPTED" | "REJECTED" | "CANCELLED";
   rejection_reason?: string; // Raison du refus (si status = 'REJECTED')
   cancellation_reason?: string; // Raison de l'annulation (si status = 'CANCELLED')
 }
@@ -335,7 +395,7 @@ export interface ConversationParticipant {
   unread_count: number;
 }
 
-export type MessageType = 'TEXT' | 'IMAGE' | 'SYSTEM';
+export type MessageType = "TEXT" | "IMAGE" | "SYSTEM";
 
 export interface Message {
   id: string;
@@ -513,15 +573,15 @@ export interface UpdatePortfolioItemDTO {
 }
 
 // Cook Certification table (matches SQL: cook_certifications)
-export type CertificationType = 
-  | 'HYGIENE_HACCP'
-  | 'FIRST_AID'
-  | 'FOOD_ALLERGY'
-  | 'PROFESSIONAL_CHEF'
-  | 'NUTRITION'
-  | 'PASTRY'
-  | 'WINE_PAIRING'
-  | 'OTHER';
+export type CertificationType =
+  | "HYGIENE_HACCP"
+  | "FIRST_AID"
+  | "FOOD_ALLERGY"
+  | "PROFESSIONAL_CHEF"
+  | "NUTRITION"
+  | "PASTRY"
+  | "WINE_PAIRING"
+  | "OTHER";
 
 export interface CookCertification {
   id: string;
@@ -552,15 +612,15 @@ export interface UpdateCertificationDTO {
 }
 
 // Dispute types (matches SQL)
-export type DisputeStatus = 'OPEN' | 'IN_REVIEW' | 'RESOLVED' | 'CLOSED';
-export type DisputeReason = 
-  | 'SERVICE_NOT_PROVIDED'
-  | 'POOR_QUALITY'
-  | 'LATE_ARRIVAL'
-  | 'HYGIENE_ISSUE'
-  | 'DAMAGE'
-  | 'PAYMENT_ISSUE'
-  | 'OTHER';
+export type DisputeStatus = "OPEN" | "IN_REVIEW" | "RESOLVED" | "CLOSED";
+export type DisputeReason =
+  | "SERVICE_NOT_PROVIDED"
+  | "POOR_QUALITY"
+  | "LATE_ARRIVAL"
+  | "HYGIENE_ISSUE"
+  | "DAMAGE"
+  | "PAYMENT_ISSUE"
+  | "OTHER";
 
 // Dispute table (matches SQL: disputes)
 export interface Dispute {
@@ -594,15 +654,19 @@ export interface ResolveDisputeDTO {
 }
 
 // Transaction types (matches SQL)
-export type TransactionType = 
-  | 'BOOKING_PAYMENT'
-  | 'REFUND'
-  | 'PAYOUT'
-  | 'PLATFORM_FEE'
-  | 'BONUS'
-  | 'PENALTY';
+export type TransactionType =
+  | "BOOKING_PAYMENT"
+  | "REFUND"
+  | "PAYOUT"
+  | "PLATFORM_FEE"
+  | "BONUS"
+  | "PENALTY";
 
-export type TransactionStatus = 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+export type TransactionStatus =
+  | "PENDING"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED";
 
 // Transaction table (matches SQL: transactions)
 export interface Transaction {
@@ -666,22 +730,22 @@ export interface CreateTransactionDTO {
 }
 
 // Client dietary preferences (M:N tables)
-export type CuisineType = 
-  | 'FRENCH'
-  | 'ITALIAN'
-  | 'ASIAN'
-  | 'MEDITERRANEAN'
-  | 'VEGETARIAN'
-  | 'VEGAN'
-  | 'HEALTHY'
-  | 'TRADITIONAL'
-  | 'GASTRONOMIC'
-  | 'COMFORT_FOOD'
-  | 'INTERNATIONAL'
-  | 'FUSION'
-  | 'SEAFOOD'
-  | 'GRILLED'
-  | 'PASTRY';
+export type CuisineType =
+  | "FRENCH"
+  | "ITALIAN"
+  | "ASIAN"
+  | "MEDITERRANEAN"
+  | "VEGETARIAN"
+  | "VEGAN"
+  | "HEALTHY"
+  | "TRADITIONAL"
+  | "GASTRONOMIC"
+  | "COMFORT_FOOD"
+  | "INTERNATIONAL"
+  | "FUSION"
+  | "SEAFOOD"
+  | "GRILLED"
+  | "PASTRY";
 
 export interface ClientDietaryRestriction {
   client_profile_id: string;
@@ -697,4 +761,3 @@ export interface ClientFavoriteCuisine {
   client_profile_id: string;
   cuisine: CuisineType;
 }
-

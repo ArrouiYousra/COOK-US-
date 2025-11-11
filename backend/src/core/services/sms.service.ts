@@ -1,5 +1,5 @@
-import twilio from 'twilio';
-import dotenv from 'dotenv';
+import twilio from "twilio";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -10,10 +10,13 @@ function getTwilioClient(): twilio.Twilio {
   if (!twilioClient) {
     if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
       throw new Error(
-        'TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be defined in environment variables. Please add them to your .env file.'
+        "TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN must be defined in environment variables. Please add them to your .env file.",
       );
     }
-    twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    twilioClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN,
+    );
   }
   return twilioClient;
 }
@@ -23,7 +26,7 @@ const FROM_PHONE = process.env.TWILIO_PHONE_NUMBER;
 
 if (!FROM_PHONE) {
   console.warn(
-    'TWILIO_PHONE_NUMBER is not defined. SMS sending will fail. Please add it to your .env file.'
+    "TWILIO_PHONE_NUMBER is not defined. SMS sending will fail. Please add it to your .env file.",
   );
 }
 
@@ -39,13 +42,13 @@ export class SmsService {
   static async sendSms(to: string, message: string): Promise<void> {
     try {
       if (!FROM_PHONE) {
-        throw new Error('TWILIO_PHONE_NUMBER is not configured');
+        throw new Error("TWILIO_PHONE_NUMBER is not configured");
       }
 
       const client = getTwilioClient();
 
       // Normaliser le numéro de téléphone (ajouter + si absent)
-      const normalizedTo = to.startsWith('+') ? to : `+${to}`;
+      const normalizedTo = to.startsWith("+") ? to : `+${to}`;
 
       const result = await client.messages.create({
         body: message,
@@ -55,9 +58,9 @@ export class SmsService {
 
       console.log(`SMS sent successfully. SID: ${result.sid}`);
     } catch (error) {
-      console.error('Error sending SMS:', error);
+      console.error("Error sending SMS:", error);
       throw new Error(
-        `Failed to send SMS: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to send SMS: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
@@ -72,9 +75,9 @@ export class SmsService {
       cookName: string;
       date: string;
       time: string;
-    }
+    },
   ): Promise<void> {
-    const message = `✅ Réservation confirmée avec ${bookingData.cookName} le ${bookingData.date} à ${bookingData.time}. Détails: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard/client/bookings/${bookingData.bookingId}`;
+    const message = `✅ Réservation confirmée avec ${bookingData.cookName} le ${bookingData.date} à ${bookingData.time}. Détails: ${process.env.FRONTEND_URL || "http://localhost:3000"}/dashboard/client/bookings/${bookingData.bookingId}`;
     await this.sendSms(phoneNumber, message);
   }
 
@@ -88,10 +91,11 @@ export class SmsService {
       cookName: string;
       date: string;
       time: string;
-      reminderType: '24h' | '1h';
-    }
+      reminderType: "24h" | "1h";
+    },
   ): Promise<void> {
-    const reminderText = bookingData.reminderType === '24h' ? 'demain' : 'dans 1 heure';
+    const reminderText =
+      bookingData.reminderType === "24h" ? "demain" : "dans 1 heure";
     const message = `⏰ Rappel: Votre réservation avec ${bookingData.cookName} est prévue ${reminderText} (${bookingData.date} à ${bookingData.time}).`;
     await this.sendSms(phoneNumber, message);
   }
@@ -105,7 +109,7 @@ export class SmsService {
       proposalId: string;
       cookName: string;
       date: string;
-    }
+    },
   ): Promise<void> {
     const message = `✨ Nouvelle proposition reçue de ${proposalData.cookName} pour le ${proposalData.date}. Connectez-vous pour voir les détails.`;
     await this.sendSms(phoneNumber, message);
@@ -120,15 +124,18 @@ export class SmsService {
       bookingId: string;
       status: string;
       message?: string;
-    }
+    },
   ): Promise<void> {
     const statusMessages: Record<string, string> = {
-      CONFIRMED: '✅ Votre réservation a été confirmée.',
-      CANCELLED: '❌ Votre réservation a été annulée.',
-      DONE: '🎉 Votre réservation est terminée. N\'hésitez pas à laisser un avis !',
+      CONFIRMED: "✅ Votre réservation a été confirmée.",
+      CANCELLED: "❌ Votre réservation a été annulée.",
+      DONE: "🎉 Votre réservation est terminée. N'hésitez pas à laisser un avis !",
     };
 
-    const message = statusMessages[statusData.status] || statusData.message || 'Le statut de votre réservation a changé.';
+    const message =
+      statusMessages[statusData.status] ||
+      statusData.message ||
+      "Le statut de votre réservation a changé.";
     await this.sendSms(phoneNumber, message);
   }
 
@@ -143,4 +150,3 @@ export class SmsService {
     );
   }
 }
-

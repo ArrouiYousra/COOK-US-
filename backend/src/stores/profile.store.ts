@@ -1,10 +1,10 @@
-import { supabaseAdmin } from '@config/supabaseClient';
+import { supabaseAdmin } from "@config/supabaseClient";
 import type {
   CookProfile,
   ClientProfile,
   User,
   CookStatus,
-} from '../types/database.types';
+} from "../types/database.types";
 
 interface GetCookProfilesFilters {
   status?: CookStatus;
@@ -30,11 +30,13 @@ export class ProfileStore {
   /**
    * Get user with their cook and/or client profile
    */
-  static async getUserWithProfile(userId: string): Promise<UserWithProfile | null> {
+  static async getUserWithProfile(
+    userId: string,
+  ): Promise<UserWithProfile | null> {
     const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('id', userId)
+      .from("users")
+      .select("*")
+      .eq("id", userId)
       .single();
 
     if (userError || !user) {
@@ -43,16 +45,16 @@ export class ProfileStore {
 
     // Get cook profile if exists
     const { data: cookProfile } = await supabaseAdmin
-      .from('cook_profiles')
-      .select('*')
-      .eq('user_id', userId)
+      .from("cook_profiles")
+      .select("*")
+      .eq("user_id", userId)
       .single();
 
     // Get client profile if exists
     const { data: clientProfile } = await supabaseAdmin
-      .from('client_profiles')
-      .select('*')
-      .eq('user_id', userId)
+      .from("client_profiles")
+      .select("*")
+      .eq("user_id", userId)
       .single();
 
     return {
@@ -65,15 +67,17 @@ export class ProfileStore {
   /**
    * Get cook profile by user ID
    */
-  static async getCookProfileByUserId(userId: string): Promise<CookProfile | null> {
+  static async getCookProfileByUserId(
+    userId: string,
+  ): Promise<CookProfile | null> {
     const { data, error } = await supabaseAdmin
-      .from('cook_profiles')
-      .select('*')
-      .eq('user_id', userId)
+      .from("cook_profiles")
+      .select("*")
+      .eq("user_id", userId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get cook profile: ${error.message}`);
@@ -85,15 +89,17 @@ export class ProfileStore {
   /**
    * Get cook profile by ID
    */
-  static async getCookProfileById(cookProfileId: string): Promise<CookProfile | null> {
+  static async getCookProfileById(
+    cookProfileId: string,
+  ): Promise<CookProfile | null> {
     const { data, error } = await supabaseAdmin
-      .from('cook_profiles')
-      .select('*')
-      .eq('id', cookProfileId)
+      .from("cook_profiles")
+      .select("*")
+      .eq("id", cookProfileId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get cook profile: ${error.message}`);
@@ -105,15 +111,17 @@ export class ProfileStore {
   /**
    * Get client profile by user ID
    */
-  static async getClientProfileByUserId(userId: string): Promise<ClientProfile | null> {
+  static async getClientProfileByUserId(
+    userId: string,
+  ): Promise<ClientProfile | null> {
     const { data, error } = await supabaseAdmin
-      .from('client_profiles')
-      .select('*')
-      .eq('user_id', userId)
+      .from("client_profiles")
+      .select("*")
+      .eq("user_id", userId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get client profile: ${error.message}`);
@@ -127,12 +135,12 @@ export class ProfileStore {
    */
   static async updateCookProfile(
     userId: string,
-    updates: Partial<CookProfile>
+    updates: Partial<CookProfile>,
   ): Promise<CookProfile> {
     const { data, error } = await supabaseAdmin
-      .from('cook_profiles')
+      .from("cook_profiles")
       .update(updates)
-      .eq('user_id', userId)
+      .eq("user_id", userId)
       .select()
       .single();
 
@@ -148,12 +156,12 @@ export class ProfileStore {
    */
   static async updateClientProfile(
     userId: string,
-    updates: Partial<ClientProfile>
+    updates: Partial<ClientProfile>,
   ): Promise<ClientProfile> {
     const { data, error } = await supabaseAdmin
-      .from('client_profiles')
+      .from("client_profiles")
       .update(updates)
-      .eq('user_id', userId)
+      .eq("user_id", userId)
       .select()
       .single();
 
@@ -167,24 +175,26 @@ export class ProfileStore {
   /**
    * Get cook profiles with filters
    */
-  static async getCookProfiles(filters: GetCookProfilesFilters = {}): Promise<GetCookProfilesResult> {
+  static async getCookProfiles(
+    filters: GetCookProfilesFilters = {},
+  ): Promise<GetCookProfilesResult> {
     let query = supabaseAdmin
-      .from('cook_profiles')
-      .select('*', { count: 'exact' });
+      .from("cook_profiles")
+      .select("*", { count: "exact" });
 
     // Apply status filter
     if (filters.status) {
-      query = query.eq('status', filters.status);
+      query = query.eq("status", filters.status);
     }
 
     // Apply min rating filter
     if (filters.minRating !== undefined) {
-      query = query.gte('average_rating', filters.minRating);
+      query = query.gte("average_rating", filters.minRating);
     }
 
     // Apply max hourly rate filter
     if (filters.maxHourlyRate !== undefined) {
-      query = query.lte('hourly_rate', filters.maxHourlyRate);
+      query = query.lte("hourly_rate", filters.maxHourlyRate);
     }
 
     // Apply pagination
@@ -193,7 +203,10 @@ export class ProfileStore {
     query = query.range(offset, offset + limit - 1);
 
     // Order by average rating (descending) by default
-    query = query.order('average_rating', { ascending: false, nullsLast: true });
+    query = query.order("average_rating", {
+      ascending: false,
+      nullsFirst: false,
+    });
 
     const { data, error, count } = await query;
 
@@ -207,4 +220,3 @@ export class ProfileStore {
     };
   }
 }
-

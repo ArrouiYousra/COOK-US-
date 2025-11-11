@@ -1,22 +1,25 @@
-import { type Request, type Response } from 'express';
-import { StripeService } from '@core/services/stripe.service';
-import { BookingStore } from '@stores/booking.store';
-import { TransactionStore } from '@stores/transaction.store';
-import { NotificationService } from '@core/services/notification.service';
-import { supabaseAdmin } from '@config/supabaseClient';
+import { type Request, type Response } from "express";
+import { StripeService } from "@core/services/stripe.service";
+import { BookingStore } from "@stores/booking.store";
+import { TransactionStore } from "@stores/transaction.store";
+import { NotificationService } from "@core/services/notification.service";
+import { supabaseAdmin } from "@config/supabaseClient";
 
 /**
  * Handle Stripe webhook events
  * This endpoint should be configured in Stripe Dashboard:
  * https://dashboard.stripe.com/webhooks
  */
-export const handleStripeWebhook = async (req: Request, res: Response): Promise<void> => {
-  const sig = req.headers['stripe-signature'];
+export const handleStripeWebhook = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const sig = req.headers["stripe-signature"];
 
   if (!sig) {
     res.status(400).json({
-      error: 'Bad Request',
-      message: 'Missing stripe-signature header',
+      error: "Bad Request",
+      message: "Missing stripe-signature header",
     });
     return;
   }
@@ -27,10 +30,10 @@ export const handleStripeWebhook = async (req: Request, res: Response): Promise<
     // Verify webhook signature
     event = StripeService.verifyWebhookSignature(req.body, sig as string);
   } catch (error) {
-    console.error('Webhook signature verification failed:', error);
+    console.error("Webhook signature verification failed:", error);
     res.status(400).json({
-      error: 'Bad Request',
-      message: 'Webhook signature verification failed',
+      error: "Bad Request",
+      message: "Webhook signature verification failed",
     });
     return;
   }
@@ -38,19 +41,19 @@ export const handleStripeWebhook = async (req: Request, res: Response): Promise<
   // Handle the event
   try {
     switch (event.type) {
-      case 'payment_intent.succeeded':
+      case "payment_intent.succeeded":
         await handlePaymentIntentSucceeded(event.data.object as any);
         break;
 
-      case 'payment_intent.payment_failed':
+      case "payment_intent.payment_failed":
         await handlePaymentIntentFailed(event.data.object as any);
         break;
 
-      case 'payment_intent.canceled':
+      case "payment_intent.canceled":
         await handlePaymentIntentCanceled(event.data.object as any);
         break;
 
-      case 'charge.refunded':
+      case "charge.refunded":
         await handleChargeRefunded(event.data.object as any);
         break;
 
@@ -61,10 +64,10 @@ export const handleStripeWebhook = async (req: Request, res: Response): Promise<
     // Return a 200 response to acknowledge receipt of the event
     res.status(200).json({ received: true });
   } catch (error) {
-    console.error('Error handling webhook:', error);
+    console.error("Error handling webhook:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to handle webhook',
+      error: "Internal Server Error",
+      message: "Failed to handle webhook",
     });
   }
 };
@@ -76,7 +79,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
   const bookingId = paymentIntent.metadata?.booking_id;
 
   if (!bookingId) {
-    console.error('Payment intent missing booking_id in metadata');
+    console.error("Payment intent missing booking_id in metadata");
     return;
   }
 
@@ -88,21 +91,21 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
 
   // Update booking status
   await supabaseAdmin
-    .from('bookings')
+    .from("bookings")
     .update({
-      payment_status: 'succeeded',
+      payment_status: "succeeded",
       paid_at: new Date().toISOString(),
-      status: booking.status === 'PENDING' ? 'CONFIRMED' : booking.status,
+      status: booking.status === "PENDING" ? "CONFIRMED" : booking.status,
     })
-    .eq('id', bookingId);
+    .eq("id", bookingId);
 
   // Create transaction record: Client pays to platform (not directly to cook)
   try {
     const clientUserId = paymentIntent.metadata?.client_id;
-    
+
     // Transaction: Client → Platform
     await TransactionStore.createTransaction({
-      type: 'BOOKING_PAYMENT',
+      type: "BOOKING_PAYMENT",
       booking_id: bookingId,
       from_user_id: clientUserId || undefined,
       to_user_id: undefined, // Platform receives payment, no to_user_id
@@ -115,11 +118,11 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
         payment_intent_id: paymentIntent.id,
       },
     });
-    
+
     // Create platform fee transaction if applicable
     if (booking.platform_fee && booking.platform_fee > 0) {
       await TransactionStore.createTransaction({
-        type: 'PLATFORM_FEE',
+        type: "PLATFORM_FEE",
         booking_id: bookingId,
         from_user_id: clientUserId || undefined,
         to_user_id: undefined, // Platform fee
@@ -133,7 +136,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
       });
     }
   } catch (transactionError) {
-    console.error('Failed to create transaction record:', transactionError);
+    console.error("Failed to create transaction record:", transactionError);
     // Continue even if transaction creation fails
   }
 
@@ -147,7 +150,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
         date: booking.booking_date,
       });
     } catch (notificationError) {
-      console.error('Failed to send payment notification:', notificationError);
+      console.error("Failed to send payment notification:", notificationError);
       // Continue even if notification fails
     }
   }
@@ -155,20 +158,26 @@ async function handlePaymentIntentSucceeded(paymentIntent: any): Promise<void> {
   // Create notification for cook
   if (booking.cook_profile_id) {
     const { data: cookProfile } = await supabaseAdmin
-      .from('cook_profiles')
-      .select('user_id')
-      .eq('id', booking.cook_profile_id)
+      .from("cook_profiles")
+      .select("user_id")
+      .eq("id", booking.cook_profile_id)
       .single();
 
     if (cookProfile) {
       try {
-        await NotificationService.sendPaymentReceivedNotification(cookProfile.user_id, {
-          bookingId: bookingId,
-          amount: paymentIntent.amount / 100, // Convert from cents
-          date: booking.booking_date,
-        });
+        await NotificationService.sendPaymentReceivedNotification(
+          cookProfile.user_id,
+          {
+            bookingId: bookingId,
+            amount: paymentIntent.amount / 100, // Convert from cents
+            date: booking.booking_date,
+          },
+        );
       } catch (notificationError) {
-        console.error('Failed to send payment notification to cook:', notificationError);
+        console.error(
+          "Failed to send payment notification to cook:",
+          notificationError,
+        );
         // Continue even if notification fails
       }
     }
@@ -184,17 +193,17 @@ async function handlePaymentIntentFailed(paymentIntent: any): Promise<void> {
   const bookingId = paymentIntent.metadata?.booking_id;
 
   if (!bookingId) {
-    console.error('Payment intent missing booking_id in metadata');
+    console.error("Payment intent missing booking_id in metadata");
     return;
   }
 
   // Update booking payment status
   await supabaseAdmin
-    .from('bookings')
+    .from("bookings")
     .update({
-      payment_status: 'failed',
+      payment_status: "failed",
     })
-    .eq('id', bookingId);
+    .eq("id", bookingId);
 
   // Send notification to client about payment failure
   const clientUserId = paymentIntent.metadata?.client_id;
@@ -202,8 +211,8 @@ async function handlePaymentIntentFailed(paymentIntent: any): Promise<void> {
     try {
       await NotificationService.sendNotification(clientUserId, {
         user_id: clientUserId,
-        type: 'SYSTEM',
-        title: 'Échec du paiement',
+        type: "SYSTEM",
+        title: "Échec du paiement",
         message: `Le paiement pour votre réservation a échoué. Veuillez réessayer.`,
         action_url: `/bookings/${bookingId}`,
         metadata: {
@@ -212,7 +221,10 @@ async function handlePaymentIntentFailed(paymentIntent: any): Promise<void> {
         },
       });
     } catch (notificationError) {
-      console.error('Failed to send payment failure notification:', notificationError);
+      console.error(
+        "Failed to send payment failure notification:",
+        notificationError,
+      );
     }
   }
 
@@ -226,17 +238,17 @@ async function handlePaymentIntentCanceled(paymentIntent: any): Promise<void> {
   const bookingId = paymentIntent.metadata?.booking_id;
 
   if (!bookingId) {
-    console.error('Payment intent missing booking_id in metadata');
+    console.error("Payment intent missing booking_id in metadata");
     return;
   }
 
   // Update booking payment status
   await supabaseAdmin
-    .from('bookings')
+    .from("bookings")
     .update({
-      payment_status: 'canceled',
+      payment_status: "canceled",
     })
-    .eq('id', bookingId);
+    .eq("id", bookingId);
 
   console.log(`Payment canceled for booking: ${bookingId}`);
 }
@@ -248,7 +260,7 @@ async function handleChargeRefunded(charge: any): Promise<void> {
   const paymentIntentId = charge.payment_intent;
 
   if (!paymentIntentId) {
-    console.error('Charge missing payment_intent');
+    console.error("Charge missing payment_intent");
     return;
   }
 
@@ -257,27 +269,27 @@ async function handleChargeRefunded(charge: any): Promise<void> {
   const bookingId = paymentIntent.metadata?.booking_id;
 
   if (!bookingId) {
-    console.error('Payment intent missing booking_id in metadata');
+    console.error("Payment intent missing booking_id in metadata");
     return;
   }
 
   // Update booking with refund info
   const refundAmount = charge.amount_refunded / 100; // Convert from cents
   await supabaseAdmin
-    .from('bookings')
+    .from("bookings")
     .update({
       refund_amount: refundAmount,
       refunded_at: new Date().toISOString(),
     })
-    .eq('id', bookingId);
+    .eq("id", bookingId);
 
   // Create transaction record for refund
   try {
     const clientUserId = paymentIntent.metadata?.client_id;
     const cookUserId = paymentIntent.metadata?.cook_id;
-    
+
     await TransactionStore.createTransaction({
-      type: 'REFUND',
+      type: "REFUND",
       booking_id: bookingId,
       from_user_id: cookUserId || undefined,
       to_user_id: clientUserId || undefined,
@@ -293,7 +305,10 @@ async function handleChargeRefunded(charge: any): Promise<void> {
       },
     });
   } catch (transactionError) {
-    console.error('Failed to create refund transaction record:', transactionError);
+    console.error(
+      "Failed to create refund transaction record:",
+      transactionError,
+    );
     // Continue even if transaction creation fails
   }
 
@@ -303,8 +318,8 @@ async function handleChargeRefunded(charge: any): Promise<void> {
     try {
       await NotificationService.sendNotification(clientUserId, {
         user_id: clientUserId,
-        type: 'SYSTEM',
-        title: 'Remboursement effectué',
+        type: "SYSTEM",
+        title: "Remboursement effectué",
         message: `Un remboursement de ${refundAmount}€ a été effectué pour votre réservation.`,
         action_url: `/bookings/${bookingId}`,
         metadata: {
@@ -313,10 +328,9 @@ async function handleChargeRefunded(charge: any): Promise<void> {
         },
       });
     } catch (notificationError) {
-      console.error('Failed to send refund notification:', notificationError);
+      console.error("Failed to send refund notification:", notificationError);
     }
   }
 
   console.log(`Refund processed for booking: ${bookingId}`);
 }
-

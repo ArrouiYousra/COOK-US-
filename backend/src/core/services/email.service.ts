@@ -1,5 +1,5 @@
-import { Resend } from 'resend';
-import dotenv from 'dotenv';
+import { Resend } from "resend";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -10,7 +10,7 @@ function getResend(): Resend {
   if (!resendInstance) {
     if (!process.env.RESEND_API_KEY) {
       throw new Error(
-        'RESEND_API_KEY is not defined in environment variables. Please add it to your .env file.'
+        "RESEND_API_KEY is not defined in environment variables. Please add it to your .env file.",
       );
     }
     resendInstance = new Resend(process.env.RESEND_API_KEY);
@@ -19,8 +19,8 @@ function getResend(): Resend {
 }
 
 // Email sender configuration
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'noreply@cook-us.com';
-const FROM_NAME = process.env.RESEND_FROM_NAME || 'Cook US';
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "noreply@cook-us.com";
+const FROM_NAME = process.env.RESEND_FROM_NAME || "Cook US";
 
 /**
  * Service d'envoi d'emails transactionnels via Resend
@@ -39,11 +39,11 @@ export class EmailService {
       numberOfGuests: number;
       totalPrice: number;
       address: string;
-    }
+    },
   ): Promise<void> {
     try {
       const resend = getResend();
-      
+
       await resend.emails.send({
         from: `${FROM_NAME} <${FROM_EMAIL}>`,
         to: [to],
@@ -101,7 +101,7 @@ export class EmailService {
 
                   <p>Nous vous enverrons un rappel 24h avant votre réservation.</p>
                   
-                  <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard/client/bookings/${bookingData.bookingId}" class="button">
+                  <a href="${process.env.FRONTEND_URL || "http://localhost:3000"}/dashboard/client/bookings/${bookingData.bookingId}" class="button">
                     Voir les détails de la réservation
                   </a>
                 </div>
@@ -115,7 +115,7 @@ export class EmailService {
         `,
       });
     } catch (error) {
-      console.error('Error sending booking confirmation email:', error);
+      console.error("Error sending booking confirmation email:", error);
       throw error;
     }
   }
@@ -130,16 +130,15 @@ export class EmailService {
       cookName: string;
       date: string;
       time: string;
-      reminderType: '24h' | '1h';
-    }
+      reminderType: "24h" | "1h";
+    },
   ): Promise<void> {
     try {
       const resend = getResend();
-      
-      const reminderText = bookingData.reminderType === '24h'
-        ? 'demain'
-        : 'dans 1 heure';
-      
+
+      const reminderText =
+        bookingData.reminderType === "24h" ? "demain" : "dans 1 heure";
+
       await resend.emails.send({
         from: `${FROM_NAME} <${FROM_EMAIL}>`,
         to: [to],
@@ -175,7 +174,7 @@ export class EmailService {
 
                   <p>Nous avons hâte de vous accueillir !</p>
                   
-                  <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard/client/bookings/${bookingData.bookingId}" class="button">
+                  <a href="${process.env.FRONTEND_URL || "http://localhost:3000"}/dashboard/client/bookings/${bookingData.bookingId}" class="button">
                     Voir les détails
                   </a>
                 </div>
@@ -188,7 +187,7 @@ export class EmailService {
         `,
       });
     } catch (error) {
-      console.error('Error sending booking reminder email:', error);
+      console.error("Error sending booking reminder email:", error);
       throw error;
     }
   }
@@ -204,11 +203,11 @@ export class EmailService {
       date: string;
       time: string;
       price: number;
-    }
+    },
   ): Promise<void> {
     try {
       const resend = getResend();
-      
+
       await resend.emails.send({
         from: `${FROM_NAME} <${FROM_EMAIL}>`,
         to: [to],
@@ -245,7 +244,7 @@ export class EmailService {
 
                   <p>Connectez-vous pour accepter ou refuser cette proposition.</p>
                   
-                  <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard/client/proposals" class="button">
+                  <a href="${process.env.FRONTEND_URL || "http://localhost:3000"}/dashboard/client/proposals" class="button">
                     Voir la proposition
                   </a>
                 </div>
@@ -258,7 +257,7 @@ export class EmailService {
         `,
       });
     } catch (error) {
-      console.error('Error sending proposal received email:', error);
+      console.error("Error sending proposal received email:", error);
       throw error;
     }
   }
@@ -274,29 +273,34 @@ export class EmailService {
       status: string;
       date: string;
       message?: string;
-    }
+    },
   ): Promise<void> {
     try {
       const resend = getResend();
-      
-      const statusMessages: Record<string, { subject: string; message: string }> = {
+
+      const statusMessages: Record<
+        string,
+        { subject: string; message: string }
+      > = {
         CONFIRMED: {
-          subject: 'Réservation confirmée',
-          message: 'Votre réservation a été confirmée.',
+          subject: "Réservation confirmée",
+          message: "Votre réservation a été confirmée.",
         },
         CANCELLED: {
-          subject: 'Réservation annulée',
-          message: 'Votre réservation a été annulée.',
+          subject: "Réservation annulée",
+          message: "Votre réservation a été annulée.",
         },
         DONE: {
-          subject: 'Réservation terminée',
-          message: 'Votre réservation est terminée. N\'hésitez pas à laisser un avis !',
+          subject: "Réservation terminée",
+          message:
+            "Votre réservation est terminée. N'hésitez pas à laisser un avis !",
         },
       };
 
       const statusInfo = statusMessages[statusData.status] || {
-        subject: 'Mise à jour de réservation',
-        message: statusData.message || 'Le statut de votre réservation a changé.',
+        subject: "Mise à jour de réservation",
+        message:
+          statusData.message || "Le statut de votre réservation a changé.",
       };
 
       await resend.emails.send({
@@ -333,7 +337,7 @@ export class EmailService {
                     <p><strong>Statut :</strong> ${statusData.status}</p>
                   </div>
 
-                  <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard/client/bookings/${statusData.bookingId}" class="button">
+                  <a href="${process.env.FRONTEND_URL || "http://localhost:3000"}/dashboard/client/bookings/${statusData.bookingId}" class="button">
                     Voir les détails
                   </a>
                 </div>
@@ -346,7 +350,7 @@ export class EmailService {
         `,
       });
     } catch (error) {
-      console.error('Error sending status change email:', error);
+      console.error("Error sending status change email:", error);
       throw error;
     }
   }
@@ -358,11 +362,11 @@ export class EmailService {
     to: string | string[],
     subject: string,
     htmlContent: string,
-    textContent?: string
+    textContent?: string,
   ): Promise<void> {
     try {
       const resend = getResend();
-      
+
       await resend.emails.send({
         from: `${FROM_NAME} <${FROM_EMAIL}>`,
         to: Array.isArray(to) ? to : [to],
@@ -371,9 +375,8 @@ export class EmailService {
         text: textContent,
       });
     } catch (error) {
-      console.error('Error sending email:', error);
+      console.error("Error sending email:", error);
       throw error;
     }
   }
 }
-

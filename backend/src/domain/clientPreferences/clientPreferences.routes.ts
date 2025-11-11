@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   getMyDietaryRestrictions,
   addDietaryRestriction,
@@ -9,8 +9,8 @@ import {
   getMyFavoriteCuisines,
   addFavoriteCuisine,
   removeFavoriteCuisine,
-} from './clientPreferences.controllers';
-import { authGuard } from '@core/middleware';
+} from "./clientPreferences.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -63,7 +63,7 @@ const router = Router();
  *       404:
  *         description: Client profile not found
  */
-router.get('/dietary-restrictions', authGuard, getMyDietaryRestrictions);
+router.get("/dietary-restrictions", authGuard, getMyDietaryRestrictions);
 
 /**
  * @swagger
@@ -93,7 +93,7 @@ router.get('/dietary-restrictions', authGuard, getMyDietaryRestrictions);
  *       401:
  *         description: Unauthorized
  */
-router.post('/dietary-restrictions', authGuard, addDietaryRestriction);
+router.post("/dietary-restrictions", authGuard, addDietaryRestriction);
 
 /**
  * @swagger
@@ -118,7 +118,11 @@ router.post('/dietary-restrictions', authGuard, addDietaryRestriction);
  *       401:
  *         description: Unauthorized
  */
-router.delete('/dietary-restrictions/:restriction', authGuard, removeDietaryRestriction);
+router.delete(
+  "/dietary-restrictions/:restriction",
+  authGuard,
+  removeDietaryRestriction,
+);
 
 /**
  * @swagger
@@ -136,7 +140,7 @@ router.delete('/dietary-restrictions/:restriction', authGuard, removeDietaryRest
  *       404:
  *         description: Client profile not found
  */
-router.get('/allergies', authGuard, getMyAllergies);
+router.get("/allergies", authGuard, getMyAllergies);
 
 /**
  * @swagger
@@ -166,7 +170,7 @@ router.get('/allergies', authGuard, getMyAllergies);
  *       401:
  *         description: Unauthorized
  */
-router.post('/allergies', authGuard, addAllergy);
+router.post("/allergies", authGuard, addAllergy);
 
 /**
  * @swagger
@@ -191,7 +195,7 @@ router.post('/allergies', authGuard, addAllergy);
  *       401:
  *         description: Unauthorized
  */
-router.delete('/allergies/:allergy', authGuard, removeAllergy);
+router.delete("/allergies/:allergy", authGuard, removeAllergy);
 
 /**
  * @swagger
@@ -209,7 +213,7 @@ router.delete('/allergies/:allergy', authGuard, removeAllergy);
  *       404:
  *         description: Client profile not found
  */
-router.get('/favorite-cuisines', authGuard, getMyFavoriteCuisines);
+router.get("/favorite-cuisines", authGuard, getMyFavoriteCuisines);
 
 /**
  * @swagger
@@ -239,7 +243,7 @@ router.get('/favorite-cuisines', authGuard, getMyFavoriteCuisines);
  *       401:
  *         description: Unauthorized
  */
-router.post('/favorite-cuisines', authGuard, addFavoriteCuisine);
+router.post("/favorite-cuisines", authGuard, addFavoriteCuisine);
 
 /**
  * @swagger
@@ -264,7 +268,6 @@ router.post('/favorite-cuisines', authGuard, addFavoriteCuisine);
  *       401:
  *         description: Unauthorized
  */
-router.delete('/favorite-cuisines/:cuisine', authGuard, removeFavoriteCuisine);
+router.delete("/favorite-cuisines/:cuisine", authGuard, removeFavoriteCuisine);
 
 export default router;
-

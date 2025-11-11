@@ -1,41 +1,50 @@
-import { type Request, type Response } from 'express';
-import { z } from 'zod';
-import { type AuthRequest } from '@core/middleware';
-import { UserStore } from '@stores/user.store';
-import { ProfileStore } from '@stores/profile.store';
-import { DocumentService } from '@domain/documents/document.service';
-import { AvatarService } from '@core/services/avatar.service';
-import { supabaseAdmin } from '@config/supabaseClient';
-import type { CookStatus, EmploymentStatus } from '../../types/database.types';
+import { type Request, type Response } from "express";
+import { z } from "zod";
+import { type AuthRequest } from "@core/middleware";
+import { UserStore } from "@stores/user.store";
+import { ProfileStore } from "@stores/profile.store";
+import { DocumentService } from "@domain/documents/document.service";
+import { AvatarService } from "@core/services/avatar.service";
+import { supabaseAdmin } from "@config/supabaseClient";
+import type { CookStatus, EmploymentStatus } from "../../types/database.types";
 
 // Schéma de validation pour la complétion du profil PORTAGE_SALARIAL
 const completePortageSalarialSchema = z.object({
   birthPlace: z
     .string()
-    .min(2, 'Le lieu de naissance doit contenir au moins 2 caractères')
-    .max(100, 'Le lieu de naissance ne peut pas dépasser 100 caractères'),
+    .min(2, "Le lieu de naissance doit contenir au moins 2 caractères")
+    .max(100, "Le lieu de naissance ne peut pas dépasser 100 caractères"),
   socialSecurityNumber: z
     .string()
-    .regex(/^[12][0-9]{2}(0[1-9]|1[0-2])([0-9]{2}|2[AB])[0-9]{3}[0-9]{3}[0-9]{2}$/, 'Numéro de sécurité sociale invalide'),
+    .regex(
+      /^[12][0-9]{2}(0[1-9]|1[0-2])([0-9]{2}|2[AB])[0-9]{3}[0-9]{3}[0-9]{2}$/,
+      "Numéro de sécurité sociale invalide",
+    ),
   iban: z
     .string()
-    .regex(/^FR[0-9]{2}[A-Z0-9]{23}$/i, 'IBAN invalide (format FR requis)'),
+    .regex(/^FR[0-9]{2}[A-Z0-9]{23}$/i, "IBAN invalide (format FR requis)"),
   bic: z
     .string()
-    .regex(/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/i, 'Code BIC invalide'),
+    .regex(/^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/i, "Code BIC invalide"),
   ribDocument: z
     .string()
-    .regex(/^data:(application\/pdf|image\/jpeg|image\/png);base64,/i, 'Format de fichier RIB invalide (PDF, JPEG ou PNG attendu)')
-    .max(15_000_000, 'Le document RIB est trop volumineux'),
+    .regex(
+      /^data:(application\/pdf|image\/jpeg|image\/png);base64,/i,
+      "Format de fichier RIB invalide (PDF, JPEG ou PNG attendu)",
+    )
+    .max(15_000_000, "Le document RIB est trop volumineux"),
   ribDocumentName: z.string().max(255).optional(),
 });
 
-export const getMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getMyProfile = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -44,8 +53,8 @@ export const getMyProfile = async (req: AuthRequest, res: Response): Promise<voi
 
     if (!userWithProfile) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
+        error: "Not Found",
+        message: "User not found",
       });
       return;
     }
@@ -59,20 +68,23 @@ export const getMyProfile = async (req: AuthRequest, res: Response): Promise<voi
       clientProfile: userWithProfile.clientProfile,
     });
   } catch (error) {
-    console.error('Get my profile error:', error);
+    console.error("Get my profile error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get profile',
+      error: "Internal Server Error",
+      message: "Failed to get profile",
     });
   }
 };
 
-export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateMyProfile = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -131,30 +143,44 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     const user = await UserStore.getUserById(req.user.id);
     if (!user) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
+        error: "Not Found",
+        message: "User not found",
       });
       return;
     }
 
     // Handle avatar upload if it's a base64 string
     let finalAvatarUrl = avatar_url;
-    if (avatar_url && typeof avatar_url === 'string' && avatar_url.startsWith('data:')) {
+    if (
+      avatar_url &&
+      typeof avatar_url === "string" &&
+      avatar_url.startsWith("data:")
+    ) {
       try {
-        console.log('Upload d\'un nouvel avatar base64...');
-        finalAvatarUrl = await AvatarService.uploadAvatarFromBase64(req.user.id, avatar_url);
-        console.log('Avatar uploadé avec succès, URL:', finalAvatarUrl);
+        console.log("Upload d'un nouvel avatar base64...");
+        finalAvatarUrl = await AvatarService.uploadAvatarFromBase64(
+          req.user.id,
+          avatar_url,
+        );
+        console.log("Avatar uploadé avec succès, URL:", finalAvatarUrl);
       } catch (error) {
-        console.error('Erreur lors de l\'upload de l\'avatar:', error);
+        console.error("Erreur lors de l'upload de l'avatar:", error);
         res.status(400).json({
-          error: 'AvatarUploadFailed',
-          message: error instanceof Error ? error.message : 'Échec de l\'upload de l\'avatar',
+          error: "AvatarUploadFailed",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Échec de l'upload de l'avatar",
         });
         return;
       }
-    } else if (avatar_url && typeof avatar_url === 'string' && avatar_url.trim() !== '') {
+    } else if (
+      avatar_url &&
+      typeof avatar_url === "string" &&
+      avatar_url.trim() !== ""
+    ) {
       // Si c'est une URL existante (pas base64), l'utiliser directement
-      console.log('Conservation de l\'URL avatar existante:', avatar_url);
+      console.log("Conservation de l'URL avatar existante:", avatar_url);
       finalAvatarUrl = avatar_url;
     }
 
@@ -170,47 +196,68 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     if (country !== undefined) userUpdates.country = country;
     // IMPORTANT: Toujours mettre à jour l'avatar si finalAvatarUrl est défini (même si c'est la même URL)
     // Cela garantit que l'avatar est bien sauvegardé dans la base de données
-    if (finalAvatarUrl !== undefined && finalAvatarUrl !== null && finalAvatarUrl !== '') {
+    if (
+      finalAvatarUrl !== undefined &&
+      finalAvatarUrl !== null &&
+      finalAvatarUrl !== ""
+    ) {
       userUpdates.avatar_url = finalAvatarUrl;
-      console.log('Mise à jour de l\'avatar:', finalAvatarUrl);
+      console.log("Mise à jour de l'avatar:", finalAvatarUrl);
     }
     if (language !== undefined) userUpdates.language = language;
     if (currency !== undefined) userUpdates.currency = currency;
-    if (notifications_enabled !== undefined) userUpdates.notifications_enabled = notifications_enabled;
-    if (email_notifications !== undefined) userUpdates.email_notifications = email_notifications;
-    if (sms_notifications !== undefined) userUpdates.sms_notifications = sms_notifications;
+    if (notifications_enabled !== undefined)
+      userUpdates.notifications_enabled = notifications_enabled;
+    if (email_notifications !== undefined)
+      userUpdates.email_notifications = email_notifications;
+    if (sms_notifications !== undefined)
+      userUpdates.sms_notifications = sms_notifications;
 
     let updatedUser = user;
     if (Object.keys(userUpdates).length > 0) {
-      console.log('Mise à jour de l\'utilisateur avec:', Object.keys(userUpdates));
-      console.log('Avatar dans userUpdates:', userUpdates.avatar_url);
+      console.log(
+        "Mise à jour de l'utilisateur avec:",
+        Object.keys(userUpdates),
+      );
+      console.log("Avatar dans userUpdates:", userUpdates.avatar_url);
       updatedUser = await UserStore.updateUser(req.user.id, userUpdates);
-      console.log('Utilisateur mis à jour, avatar_url:', updatedUser.avatar_url);
+      console.log(
+        "Utilisateur mis à jour, avatar_url:",
+        updatedUser.avatar_url,
+      );
     } else {
-      console.log('Aucune mise à jour utilisateur nécessaire');
+      console.log("Aucune mise à jour utilisateur nécessaire");
     }
 
     // Update profile based on role
     let updatedCookProfile;
     let updatedClientProfile;
 
-    if (user.role === 'COOK') {
+    if (user.role === "COOK") {
       // Récupérer le profil cuisinier actuel pour vérifier le statut d'emploi
-      const currentCookProfile = await ProfileStore.getCookProfileByUserId(req.user.id);
-      const isPortageSalarial = currentCookProfile?.employment_status === 'PORTAGE_SALARIAL';
+      const currentCookProfile = await ProfileStore.getCookProfileByUserId(
+        req.user.id,
+      );
+      const isPortageSalarial =
+        currentCookProfile?.employment_status === "PORTAGE_SALARIAL";
 
       // Validation conditionnelle pour PORTAGE_SALARIAL
       // Si au moins un champ est fourni, tous doivent être présents
-      if (isPortageSalarial && (birth_place || social_security_number || iban || bic || rib_document)) {
-        const hasAllFields = birth_place && social_security_number && iban && bic && rib_document;
+      if (
+        isPortageSalarial &&
+        (birth_place || social_security_number || iban || bic || rib_document)
+      ) {
+        const hasAllFields =
+          birth_place && social_security_number && iban && bic && rib_document;
         if (!hasAllFields) {
           res.status(400).json({
-            error: 'ValidationError',
-            message: 'Pour le portage salarial, tous les champs sont requis : lieu de naissance, numéro de sécurité sociale, IBAN, BIC et document RIB',
+            error: "ValidationError",
+            message:
+              "Pour le portage salarial, tous les champs sont requis : lieu de naissance, numéro de sécurité sociale, IBAN, BIC et document RIB",
           });
           return;
         }
-        
+
         try {
           completePortageSalarialSchema.parse({
             birthPlace: birth_place,
@@ -223,7 +270,7 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
         } catch (validationError) {
           if (validationError instanceof z.ZodError) {
             res.status(400).json({
-              error: 'ValidationError',
+              error: "ValidationError",
               details: validationError.flatten(),
             });
             return;
@@ -235,26 +282,39 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       if (headline !== undefined) cookProfileUpdates.headline = headline;
       if (bio !== undefined) cookProfileUpdates.bio = bio;
       if (experience !== undefined) cookProfileUpdates.experience = experience;
-      if (video_intro_url !== undefined) cookProfileUpdates.video_intro_url = video_intro_url;
-      if (service_radius !== undefined) cookProfileUpdates.service_radius = service_radius;
-      if (hourly_rate !== undefined) cookProfileUpdates.hourly_rate = hourly_rate;
+      if (video_intro_url !== undefined)
+        cookProfileUpdates.video_intro_url = video_intro_url;
+      if (service_radius !== undefined)
+        cookProfileUpdates.service_radius = service_radius;
+      if (hourly_rate !== undefined)
+        cookProfileUpdates.hourly_rate = hourly_rate;
       if (minimum_booking_hours !== undefined)
         cookProfileUpdates.minimum_booking_hours = minimum_booking_hours;
-      if (can_do_groceries !== undefined) cookProfileUpdates.can_do_groceries = can_do_groceries;
-      if (can_set_table !== undefined) cookProfileUpdates.can_set_table = can_set_table;
-      if (can_do_dishes !== undefined) cookProfileUpdates.can_do_dishes = can_do_dishes;
+      if (can_do_groceries !== undefined)
+        cookProfileUpdates.can_do_groceries = can_do_groceries;
+      if (can_set_table !== undefined)
+        cookProfileUpdates.can_set_table = can_set_table;
+      if (can_do_dishes !== undefined)
+        cookProfileUpdates.can_do_dishes = can_do_dishes;
       if (max_guests !== undefined) cookProfileUpdates.max_guests = max_guests;
       if (employment_status !== undefined)
-        cookProfileUpdates.employment_status = employment_status as EmploymentStatus;
-      if (siret_number !== undefined) cookProfileUpdates.siret_number = siret_number;
-      if (insurance_number !== undefined) cookProfileUpdates.insurance_number = insurance_number;
+        cookProfileUpdates.employment_status =
+          employment_status as EmploymentStatus;
+      if (siret_number !== undefined)
+        cookProfileUpdates.siret_number = siret_number;
+      if (insurance_number !== undefined)
+        cookProfileUpdates.insurance_number = insurance_number;
       if (insurance_expiry_date !== undefined)
         cookProfileUpdates.insurance_expiry_date = insurance_expiry_date;
-      if (id_card_url !== undefined) cookProfileUpdates.id_card_url = id_card_url;
-      if (insurance_cert_url !== undefined) cookProfileUpdates.insurance_cert_url = insurance_cert_url;
+      if (id_card_url !== undefined)
+        cookProfileUpdates.id_card_url = id_card_url;
+      if (insurance_cert_url !== undefined)
+        cookProfileUpdates.insurance_cert_url = insurance_cert_url;
       if (kbis_url !== undefined) cookProfileUpdates.kbis_url = kbis_url;
-      if (is_available !== undefined) cookProfileUpdates.is_available = is_available;
-      if (availability_note !== undefined) cookProfileUpdates.availability_note = availability_note;
+      if (is_available !== undefined)
+        cookProfileUpdates.is_available = is_available;
+      if (availability_note !== undefined)
+        cookProfileUpdates.availability_note = availability_note;
 
       // Gestion des champs PORTAGE_SALARIAL
       let ribDocumentPath: string | undefined;
@@ -263,38 +323,50 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
           // Supprimer l'ancien RIB si existant
           if (currentCookProfile?.rib_document_url) {
             try {
-              await DocumentService.deleteRibDocument(currentCookProfile.rib_document_url);
+              await DocumentService.deleteRibDocument(
+                currentCookProfile.rib_document_url,
+              );
             } catch (deleteError) {
-              console.warn('Erreur lors de la suppression de l\'ancien RIB:', deleteError);
+              console.warn(
+                "Erreur lors de la suppression de l'ancien RIB:",
+                deleteError,
+              );
             }
           }
           // Upload du nouveau RIB
           ribDocumentPath = await DocumentService.uploadRibDocumentFromBase64(
             req.user.id,
             rib_document,
-            rib_document_name
+            rib_document_name,
           );
           cookProfileUpdates.rib_document_url = ribDocumentPath;
         } catch (uploadError) {
           res.status(400).json({
-            error: 'RibUploadFailed',
-            message: uploadError instanceof Error ? uploadError.message : 'Échec de l\'upload du document RIB',
+            error: "RibUploadFailed",
+            message:
+              uploadError instanceof Error
+                ? uploadError.message
+                : "Échec de l'upload du document RIB",
           });
           return;
         }
       }
 
-      if (birth_place !== undefined) cookProfileUpdates.birth_place = birth_place;
-      
+      if (birth_place !== undefined)
+        cookProfileUpdates.birth_place = birth_place;
+
       // Chiffrer les données sensibles
       if (social_security_number !== undefined) {
-        const { data: ssnResult, error: ssnError } = await supabaseAdmin.rpc('encrypt_sensitive_data', {
-          data: social_security_number,
-        });
+        const { data: ssnResult, error: ssnError } = await supabaseAdmin.rpc(
+          "encrypt_sensitive_data",
+          {
+            data: social_security_number,
+          },
+        );
         if (ssnError || !ssnResult) {
           res.status(500).json({
-            error: 'EncryptionError',
-            message: 'Échec du chiffrement du numéro de sécurité sociale',
+            error: "EncryptionError",
+            message: "Échec du chiffrement du numéro de sécurité sociale",
           });
           return;
         }
@@ -302,13 +374,16 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       }
 
       if (iban !== undefined) {
-        const { data: ibanResult, error: ibanError } = await supabaseAdmin.rpc('encrypt_sensitive_data', {
-          data: iban.toUpperCase().replace(/\s/g, ''),
-        });
+        const { data: ibanResult, error: ibanError } = await supabaseAdmin.rpc(
+          "encrypt_sensitive_data",
+          {
+            data: iban.toUpperCase().replace(/\s/g, ""),
+          },
+        );
         if (ibanError || !ibanResult) {
           res.status(500).json({
-            error: 'EncryptionError',
-            message: 'Échec du chiffrement de l\'IBAN',
+            error: "EncryptionError",
+            message: "Échec du chiffrement de l'IBAN",
           });
           return;
         }
@@ -316,13 +391,16 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       }
 
       if (bic !== undefined) {
-        const { data: bicResult, error: bicError } = await supabaseAdmin.rpc('encrypt_sensitive_data', {
-          data: bic.toUpperCase().replace(/\s/g, ''),
-        });
+        const { data: bicResult, error: bicError } = await supabaseAdmin.rpc(
+          "encrypt_sensitive_data",
+          {
+            data: bic.toUpperCase().replace(/\s/g, ""),
+          },
+        );
         if (bicError || !bicResult) {
           res.status(500).json({
-            error: 'EncryptionError',
-            message: 'Échec du chiffrement du code BIC',
+            error: "EncryptionError",
+            message: "Échec du chiffrement du code BIC",
           });
           return;
         }
@@ -330,55 +408,71 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
       }
 
       if (Object.keys(cookProfileUpdates).length > 0) {
-        updatedCookProfile = await ProfileStore.updateCookProfile(req.user.id, cookProfileUpdates);
+        updatedCookProfile = await ProfileStore.updateCookProfile(
+          req.user.id,
+          cookProfileUpdates,
+        );
       } else {
-        updatedCookProfile = await ProfileStore.getCookProfileByUserId(req.user.id);
+        updatedCookProfile = await ProfileStore.getCookProfileByUserId(
+          req.user.id,
+        );
       }
-    } else if (user.role === 'CLIENT') {
+    } else if (user.role === "CLIENT") {
       const clientProfileUpdates: Record<string, unknown> = {};
-      if (household_size !== undefined) clientProfileUpdates.household_size = household_size;
-      if (pet_friendly !== undefined) clientProfileUpdates.pet_friendly = pet_friendly;
-      if (smoking_allowed !== undefined) clientProfileUpdates.smoking_allowed = smoking_allowed;
+      if (household_size !== undefined)
+        clientProfileUpdates.household_size = household_size;
+      if (pet_friendly !== undefined)
+        clientProfileUpdates.pet_friendly = pet_friendly;
+      if (smoking_allowed !== undefined)
+        clientProfileUpdates.smoking_allowed = smoking_allowed;
 
       if (Object.keys(clientProfileUpdates).length > 0) {
         updatedClientProfile = await ProfileStore.updateClientProfile(
           req.user.id,
-          clientProfileUpdates
+          clientProfileUpdates,
         );
       } else {
-        updatedClientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+        updatedClientProfile = await ProfileStore.getClientProfileByUserId(
+          req.user.id,
+        );
       }
     }
 
     // Remove sensitive data
     const { password, two_factor_secret, ...safeUser } = updatedUser;
 
-    console.log('Réponse envoyée - avatar_url dans safeUser:', safeUser.avatar_url);
-    console.log('Réponse complète - user:', JSON.stringify(safeUser, null, 2));
+    console.log(
+      "Réponse envoyée - avatar_url dans safeUser:",
+      safeUser.avatar_url,
+    );
+    console.log("Réponse complète - user:", JSON.stringify(safeUser, null, 2));
 
     res.status(200).json({
-      message: 'Profile updated successfully',
+      message: "Profile updated successfully",
       user: safeUser,
       cookProfile: updatedCookProfile,
       clientProfile: updatedClientProfile,
     });
   } catch (error) {
-    console.error('Update profile error:', error);
+    console.error("Update profile error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to update profile',
+      error: "Internal Server Error",
+      message: "Failed to update profile",
     });
   }
 };
 
-export const getUserProfile = async (req: Request, res: Response): Promise<void> => {
+export const getUserProfile = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const { id } = req.params;
 
     if (!id) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'User ID is required',
+        error: "Bad Request",
+        message: "User ID is required",
       });
       return;
     }
@@ -387,14 +481,15 @@ export const getUserProfile = async (req: Request, res: Response): Promise<void>
 
     if (!userWithProfile) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
+        error: "Not Found",
+        message: "User not found",
       });
       return;
     }
 
     // Remove sensitive data
-    const { password, two_factor_secret, email, phone, ...safeUser } = userWithProfile.user;
+    const { password, two_factor_secret, email, phone, ...safeUser } =
+      userWithProfile.user;
 
     // For public profiles, only show limited cook profile data
     let publicCookProfile;
@@ -421,20 +516,24 @@ export const getUserProfile = async (req: Request, res: Response): Promise<void>
             pet_friendly: userWithProfile.clientProfile.pet_friendly,
             smoking_allowed: userWithProfile.clientProfile.smoking_allowed,
             total_bookings: userWithProfile.clientProfile.total_bookings,
-            average_rating_given: userWithProfile.clientProfile.average_rating_given,
+            average_rating_given:
+              userWithProfile.clientProfile.average_rating_given,
           }
         : undefined,
     });
   } catch (error) {
-    console.error('Get user profile error:', error);
+    console.error("Get user profile error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get user profile',
+      error: "Internal Server Error",
+      message: "Failed to get user profile",
     });
   }
 };
 
-export const getCookProfiles = async (req: Request, res: Response): Promise<void> => {
+export const getCookProfiles = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   // Déclarer filters en dehors du try-catch pour qu'il soit accessible dans le catch
   const filters: {
     status?: CookStatus;
@@ -446,14 +545,8 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
   } = {};
 
   try {
-    const {
-      status,
-      city,
-      min_rating,
-      max_hourly_rate,
-      limit,
-      offset,
-    } = req.query;
+    const { status, city, min_rating, max_hourly_rate, limit, offset } =
+      req.query;
 
     if (status) {
       filters.status = status as CookStatus;
@@ -487,10 +580,12 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
       result.profiles.map(async (profile) => {
         // Get user data
         const user = await UserStore.getUserById(profile.user_id);
-        
+
         if (!user) {
           // Skip profiles without user (shouldn't happen, but handle gracefully)
-          console.warn(`User not found for cook profile ${profile.id} (user_id: ${profile.user_id})`);
+          console.warn(
+            `User not found for cook profile ${profile.id} (user_id: ${profile.user_id})`,
+          );
           return null;
         }
 
@@ -500,16 +595,16 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
         }
 
         // Remove sensitive data from cook profile
-      const {
-        siret_number,
-        insurance_number,
-        insurance_expiry_date,
-        id_card_url,
-        insurance_cert_url,
-        kbis_url,
-        total_earnings,
+        const {
+          siret_number,
+          insurance_number,
+          insurance_expiry_date,
+          id_card_url,
+          insurance_cert_url,
+          kbis_url,
+          total_earnings,
           ...publicCookData
-      } = profile;
+        } = profile;
 
         // Remove sensitive data from user
         const { password, two_factor_secret, email, phone, ...safeUser } = user;
@@ -524,21 +619,29 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
             city: safeUser.city,
           },
         };
-      })
+      }),
     );
 
     // Extract successful results and filter out nulls
     const publicProfiles = enrichedProfilesResults
-      .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+      .filter(
+        (result): result is PromiseFulfilledResult<any> =>
+          result.status === "fulfilled",
+      )
       .map((result) => result.value)
       .filter((profile) => profile !== null) as any[];
 
     // Log any rejected promises for debugging
-    const rejected = enrichedProfilesResults.filter((result) => result.status === 'rejected');
+    const rejected = enrichedProfilesResults.filter(
+      (result) => result.status === "rejected",
+    );
     if (rejected.length > 0) {
-      console.warn(`Failed to enrich ${rejected.length} cook profile(s):`, rejected.map((r) => r.status === 'rejected' ? r.reason : null));
+      console.warn(
+        `Failed to enrich ${rejected.length} cook profile(s):`,
+        rejected.map((r) => (r.status === "rejected" ? r.reason : null)),
+      );
     }
-    
+
     // Update count if we filtered by city (since we filtered after fetching)
     const finalCount = filters.city ? publicProfiles.length : result.count;
 
@@ -550,7 +653,7 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
       offset: filters.offset || 0,
     });
   } catch (error) {
-    console.error('Get cook profiles error:', error);
+    console.error("Get cook profiles error:", error);
     // Return empty array instead of error to prevent frontend crashes
     res.status(200).json({
       profiles: [],
@@ -560,4 +663,3 @@ export const getCookProfiles = async (req: Request, res: Response): Promise<void
     });
   }
 };
-

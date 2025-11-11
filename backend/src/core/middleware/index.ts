@@ -1,2 +1,1 @@
-export { authGuard, type AuthRequest } from './authGuard';
-
+export { authGuard, type AuthRequest } from "./authGuard";

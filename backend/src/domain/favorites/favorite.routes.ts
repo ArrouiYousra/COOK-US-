@@ -1,11 +1,11 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   getMyFavorites,
   addFavorite,
   removeFavorite,
   checkFavorite,
-} from './favorite.controllers';
-import { authGuard } from '@core/middleware';
+} from "./favorite.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -23,7 +23,7 @@ const router = Router();
  *       403:
  *         description: Forbidden (only clients)
  */
-router.get('/', authGuard, getMyFavorites);
+router.get("/", authGuard, getMyFavorites);
 
 /**
  * @swagger
@@ -47,7 +47,7 @@ router.get('/', authGuard, getMyFavorites);
  *       403:
  *         description: Forbidden (only clients)
  */
-router.post('/:cookId', authGuard, addFavorite);
+router.post("/:cookId", authGuard, addFavorite);
 
 /**
  * @swagger
@@ -69,7 +69,7 @@ router.post('/:cookId', authGuard, addFavorite);
  *       403:
  *         description: Forbidden (only clients)
  */
-router.delete('/:cookId', authGuard, removeFavorite);
+router.delete("/:cookId", authGuard, removeFavorite);
 
 /**
  * @swagger
@@ -98,7 +98,6 @@ router.delete('/:cookId', authGuard, removeFavorite);
  *       403:
  *         description: Forbidden (only clients)
  */
-router.get('/:cookId/check', authGuard, checkFavorite);
+router.get("/:cookId/check", authGuard, checkFavorite);
 
 export default router;
-

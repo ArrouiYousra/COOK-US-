@@ -5,10 +5,12 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon --exec tsx src/server.ts",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.{ts,tsx,js,jsx}\"",
+    "lint:fix": "eslint \"src/**/*.{ts,tsx,js,jsx}\" --fix",
+    "prebuild": "npm run lint && npm run type-check",
     "build": "tsc",
     "start": "node dist/server.js",
-    "type-check": "tsc --noEmit",
-    "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",
     "test:insee": "tsx scripts/test-insee-api.ts"
   },

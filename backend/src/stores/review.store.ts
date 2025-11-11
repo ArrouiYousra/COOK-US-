@@ -1,5 +1,5 @@
-import { supabaseAdmin } from '@config/supabaseClient';
-import type { Review, CreateReviewDTO } from '../types/database.types';
+import { supabaseAdmin } from "@config/supabaseClient";
+import type { Review, CreateReviewDTO } from "../types/database.types";
 
 export class ReviewStore {
   /**
@@ -7,49 +7,49 @@ export class ReviewStore {
    */
   static async createReview(
     reviewerId: string,
-    reviewData: CreateReviewDTO
+    reviewData: CreateReviewDTO,
   ): Promise<Review> {
     // Validate rating
     if (reviewData.rating < 0 || reviewData.rating > 5) {
-      throw new Error('Rating must be between 0 and 5');
+      throw new Error("Rating must be between 0 and 5");
     }
 
     // Check if booking exists and is completed
     const { data: booking, error: bookingError } = await supabaseAdmin
-      .from('bookings')
-      .select('*')
-      .eq('id', reviewData.booking_id)
+      .from("bookings")
+      .select("*")
+      .eq("id", reviewData.booking_id)
       .single();
 
     if (bookingError || !booking) {
-      throw new Error('Booking not found');
+      throw new Error("Booking not found");
     }
 
-    if (booking.status !== 'COMPLETED') {
-      throw new Error('Can only review completed bookings');
+    if (booking.status !== "COMPLETED") {
+      throw new Error("Can only review completed bookings");
     }
 
     // Verify reviewer is a participant (client or cook)
     const user = await supabaseAdmin
-      .from('users')
-      .select('id, role')
-      .eq('id', reviewerId)
+      .from("users")
+      .select("id, role")
+      .eq("id", reviewerId)
       .single();
 
     if (user.error || !user.data) {
-      throw new Error('User not found');
+      throw new Error("User not found");
     }
 
     // Get profiles to verify participation
     let isParticipant = false;
     let revieweeId: string | null = null;
 
-    if (user.data.role === 'CLIENT') {
+    if (user.data.role === "CLIENT") {
       // Client reviewing cook
       const { data: clientProfile } = await supabaseAdmin
-        .from('client_profiles')
-        .select('id')
-        .eq('user_id', reviewerId)
+        .from("client_profiles")
+        .select("id")
+        .eq("user_id", reviewerId)
         .single();
 
       if (clientProfile && clientProfile.id === booking.client_profile_id) {
@@ -57,9 +57,9 @@ export class ReviewStore {
         // Get cook's user_id
         if (booking.cook_profile_id) {
           const { data: cookProfile } = await supabaseAdmin
-            .from('cook_profiles')
-            .select('user_id')
-            .eq('id', booking.cook_profile_id)
+            .from("cook_profiles")
+            .select("user_id")
+            .eq("id", booking.cook_profile_id)
             .single();
 
           if (cookProfile) {
@@ -67,21 +67,21 @@ export class ReviewStore {
           }
         }
       }
-    } else if (user.data.role === 'COOK') {
+    } else if (user.data.role === "COOK") {
       // Cook reviewing client
       const { data: cookProfile } = await supabaseAdmin
-        .from('cook_profiles')
-        .select('id')
-        .eq('user_id', reviewerId)
+        .from("cook_profiles")
+        .select("id")
+        .eq("user_id", reviewerId)
         .single();
 
       if (cookProfile && cookProfile.id === booking.cook_profile_id) {
         isParticipant = true;
         // Get client's user_id
         const { data: clientProfile } = await supabaseAdmin
-          .from('client_profiles')
-          .select('user_id')
-          .eq('id', booking.client_profile_id)
+          .from("client_profiles")
+          .select("user_id")
+          .eq("id", booking.client_profile_id)
           .single();
 
         if (clientProfile) {
@@ -91,18 +91,18 @@ export class ReviewStore {
     }
 
     if (!isParticipant || !revieweeId) {
-      throw new Error('You are not a participant of this booking');
+      throw new Error("You are not a participant of this booking");
     }
 
     // Check if review already exists for this booking
     const existingReview = await this.getReviewByBooking(reviewData.booking_id);
     if (existingReview) {
-      throw new Error('A review already exists for this booking');
+      throw new Error("A review already exists for this booking");
     }
 
     // Create review
     const { data, error } = await supabaseAdmin
-      .from('reviews')
+      .from("reviews")
       .insert({
         booking_id: reviewData.booking_id,
         reviewer_id: reviewerId,
@@ -128,13 +128,13 @@ export class ReviewStore {
    */
   static async getReviewByBooking(bookingId: string): Promise<Review | null> {
     const { data, error } = await supabaseAdmin
-      .from('reviews')
-      .select('*')
-      .eq('booking_id', bookingId)
+      .from("reviews")
+      .select("*")
+      .eq("booking_id", bookingId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get review: ${error.message}`);
@@ -148,13 +148,13 @@ export class ReviewStore {
    */
   static async getReviewById(reviewId: string): Promise<Review | null> {
     const { data, error } = await supabaseAdmin
-      .from('reviews')
-      .select('*')
-      .eq('id', reviewId)
+      .from("reviews")
+      .select("*")
+      .eq("id", reviewId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get review: ${error.message}`);
@@ -168,10 +168,10 @@ export class ReviewStore {
    */
   static async getReviewsByReviewee(revieweeId: string): Promise<Review[]> {
     const { data, error } = await supabaseAdmin
-      .from('reviews')
-      .select('*')
-      .eq('reviewee_id', revieweeId)
-      .order('created_at', { ascending: false });
+      .from("reviews")
+      .select("*")
+      .eq("reviewee_id", revieweeId)
+      .order("created_at", { ascending: false });
 
     if (error) {
       throw new Error(`Failed to get reviews: ${error.message}`);
@@ -185,10 +185,10 @@ export class ReviewStore {
    */
   static async getReviewsByReviewer(reviewerId: string): Promise<Review[]> {
     const { data, error } = await supabaseAdmin
-      .from('reviews')
-      .select('*')
-      .eq('reviewer_id', reviewerId)
-      .order('created_at', { ascending: false });
+      .from("reviews")
+      .select("*")
+      .eq("reviewer_id", reviewerId)
+      .order("created_at", { ascending: false });
 
     if (error) {
       throw new Error(`Failed to get reviews: ${error.message}`);
@@ -203,30 +203,33 @@ export class ReviewStore {
   static async updateReview(
     reviewId: string,
     reviewerId: string,
-    updates: { rating?: number; comment?: string }
+    updates: { rating?: number; comment?: string },
   ): Promise<Review> {
     // Verify ownership
     const review = await this.getReviewById(reviewId);
     if (!review) {
-      throw new Error('Review not found');
+      throw new Error("Review not found");
     }
 
     if (review.reviewer_id !== reviewerId) {
-      throw new Error('You can only update your own reviews');
+      throw new Error("You can only update your own reviews");
     }
 
     // Validate rating if provided
-    if (updates.rating !== undefined && (updates.rating < 0 || updates.rating > 5)) {
-      throw new Error('Rating must be between 0 and 5');
+    if (
+      updates.rating !== undefined &&
+      (updates.rating < 0 || updates.rating > 5)
+    ) {
+      throw new Error("Rating must be between 0 and 5");
     }
 
     const { data, error } = await supabaseAdmin
-      .from('reviews')
+      .from("reviews")
       .update({
         rating: updates.rating,
         comment: updates.comment,
       })
-      .eq('id', reviewId)
+      .eq("id", reviewId)
       .select()
       .single();
 
@@ -243,21 +246,24 @@ export class ReviewStore {
   /**
    * Delete a review
    */
-  static async deleteReview(reviewId: string, reviewerId: string): Promise<void> {
+  static async deleteReview(
+    reviewId: string,
+    reviewerId: string,
+  ): Promise<void> {
     // Verify ownership
     const review = await this.getReviewById(reviewId);
     if (!review) {
-      throw new Error('Review not found');
+      throw new Error("Review not found");
     }
 
     if (review.reviewer_id !== reviewerId) {
-      throw new Error('You can only delete your own reviews');
+      throw new Error("You can only delete your own reviews");
     }
 
     const { error } = await supabaseAdmin
-      .from('reviews')
+      .from("reviews")
       .delete()
-      .eq('id', reviewId);
+      .eq("id", reviewId);
 
     if (error) {
       throw new Error(`Failed to delete review: ${error.message}`);
@@ -278,36 +284,36 @@ export class ReviewStore {
       // No reviews, set average to null
       // Check if user is cook or client
       const { data: user } = await supabaseAdmin
-        .from('users')
-        .select('role')
-        .eq('id', userId)
+        .from("users")
+        .select("role")
+        .eq("id", userId)
         .single();
 
-      if (user?.role === 'COOK') {
+      if (user?.role === "COOK") {
         const { data: cookProfile } = await supabaseAdmin
-          .from('cook_profiles')
-          .select('id')
-          .eq('user_id', userId)
+          .from("cook_profiles")
+          .select("id")
+          .eq("user_id", userId)
           .single();
 
         if (cookProfile) {
           await supabaseAdmin
-            .from('cook_profiles')
+            .from("cook_profiles")
             .update({ average_rating: null })
-            .eq('id', cookProfile.id);
+            .eq("id", cookProfile.id);
         }
-      } else if (user?.role === 'CLIENT') {
+      } else if (user?.role === "CLIENT") {
         const { data: clientProfile } = await supabaseAdmin
-          .from('client_profiles')
-          .select('id')
-          .eq('user_id', userId)
+          .from("client_profiles")
+          .select("id")
+          .eq("user_id", userId)
           .single();
 
         if (clientProfile) {
           await supabaseAdmin
-            .from('client_profiles')
+            .from("client_profiles")
             .update({ average_rating_given: null })
-            .eq('id', clientProfile.id);
+            .eq("id", clientProfile.id);
         }
       }
       return;
@@ -319,46 +325,46 @@ export class ReviewStore {
 
     // Check if user is cook or client
     const { data: user } = await supabaseAdmin
-      .from('users')
-      .select('role')
-      .eq('id', userId)
+      .from("users")
+      .select("role")
+      .eq("id", userId)
       .single();
 
-    if (user?.role === 'COOK') {
+    if (user?.role === "COOK") {
       const { data: cookProfile } = await supabaseAdmin
-        .from('cook_profiles')
-        .select('id')
-        .eq('user_id', userId)
+        .from("cook_profiles")
+        .select("id")
+        .eq("user_id", userId)
         .single();
 
       if (cookProfile) {
         await supabaseAdmin
-          .from('cook_profiles')
+          .from("cook_profiles")
           .update({ average_rating: average })
-          .eq('id', cookProfile.id);
+          .eq("id", cookProfile.id);
       }
-    } else if (user?.role === 'CLIENT') {
+    } else if (user?.role === "CLIENT") {
       // For clients, we might want to track average_rating_given (reviews they wrote)
       // But the schema shows average_rating_given, so let's calculate based on reviews they wrote
       const reviewsWritten = await this.getReviewsByReviewer(userId);
       if (reviewsWritten.length > 0) {
         const sumWritten = reviewsWritten.reduce((acc, r) => acc + r.rating, 0);
-        const averageWritten = Math.round((sumWritten / reviewsWritten.length) * 100) / 100;
+        const averageWritten =
+          Math.round((sumWritten / reviewsWritten.length) * 100) / 100;
 
         const { data: clientProfile } = await supabaseAdmin
-          .from('client_profiles')
-          .select('id')
-          .eq('user_id', userId)
+          .from("client_profiles")
+          .select("id")
+          .eq("user_id", userId)
           .single();
 
         if (clientProfile) {
           await supabaseAdmin
-            .from('client_profiles')
+            .from("client_profiles")
             .update({ average_rating_given: averageWritten })
-            .eq('id', clientProfile.id);
+            .eq("id", clientProfile.id);
         }
       }
     }
   }
 }
-

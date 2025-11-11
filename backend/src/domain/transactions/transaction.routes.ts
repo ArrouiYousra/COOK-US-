@@ -1,12 +1,12 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createTransaction,
   getMyTransactions,
   getTransactionById,
   getAllTransactions,
   updateTransactionStatus,
-} from './transaction.controllers';
-import { authGuard } from '@core/middleware';
+} from "./transaction.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -123,7 +123,7 @@ const router = Router();
  *       403:
  *         description: Forbidden - Only admins can create
  */
-router.post('/', authGuard, createTransaction);
+router.post("/", authGuard, createTransaction);
 
 /**
  * @swagger
@@ -139,7 +139,7 @@ router.post('/', authGuard, createTransaction);
  *       401:
  *         description: Unauthorized
  */
-router.get('/me', authGuard, getMyTransactions);
+router.get("/me", authGuard, getMyTransactions);
 
 /**
  * @swagger
@@ -168,7 +168,7 @@ router.get('/me', authGuard, getMyTransactions);
  *       403:
  *         description: Forbidden - Only admins can access
  */
-router.get('/all', authGuard, getAllTransactions);
+router.get("/all", authGuard, getAllTransactions);
 
 /**
  * @swagger
@@ -195,7 +195,7 @@ router.get('/all', authGuard, getAllTransactions);
  *       404:
  *         description: Transaction not found
  */
-router.get('/:transactionId', authGuard, getTransactionById);
+router.get("/:transactionId", authGuard, getTransactionById);
 
 /**
  * @swagger
@@ -236,7 +236,6 @@ router.get('/:transactionId', authGuard, getTransactionById);
  *       403:
  *         description: Forbidden - Only admins can update
  */
-router.put('/:transactionId/status', authGuard, updateTransactionStatus);
+router.put("/:transactionId/status", authGuard, updateTransactionStatus);
 
 export default router;
-

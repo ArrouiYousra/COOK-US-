@@ -1,12 +1,12 @@
-import type { Session } from '@supabase/supabase-js';
-import { UserStore } from '@stores/user.store';
-import type { User } from '../../types/database.types';
+import type { Session } from "@supabase/supabase-js";
+import { UserStore } from "@stores/user.store";
+import type { User } from "../../types/database.types";
 
 export interface AuthUserResponse {
   id: string;
   email: string;
-  role: User['role'];
-  status: User['status'];
+  role: User["role"];
+  status: User["status"];
   firstName: string;
   lastName: string;
   avatarUrl?: string | null;
@@ -37,16 +37,16 @@ export const mapUserToAuthUser = (user: User): AuthUserResponse => ({
 export const buildAuthResponse = async (
   userId: string,
   session: Session,
-  refreshTokenOverride?: string
+  refreshTokenOverride?: string,
 ): Promise<AuthResponse> => {
   if (!session?.access_token) {
-    throw new Error('Session is invalid – missing access token');
+    throw new Error("Session is invalid – missing access token");
   }
 
   const user = await UserStore.getUserById(userId);
 
   if (!user) {
-    throw new Error('User not found in database');
+    throw new Error("User not found in database");
   }
 
   return {
@@ -55,4 +55,3 @@ export const buildAuthResponse = async (
     refreshToken: refreshTokenOverride ?? session.refresh_token ?? undefined,
   };
 };
-

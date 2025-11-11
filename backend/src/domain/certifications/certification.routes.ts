@@ -1,12 +1,12 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   getMyCertifications,
   getCookCertifications,
   createCertification,
   updateCertification,
   deleteCertification,
-} from './certification.controllers';
-import { authGuard } from '@core/middleware';
+} from "./certification.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -81,7 +81,7 @@ const router = Router();
  *       403:
  *         description: Forbidden - Only cooks can access
  */
-router.get('/me', authGuard, getMyCertifications);
+router.get("/me", authGuard, getMyCertifications);
 
 /**
  * @swagger
@@ -102,7 +102,7 @@ router.get('/me', authGuard, getMyCertifications);
  *       404:
  *         description: Cook profile not found
  */
-router.get('/cook/:cookId', getCookCertifications);
+router.get("/cook/:cookId", getCookCertifications);
 
 /**
  * @swagger
@@ -128,7 +128,7 @@ router.get('/cook/:cookId', getCookCertifications);
  *       403:
  *         description: Forbidden - Only cooks can create
  */
-router.post('/', authGuard, createCertification);
+router.post("/", authGuard, createCertification);
 
 /**
  * @swagger
@@ -179,7 +179,7 @@ router.post('/', authGuard, createCertification);
  *       404:
  *         description: Certification not found
  */
-router.put('/:certId', authGuard, updateCertification);
+router.put("/:certId", authGuard, updateCertification);
 
 /**
  * @swagger
@@ -206,9 +206,8 @@ router.put('/:certId', authGuard, updateCertification);
  *       404:
  *         description: Certification not found
  */
-router.delete('/:certId', authGuard, deleteCertification);
+router.delete("/:certId", authGuard, deleteCertification);
 
 // Verification routes removed - no verification_status in SQL schema
 
 export default router;
-

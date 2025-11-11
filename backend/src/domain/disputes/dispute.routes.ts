@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createDispute,
   getMyDisputes,
@@ -7,8 +7,8 @@ import {
   resolveDispute,
   closeDispute,
   getAllDisputes,
-} from './dispute.controllers';
-import { authGuard } from '@core/middleware';
+} from "./dispute.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -90,7 +90,7 @@ const router = Router();
  *       403:
  *         description: Forbidden
  */
-router.post('/', authGuard, createDispute);
+router.post("/", authGuard, createDispute);
 
 /**
  * @swagger
@@ -106,7 +106,7 @@ router.post('/', authGuard, createDispute);
  *       401:
  *         description: Unauthorized
  */
-router.get('/me', authGuard, getMyDisputes);
+router.get("/me", authGuard, getMyDisputes);
 
 /**
  * @swagger
@@ -130,7 +130,7 @@ router.get('/me', authGuard, getMyDisputes);
  *       403:
  *         description: Forbidden - Only admins can access
  */
-router.get('/all', authGuard, getAllDisputes);
+router.get("/all", authGuard, getAllDisputes);
 
 /**
  * @swagger
@@ -157,7 +157,7 @@ router.get('/all', authGuard, getAllDisputes);
  *       404:
  *         description: Dispute not found
  */
-router.get('/:disputeId', authGuard, getDisputeById);
+router.get("/:disputeId", authGuard, getDisputeById);
 
 /**
  * @swagger
@@ -196,7 +196,7 @@ router.get('/:disputeId', authGuard, getDisputeById);
  *       403:
  *         description: Forbidden
  */
-router.put('/:disputeId', authGuard, updateDispute);
+router.put("/:disputeId", authGuard, updateDispute);
 
 /**
  * @swagger
@@ -236,7 +236,7 @@ router.put('/:disputeId', authGuard, updateDispute);
  *       403:
  *         description: Forbidden - Only admins can resolve
  */
-router.post('/:disputeId/resolve', authGuard, resolveDispute);
+router.post("/:disputeId/resolve", authGuard, resolveDispute);
 
 /**
  * @swagger
@@ -263,9 +263,8 @@ router.post('/:disputeId/resolve', authGuard, resolveDispute);
  *       403:
  *         description: Forbidden
  */
-router.post('/:disputeId/close', authGuard, closeDispute);
+router.post("/:disputeId/close", authGuard, closeDispute);
 
 // Dispute messages routes removed - not in SQL schema
 
 export default router;
-

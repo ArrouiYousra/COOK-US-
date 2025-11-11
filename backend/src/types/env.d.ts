@@ -2,7 +2,7 @@ declare namespace NodeJS {
   interface ProcessEnv {
     // Server
     PORT: string;
-    NODE_ENV: 'development' | 'production' | 'test';
+    NODE_ENV: "development" | "production" | "test";
 
     // Supabase
     SUPABASE_URL: string;
@@ -40,4 +40,3 @@ declare namespace NodeJS {
     FRONTEND_URL?: string;
   }
 }
-

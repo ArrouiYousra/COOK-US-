@@ -1,5 +1,8 @@
-import { supabaseAdmin } from '@config/supabaseClient';
-import type { PaymentMethod, CreatePaymentMethodDTO } from '../types/database.types';
+import { supabaseAdmin } from "@config/supabaseClient";
+import type {
+  PaymentMethod,
+  CreatePaymentMethodDTO,
+} from "../types/database.types";
 
 export class PaymentMethodStore {
   /**
@@ -7,14 +10,14 @@ export class PaymentMethodStore {
    */
   static async createPaymentMethod(
     userId: string,
-    data: CreatePaymentMethodDTO
+    data: CreatePaymentMethodDTO,
   ): Promise<PaymentMethod> {
     const { data: insertData, error } = await supabaseAdmin
-      .from('payment_methods')
+      .from("payment_methods")
       .insert({
         user_id: userId,
         stripe_payment_method_id: data.stripe_payment_method_id,
-        type: data.type || 'card',
+        type: data.type || "card",
         last4: data.last4 || null,
         brand: data.brand || null,
         expiry_month: data.expiry_month || null,
@@ -34,13 +37,15 @@ export class PaymentMethodStore {
   /**
    * Get all payment methods for a user
    */
-  static async getPaymentMethodsByUserId(userId: string): Promise<PaymentMethod[]> {
+  static async getPaymentMethodsByUserId(
+    userId: string,
+  ): Promise<PaymentMethod[]> {
     const { data, error } = await supabaseAdmin
-      .from('payment_methods')
-      .select('*')
-      .eq('user_id', userId)
-      .order('is_default', { ascending: false })
-      .order('created_at', { ascending: false });
+      .from("payment_methods")
+      .select("*")
+      .eq("user_id", userId)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false });
 
     if (error) {
       throw new Error(`Failed to get payment methods: ${error.message}`);
@@ -52,15 +57,17 @@ export class PaymentMethodStore {
   /**
    * Get a payment method by ID
    */
-  static async getPaymentMethodById(paymentMethodId: string): Promise<PaymentMethod | null> {
+  static async getPaymentMethodById(
+    paymentMethodId: string,
+  ): Promise<PaymentMethod | null> {
     const { data, error } = await supabaseAdmin
-      .from('payment_methods')
-      .select('*')
-      .eq('id', paymentMethodId)
+      .from("payment_methods")
+      .select("*")
+      .eq("id", paymentMethodId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null; // Not found
       }
       throw new Error(`Failed to get payment method: ${error.message}`);
@@ -72,12 +79,15 @@ export class PaymentMethodStore {
   /**
    * Delete a payment method
    */
-  static async deletePaymentMethod(paymentMethodId: string, userId: string): Promise<void> {
+  static async deletePaymentMethod(
+    paymentMethodId: string,
+    userId: string,
+  ): Promise<void> {
     const { error } = await supabaseAdmin
-      .from('payment_methods')
+      .from("payment_methods")
       .delete()
-      .eq('id', paymentMethodId)
-      .eq('user_id', userId); // Ensure user owns the payment method
+      .eq("id", paymentMethodId)
+      .eq("user_id", userId); // Ensure user owns the payment method
 
     if (error) {
       throw new Error(`Failed to delete payment method: ${error.message}`);
@@ -89,21 +99,21 @@ export class PaymentMethodStore {
    */
   static async setDefaultPaymentMethod(
     paymentMethodId: string,
-    userId: string
+    userId: string,
   ): Promise<PaymentMethod> {
     // First, unset all other default payment methods for this user
     await supabaseAdmin
-      .from('payment_methods')
+      .from("payment_methods")
       .update({ is_default: false })
-      .eq('user_id', userId)
-      .eq('is_default', true);
+      .eq("user_id", userId)
+      .eq("is_default", true);
 
     // Then set this one as default
     const { data, error } = await supabaseAdmin
-      .from('payment_methods')
+      .from("payment_methods")
       .update({ is_default: true })
-      .eq('id', paymentMethodId)
-      .eq('user_id', userId)
+      .eq("id", paymentMethodId)
+      .eq("user_id", userId)
       .select()
       .single();
 

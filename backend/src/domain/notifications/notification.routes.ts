@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   getMyNotifications,
   getNotificationById,
@@ -6,13 +6,13 @@ import {
   markAllAsRead,
   deleteNotification,
   getUnreadCount,
-} from './notification.controllers';
-import { registerFcmToken, removeFcmToken } from './fcm-token.controllers';
+} from "./notification.controllers";
+import { registerFcmToken, removeFcmToken } from "./fcm-token.controllers";
 import {
   getNotificationPreferences,
   updateNotificationPreferences,
-} from './notification-preferences.controllers';
-import { authGuard } from '@core/middleware';
+} from "./notification-preferences.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -48,7 +48,7 @@ const router = Router();
  *       200:
  *         description: List of notifications with unread count
  */
-router.get('/', authGuard, getMyNotifications);
+router.get("/", authGuard, getMyNotifications);
 
 /**
  * @swagger
@@ -62,7 +62,7 @@ router.get('/', authGuard, getMyNotifications);
  *       200:
  *         description: Unread count
  */
-router.get('/unread-count', authGuard, getUnreadCount);
+router.get("/unread-count", authGuard, getUnreadCount);
 
 /**
  * @swagger
@@ -76,7 +76,7 @@ router.get('/unread-count', authGuard, getUnreadCount);
  *       200:
  *         description: Notification preferences retrieved successfully
  */
-router.get('/preferences', authGuard, getNotificationPreferences);
+router.get("/preferences", authGuard, getNotificationPreferences);
 
 /**
  * @swagger
@@ -106,7 +106,7 @@ router.get('/preferences', authGuard, getNotificationPreferences);
  *       200:
  *         description: Notification preferences updated successfully
  */
-router.put('/preferences', authGuard, updateNotificationPreferences);
+router.put("/preferences", authGuard, updateNotificationPreferences);
 
 /**
  * @swagger
@@ -128,7 +128,7 @@ router.put('/preferences', authGuard, updateNotificationPreferences);
  *       403:
  *         description: Forbidden (not your notification)
  */
-router.get('/:notificationId', authGuard, getNotificationById);
+router.get("/:notificationId", authGuard, getNotificationById);
 
 /**
  * @swagger
@@ -148,7 +148,7 @@ router.get('/:notificationId', authGuard, getNotificationById);
  *       200:
  *         description: Notification marked as read
  */
-router.put('/:notificationId/read', authGuard, markAsRead);
+router.put("/:notificationId/read", authGuard, markAsRead);
 
 /**
  * @swagger
@@ -162,7 +162,7 @@ router.put('/:notificationId/read', authGuard, markAsRead);
  *       200:
  *         description: All notifications marked as read
  */
-router.put('/read-all', authGuard, markAllAsRead);
+router.put("/read-all", authGuard, markAllAsRead);
 
 /**
  * @swagger
@@ -182,7 +182,7 @@ router.put('/read-all', authGuard, markAllAsRead);
  *       200:
  *         description: Notification deleted successfully
  */
-router.delete('/:notificationId', authGuard, deleteNotification);
+router.delete("/:notificationId", authGuard, deleteNotification);
 
 /**
  * @swagger
@@ -207,7 +207,7 @@ router.delete('/:notificationId', authGuard, deleteNotification);
  *       200:
  *         description: FCM token registered successfully
  */
-router.post('/fcm-token', authGuard, registerFcmToken);
+router.post("/fcm-token", authGuard, registerFcmToken);
 
 /**
  * @swagger
@@ -221,7 +221,6 @@ router.post('/fcm-token', authGuard, registerFcmToken);
  *       200:
  *         description: FCM token removed successfully
  */
-router.delete('/fcm-token', authGuard, removeFcmToken);
+router.delete("/fcm-token", authGuard, removeFcmToken);
 
 export default router;
-

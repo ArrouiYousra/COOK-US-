@@ -1,5 +1,5 @@
-import { supabaseAdmin } from '@config/supabaseClient';
-import type { Address, CreateAddressDTO } from '../types/database.types';
+import { supabaseAdmin } from "@config/supabaseClient";
+import type { Address, CreateAddressDTO } from "../types/database.types";
 
 export class AddressStore {
   /**
@@ -8,28 +8,28 @@ export class AddressStore {
    */
   static async createAddress(
     clientProfileId: string,
-    addressData: CreateAddressDTO
+    addressData: CreateAddressDTO,
   ): Promise<Address> {
     // If this is set as default, unset other default addresses
     if (addressData.is_default) {
       await supabaseAdmin
-        .from('addresses')
+        .from("addresses")
         .update({ is_default: false })
-        .eq('client_profile_id', clientProfileId)
-        .eq('is_default', true);
+        .eq("client_profile_id", clientProfileId)
+        .eq("is_default", true);
     }
 
     // Insert address data (location will be set via SQL function or trigger)
     const insertData: any = {
       client_profile_id: clientProfileId,
-      type: addressData.type || 'HOME',
+      type: addressData.type || "HOME",
       label: addressData.label || null,
       street: addressData.street,
       street_number: addressData.street_number,
       complement: addressData.complement || null,
       city: addressData.city,
       postal_code: addressData.postal_code,
-      country: addressData.country || 'FR',
+      country: addressData.country || "FR",
       access_code: addressData.access_code || null,
       access_notes: addressData.access_notes || null,
       parking_info: addressData.parking_info || null,
@@ -41,7 +41,7 @@ export class AddressStore {
 
     // Insert address
     const { data: inserted, error: insertError } = await supabaseAdmin
-      .from('addresses')
+      .from("addresses")
       .insert(insertData)
       .select()
       .single();
@@ -53,7 +53,10 @@ export class AddressStore {
     // Update location using PostGIS function via RPC
     // Note: This requires a PostgreSQL function to be created in the database
     // For now, we'll try to use a direct SQL approach or store lat/lng separately
-    if (addressData.latitude !== undefined && addressData.longitude !== undefined) {
+    if (
+      addressData.latitude !== undefined &&
+      addressData.longitude !== undefined
+    ) {
       // Try to update location using a PostgreSQL function
       // The function should be created in the database:
       // CREATE OR REPLACE FUNCTION update_address_location(addr_id UUID, lat NUMERIC, lng NUMERIC)
@@ -62,9 +65,9 @@ export class AddressStore {
       //   UPDATE addresses SET location = ST_SetSRID(ST_MakePoint(lng, lat), 4326) WHERE id = addr_id;
       // END;
       // $$ LANGUAGE plpgsql;
-      
+
       try {
-        await supabaseAdmin.rpc('update_address_location', {
+        await supabaseAdmin.rpc("update_address_location", {
           addr_id: inserted.id,
           lat: addressData.latitude,
           lng: addressData.longitude,
@@ -72,14 +75,16 @@ export class AddressStore {
       } catch (rpcError) {
         // If RPC function doesn't exist, log warning but continue
         // The location can be set later via a database function or trigger
-        console.warn('Location update function not available. Location will need to be set via database function.');
+        console.warn(
+          "Location update function not available. Location will need to be set via database function.",
+        );
       }
     }
 
     // Fetch the complete address to return
     const address = await this.getAddressById(inserted.id);
     if (!address) {
-      throw new Error('Failed to retrieve created address');
+      throw new Error("Failed to retrieve created address");
     }
 
     return address;
@@ -90,13 +95,13 @@ export class AddressStore {
    */
   static async getAddressById(addressId: string): Promise<Address | null> {
     const { data, error } = await supabaseAdmin
-      .from('addresses')
-      .select('*')
-      .eq('id', addressId)
+      .from("addresses")
+      .select("*")
+      .eq("id", addressId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get address: ${error.message}`);
@@ -110,18 +115,18 @@ export class AddressStore {
    */
   static async getAddressesByClient(
     clientProfileId: string,
-    showAll: boolean = false
+    showAll: boolean = false,
   ): Promise<Address[]> {
     let query = supabaseAdmin
-      .from('addresses')
-      .select('*')
-      .eq('client_profile_id', clientProfileId)
-      .order('is_default', { ascending: false })
-      .order('created_at', { ascending: false });
+      .from("addresses")
+      .select("*")
+      .eq("client_profile_id", clientProfileId)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: false });
 
     // If showAll is false, only show default address (for other users viewing)
     if (!showAll) {
-      query = query.eq('is_default', true);
+      query = query.eq("is_default", true);
     }
 
     const { data, error } = await query;
@@ -139,26 +144,26 @@ export class AddressStore {
   static async updateAddress(
     addressId: string,
     clientProfileId: string,
-    updates: Partial<CreateAddressDTO>
+    updates: Partial<CreateAddressDTO>,
   ): Promise<Address> {
     // Verify ownership
     const address = await this.getAddressById(addressId);
     if (!address) {
-      throw new Error('Address not found');
+      throw new Error("Address not found");
     }
 
     if (address.client_profile_id !== clientProfileId) {
-      throw new Error('You can only update your own addresses');
+      throw new Error("You can only update your own addresses");
     }
 
     // If setting as default, unset other defaults
     if (updates.is_default === true) {
       await supabaseAdmin
-        .from('addresses')
+        .from("addresses")
         .update({ is_default: false })
-        .eq('client_profile_id', clientProfileId)
-        .eq('is_default', true)
-        .neq('id', addressId);
+        .eq("client_profile_id", clientProfileId)
+        .eq("is_default", true)
+        .neq("id", addressId);
     }
 
     const updateData: any = {
@@ -190,21 +195,21 @@ export class AddressStore {
     if (updates.latitude !== undefined && updates.longitude !== undefined) {
       // Try to update location using PostgreSQL function
       try {
-        await supabaseAdmin.rpc('update_address_location', {
+        await supabaseAdmin.rpc("update_address_location", {
           addr_id: addressId,
           lat: updates.latitude,
           lng: updates.longitude,
         });
       } catch (rpcError) {
         // If RPC function doesn't exist, log warning but continue
-        console.warn('Location update function not available.');
+        console.warn("Location update function not available.");
       }
     }
 
     const { data, error } = await supabaseAdmin
-      .from('addresses')
+      .from("addresses")
       .update(updateData)
-      .eq('id', addressId)
+      .eq("id", addressId)
       .select()
       .single();
 
@@ -218,21 +223,24 @@ export class AddressStore {
   /**
    * Delete an address
    */
-  static async deleteAddress(addressId: string, clientProfileId: string): Promise<void> {
+  static async deleteAddress(
+    addressId: string,
+    clientProfileId: string,
+  ): Promise<void> {
     // Verify ownership
     const address = await this.getAddressById(addressId);
     if (!address) {
-      throw new Error('Address not found');
+      throw new Error("Address not found");
     }
 
     if (address.client_profile_id !== clientProfileId) {
-      throw new Error('You can only delete your own addresses');
+      throw new Error("You can only delete your own addresses");
     }
 
     const { error } = await supabaseAdmin
-      .from('addresses')
+      .from("addresses")
       .delete()
-      .eq('id', addressId);
+      .eq("id", addressId);
 
     if (error) {
       throw new Error(`Failed to delete address: ${error.message}`);
@@ -244,31 +252,31 @@ export class AddressStore {
    */
   static async setDefaultAddress(
     addressId: string,
-    clientProfileId: string
+    clientProfileId: string,
   ): Promise<Address> {
     // Verify ownership
     const address = await this.getAddressById(addressId);
     if (!address) {
-      throw new Error('Address not found');
+      throw new Error("Address not found");
     }
 
     if (address.client_profile_id !== clientProfileId) {
-      throw new Error('You can only set your own addresses as default');
+      throw new Error("You can only set your own addresses as default");
     }
 
     // Unset other default addresses
     await supabaseAdmin
-      .from('addresses')
+      .from("addresses")
       .update({ is_default: false })
-      .eq('client_profile_id', clientProfileId)
-      .eq('is_default', true)
-      .neq('id', addressId);
+      .eq("client_profile_id", clientProfileId)
+      .eq("is_default", true)
+      .neq("id", addressId);
 
     // Set this address as default
     const { data, error } = await supabaseAdmin
-      .from('addresses')
+      .from("addresses")
       .update({ is_default: true })
-      .eq('id', addressId)
+      .eq("id", addressId)
       .select()
       .single();
 
@@ -278,6 +286,4 @@ export class AddressStore {
 
     return data as Address;
   }
-
 }
-

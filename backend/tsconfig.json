@@ -48,9 +48,9 @@
     },
     
     /* Types */
-    "types": ["node"],
     "skipLibCheck": true,
-    "typeRoots": ["./node_modules/@types"]
+    "typeRoots": ["./node_modules/@types"],
+    "types": []
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "tests"]

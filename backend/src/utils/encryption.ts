@@ -9,8 +9,8 @@
  * Cette fonction prépare les données pour l'insertion
  */
 export function prepareEncryptedValue(value: string): string {
-  if (!value || value.trim() === '') {
-    return '';
+  if (!value || value.trim() === "") {
+    return "";
   }
   // Le chiffrement se fait côté PostgreSQL via la fonction encrypt_sensitive_data()
   // On retourne la valeur telle quelle, PostgreSQL s'occupera du chiffrement
@@ -24,8 +24,9 @@ export function prepareEncryptedValue(value: string): string {
 export function validateSocialSecurityNumber(ssn: string): boolean {
   if (!ssn) return false;
   // Format: 15 chiffres
-  const ssnRegex = /^[12][0-9]{2}(0[1-9]|1[0-2])([0-9]{2}|2[AB])[0-9]{3}[0-9]{3}[0-9]{2}$/;
-  return ssnRegex.test(ssn.replace(/\s/g, ''));
+  const ssnRegex =
+    /^[12][0-9]{2}(0[1-9]|1[0-2])([0-9]{2}|2[AB])[0-9]{3}[0-9]{3}[0-9]{2}$/;
+  return ssnRegex.test(ssn.replace(/\s/g, ""));
 }
 
 /**
@@ -36,7 +37,7 @@ export function validateIBAN(iban: string): boolean {
   if (!iban) return false;
   // Format IBAN français: FR + 2 chiffres + 23 caractères alphanumériques
   const ibanRegex = /^FR[0-9]{2}[A-Z0-9]{23}$/;
-  const cleaned = iban.replace(/\s/g, '').toUpperCase();
+  const cleaned = iban.replace(/\s/g, "").toUpperCase();
   return ibanRegex.test(cleaned);
 }
 
@@ -48,27 +49,26 @@ export function validateBIC(bic: string): boolean {
   if (!bic) return false;
   // Format BIC: 8 ou 11 caractères alphanumériques
   const bicRegex = /^[A-Z]{4}[A-Z]{2}[A-Z0-9]{2}([A-Z0-9]{3})?$/;
-  return bicRegex.test(bic.replace(/\s/g, '').toUpperCase());
+  return bicRegex.test(bic.replace(/\s/g, "").toUpperCase());
 }
 
 /**
  * Nettoie et formate un IBAN (supprime les espaces, met en majuscules)
  */
 export function formatIBAN(iban: string): string {
-  return iban.replace(/\s/g, '').toUpperCase();
+  return iban.replace(/\s/g, "").toUpperCase();
 }
 
 /**
  * Nettoie et formate un code BIC (supprime les espaces, met en majuscules)
  */
 export function formatBIC(bic: string): string {
-  return bic.replace(/\s/g, '').toUpperCase();
+  return bic.replace(/\s/g, "").toUpperCase();
 }
 
 /**
  * Nettoie un numéro de sécurité sociale (supprime les espaces)
  */
 export function formatSocialSecurityNumber(ssn: string): string {
-  return ssn.replace(/\s/g, '');
+  return ssn.replace(/\s/g, "");
 }
-

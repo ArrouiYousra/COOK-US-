@@ -1,5 +1,5 @@
-import * as admin from 'firebase-admin';
-import dotenv from 'dotenv';
+import * as admin from "firebase-admin";
+import dotenv from "dotenv";
 
 dotenv.config();
 
@@ -10,7 +10,7 @@ function getFirebaseApp(): admin.app.App {
   if (!firebaseApp) {
     if (!process.env.FIREBASE_PROJECT_ID) {
       throw new Error(
-        'FIREBASE_PROJECT_ID is not defined in environment variables. Please add it to your .env file.'
+        "FIREBASE_PROJECT_ID is not defined in environment variables. Please add it to your .env file.",
       );
     }
 
@@ -22,19 +22,21 @@ function getFirebaseApp(): admin.app.App {
       const serviceAccount = process.env.FIREBASE_PRIVATE_KEY
         ? {
             projectId: process.env.FIREBASE_PROJECT_ID,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
             clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
           }
         : undefined;
 
       if (!serviceAccount) {
         throw new Error(
-          'FIREBASE_PRIVATE_KEY and FIREBASE_CLIENT_EMAIL must be defined. Please add them to your .env file.'
+          "FIREBASE_PRIVATE_KEY and FIREBASE_CLIENT_EMAIL must be defined. Please add them to your .env file.",
         );
       }
 
       firebaseApp = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+        credential: admin.credential.cert(
+          serviceAccount as admin.ServiceAccount,
+        ),
         projectId: process.env.FIREBASE_PROJECT_ID,
       });
     }
@@ -57,7 +59,7 @@ export class PushService {
     fcmToken: string,
     title: string,
     body: string,
-    data?: Record<string, string>
+    data?: Record<string, string>,
   ): Promise<void> {
     try {
       const app = getFirebaseApp();
@@ -71,16 +73,16 @@ export class PushService {
         },
         data: data || {},
         android: {
-          priority: 'high' as const,
+          priority: "high" as const,
           notification: {
-            sound: 'default',
-            channelId: 'default',
+            sound: "default",
+            channelId: "default",
           },
         },
         apns: {
           payload: {
             aps: {
-              sound: 'default',
+              sound: "default",
               badge: 1,
             },
           },
@@ -88,18 +90,25 @@ export class PushService {
       };
 
       const response = await messaging.send(message);
-      console.log(`Push notification sent successfully. Message ID: ${response}`);
+      console.log(
+        `Push notification sent successfully. Message ID: ${response}`,
+      );
     } catch (error) {
-      console.error('Error sending push notification:', error);
-      
+      console.error("Error sending push notification:", error);
+
       // Si le token est invalide, on ne lance pas d'erreur (l'utilisateur peut avoir désinstallé l'app)
-      if (error instanceof Error && error.message.includes('registration-token-not-registered')) {
-        console.warn('FCM token is invalid or unregistered. User may have uninstalled the app.');
+      if (
+        error instanceof Error &&
+        error.message.includes("registration-token-not-registered")
+      ) {
+        console.warn(
+          "FCM token is invalid or unregistered. User may have uninstalled the app.",
+        );
         return;
       }
-      
+
       throw new Error(
-        `Failed to send push notification: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to send push notification: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
@@ -115,7 +124,7 @@ export class PushService {
     fcmTokens: string[],
     title: string,
     body: string,
-    data?: Record<string, string>
+    data?: Record<string, string>,
   ): Promise<{ successCount: number; failureCount: number }> {
     try {
       const app = getFirebaseApp();
@@ -129,21 +138,21 @@ export class PushService {
         },
         data: data || {},
         android: {
-          priority: 'high' as const,
+          priority: "high" as const,
         },
         apns: {
           payload: {
             aps: {
-              sound: 'default',
+              sound: "default",
             },
           },
         },
       };
 
       const response = await messaging.sendEachForMulticast(message);
-      
+
       console.log(
-        `Push notifications sent: ${response.successCount} successful, ${response.failureCount} failed`
+        `Push notifications sent: ${response.successCount} successful, ${response.failureCount} failed`,
       );
 
       return {
@@ -151,9 +160,9 @@ export class PushService {
         failureCount: response.failureCount,
       };
     } catch (error) {
-      console.error('Error sending push notifications:', error);
+      console.error("Error sending push notifications:", error);
       throw new Error(
-        `Failed to send push notifications: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to send push notifications: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
   }
@@ -168,17 +177,17 @@ export class PushService {
       cookName: string;
       date: string;
       time: string;
-    }
+    },
   ): Promise<void> {
     await this.sendPushNotification(
       fcmToken,
-      '✅ Réservation confirmée',
+      "✅ Réservation confirmée",
       `Votre réservation avec ${bookingData.cookName} est confirmée pour le ${bookingData.date} à ${bookingData.time}.`,
       {
-        type: 'BOOKING_CONFIRMED',
+        type: "BOOKING_CONFIRMED",
         bookingId: bookingData.bookingId,
         actionUrl: `/dashboard/client/bookings/${bookingData.bookingId}`,
-      }
+      },
     );
   }
 
@@ -192,20 +201,21 @@ export class PushService {
       cookName: string;
       date: string;
       time: string;
-      reminderType: '24h' | '1h';
-    }
+      reminderType: "24h" | "1h";
+    },
   ): Promise<void> {
-    const reminderText = bookingData.reminderType === '24h' ? 'demain' : 'dans 1 heure';
+    const reminderText =
+      bookingData.reminderType === "24h" ? "demain" : "dans 1 heure";
     await this.sendPushNotification(
       fcmToken,
-      '⏰ Rappel de réservation',
+      "⏰ Rappel de réservation",
       `Votre réservation avec ${bookingData.cookName} est prévue ${reminderText} (${bookingData.date} à ${bookingData.time}).`,
       {
-        type: 'BOOKING_REMINDER',
+        type: "BOOKING_REMINDER",
         bookingId: bookingData.bookingId,
         reminderType: bookingData.reminderType,
         actionUrl: `/dashboard/client/bookings/${bookingData.bookingId}`,
-      }
+      },
     );
   }
 
@@ -218,17 +228,17 @@ export class PushService {
       proposalId: string;
       cookName: string;
       date: string;
-    }
+    },
   ): Promise<void> {
     await this.sendPushNotification(
       fcmToken,
-      '✨ Nouvelle proposition',
+      "✨ Nouvelle proposition",
       `${proposalData.cookName} a proposé ses services pour le ${proposalData.date}.`,
       {
-        type: 'PROPOSAL_RECEIVED',
+        type: "PROPOSAL_RECEIVED",
         proposalId: proposalData.proposalId,
         actionUrl: `/dashboard/client/proposals`,
-      }
+      },
     );
   }
 
@@ -243,4 +253,3 @@ export class PushService {
     );
   }
 }
-

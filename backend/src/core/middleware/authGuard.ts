@@ -1,5 +1,5 @@
-import { type Request, type Response, type NextFunction } from 'express';
-import { supabaseAdmin } from '@config/supabaseClient';
+import { type Request, type Response, type NextFunction } from "express";
+import { supabaseAdmin } from "@config/supabaseClient";
 
 export interface AuthRequest extends Request {
   user?: {
@@ -12,13 +12,14 @@ export interface AuthRequest extends Request {
 export const authGuard = async (
   req: AuthRequest,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<void> => {
   try {
-    const cookieToken = (req as unknown as { cookies?: Record<string, string> }).cookies?.access_token;
+    const cookieToken = (req as unknown as { cookies?: Record<string, string> })
+      .cookies?.access_token;
     const authHeader = req.headers.authorization;
 
-    const tokenFromHeader = authHeader?.startsWith('Bearer ')
+    const tokenFromHeader = authHeader?.startsWith("Bearer ")
       ? authHeader.substring(7)
       : undefined;
 
@@ -26,8 +27,8 @@ export const authGuard = async (
 
     if (!token) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Jeton d’authentification manquant',
+        error: "Unauthorized",
+        message: "Jeton d’authentification manquant",
       });
       return;
     }
@@ -40,10 +41,10 @@ export const authGuard = async (
     } = await supabaseAdmin.auth.getUser(token);
 
     if (error || !user) {
-      console.error('Auth verification error:', error);
+      console.error("Auth verification error:", error);
       res.status(401).json({
-        error: 'Unauthorized',
-        message: error?.message || 'Invalid or expired token',
+        error: "Unauthorized",
+        message: error?.message || "Invalid or expired token",
       });
       return;
     }
@@ -57,11 +58,10 @@ export const authGuard = async (
 
     next();
   } catch (error) {
-    console.error('Auth guard error:', error);
+    console.error("Auth guard error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to authenticate user',
+      error: "Internal Server Error",
+      message: "Failed to authenticate user",
     });
   }
 };
-

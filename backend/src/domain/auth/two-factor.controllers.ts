@@ -1,29 +1,32 @@
-import { type Response } from 'express';
-import { type AuthRequest } from '@core/middleware';
-import { UserStore } from '@stores/user.store';
-import { z } from 'zod';
-import * as speakeasy from 'speakeasy';
-import * as QRCode from 'qrcode';
-import { supabaseAdmin } from '@config/supabaseClient';
+import { type Response } from "express";
+import { type AuthRequest } from "@core/middleware";
+import { UserStore } from "@stores/user.store";
+import { z } from "zod";
+import * as speakeasy from "speakeasy";
+import * as QRCode from "qrcode";
+import { supabaseAdmin } from "@config/supabaseClient";
 
 const enable2FASchema = z.object({
-  password: z.string().min(1, 'Le mot de passe est requis'),
+  password: z.string().min(1, "Le mot de passe est requis"),
 });
 
 const verify2FASchema = z.object({
-  token: z.string().length(6, 'Le code doit contenir 6 chiffres'),
+  token: z.string().length(6, "Le code doit contenir 6 chiffres"),
 });
 
 /**
  * Activer l'authentification à deux facteurs
  * Génère un secret et un QR code
  */
-export const enable2FA = async (req: AuthRequest, res: Response): Promise<void> => {
+export const enable2FA = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -31,7 +34,7 @@ export const enable2FA = async (req: AuthRequest, res: Response): Promise<void> 
     const parsed = enable2FASchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
-        error: 'ValidationError',
+        error: "ValidationError",
         details: parsed.error.flatten(),
       });
       return;
@@ -41,8 +44,8 @@ export const enable2FA = async (req: AuthRequest, res: Response): Promise<void> 
     const user = await UserStore.getUserById(req.user.id);
     if (!user) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
+        error: "Not Found",
+        message: "User not found",
       });
       return;
     }
@@ -55,8 +58,8 @@ export const enable2FA = async (req: AuthRequest, res: Response): Promise<void> 
       });
     } catch (error) {
       res.status(401).json({
-        error: 'InvalidPassword',
-        message: 'Mot de passe incorrect',
+        error: "InvalidPassword",
+        message: "Mot de passe incorrect",
       });
       return;
     }
@@ -64,7 +67,7 @@ export const enable2FA = async (req: AuthRequest, res: Response): Promise<void> 
     // Générer un secret 2FA
     const secret = speakeasy.generateSecret({
       name: `Cook US (${user.email})`,
-      issuer: 'Cook US',
+      issuer: "Cook US",
     });
 
     // Stocker temporairement le secret (pas encore activé)
@@ -73,19 +76,19 @@ export const enable2FA = async (req: AuthRequest, res: Response): Promise<void> 
     });
 
     // Générer le QR code
-    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url || '');
+    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url || "");
 
     res.status(200).json({
-      message: '2FA setup initiated',
+      message: "2FA setup initiated",
       secret: secret.base32,
       qrCode: qrCodeUrl,
       manualEntryKey: secret.base32,
     });
   } catch (error) {
-    console.error('Enable 2FA error:', error);
+    console.error("Enable 2FA error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to enable 2FA',
+      error: "Internal Server Error",
+      message: "Failed to enable 2FA",
       details: error instanceof Error ? error.message : String(error),
     });
   }
@@ -94,12 +97,15 @@ export const enable2FA = async (req: AuthRequest, res: Response): Promise<void> 
 /**
  * Vérifier et activer définitivement la 2FA
  */
-export const verifyAndEnable2FA = async (req: AuthRequest, res: Response): Promise<void> => {
+export const verifyAndEnable2FA = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -107,7 +113,7 @@ export const verifyAndEnable2FA = async (req: AuthRequest, res: Response): Promi
     const parsed = verify2FASchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
-        error: 'ValidationError',
+        error: "ValidationError",
         details: parsed.error.flatten(),
       });
       return;
@@ -116,8 +122,8 @@ export const verifyAndEnable2FA = async (req: AuthRequest, res: Response): Promi
     const user = await UserStore.getUserById(req.user.id);
     if (!user || !user.two_factor_secret) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: '2FA setup not initiated. Please call /enable first.',
+        error: "Bad Request",
+        message: "2FA setup not initiated. Please call /enable first.",
       });
       return;
     }
@@ -125,15 +131,15 @@ export const verifyAndEnable2FA = async (req: AuthRequest, res: Response): Promi
     // Vérifier le token
     const verified = speakeasy.totp.verify({
       secret: user.two_factor_secret,
-      encoding: 'base32',
+      encoding: "base32",
       token: parsed.data.token,
       window: 2, // Accepte les tokens dans une fenêtre de ±2 périodes
     });
 
     if (!verified) {
       res.status(400).json({
-        error: 'InvalidToken',
-        message: 'Code de vérification invalide',
+        error: "InvalidToken",
+        message: "Code de vérification invalide",
       });
       return;
     }
@@ -144,13 +150,13 @@ export const verifyAndEnable2FA = async (req: AuthRequest, res: Response): Promi
     });
 
     res.status(200).json({
-      message: '2FA enabled successfully',
+      message: "2FA enabled successfully",
     });
   } catch (error) {
-    console.error('Verify 2FA error:', error);
+    console.error("Verify 2FA error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to verify 2FA',
+      error: "Internal Server Error",
+      message: "Failed to verify 2FA",
       details: error instanceof Error ? error.message : String(error),
     });
   }
@@ -159,12 +165,15 @@ export const verifyAndEnable2FA = async (req: AuthRequest, res: Response): Promi
 /**
  * Désactiver l'authentification à deux facteurs
  */
-export const disable2FA = async (req: AuthRequest, res: Response): Promise<void> => {
+export const disable2FA = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -172,7 +181,7 @@ export const disable2FA = async (req: AuthRequest, res: Response): Promise<void>
     const parsed = enable2FASchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
-        error: 'ValidationError',
+        error: "ValidationError",
         details: parsed.error.flatten(),
       });
       return;
@@ -182,8 +191,8 @@ export const disable2FA = async (req: AuthRequest, res: Response): Promise<void>
     const user = await UserStore.getUserById(req.user.id);
     if (!user) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
+        error: "Not Found",
+        message: "User not found",
       });
       return;
     }
@@ -195,8 +204,8 @@ export const disable2FA = async (req: AuthRequest, res: Response): Promise<void>
       });
     } catch (error) {
       res.status(401).json({
-        error: 'InvalidPassword',
-        message: 'Mot de passe incorrect',
+        error: "InvalidPassword",
+        message: "Mot de passe incorrect",
       });
       return;
     }
@@ -208,13 +217,13 @@ export const disable2FA = async (req: AuthRequest, res: Response): Promise<void>
     });
 
     res.status(200).json({
-      message: '2FA disabled successfully',
+      message: "2FA disabled successfully",
     });
   } catch (error) {
-    console.error('Disable 2FA error:', error);
+    console.error("Disable 2FA error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to disable 2FA',
+      error: "Internal Server Error",
+      message: "Failed to disable 2FA",
       details: error instanceof Error ? error.message : String(error),
     });
   }
@@ -223,12 +232,15 @@ export const disable2FA = async (req: AuthRequest, res: Response): Promise<void>
 /**
  * Vérifier un code 2FA lors de la connexion
  */
-export const verify2FAToken = async (req: AuthRequest, res: Response): Promise<void> => {
+export const verify2FAToken = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -236,7 +248,7 @@ export const verify2FAToken = async (req: AuthRequest, res: Response): Promise<v
     const parsed = verify2FASchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({
-        error: 'ValidationError',
+        error: "ValidationError",
         details: parsed.error.flatten(),
       });
       return;
@@ -245,8 +257,8 @@ export const verify2FAToken = async (req: AuthRequest, res: Response): Promise<v
     const user = await UserStore.getUserById(req.user.id);
     if (!user || !user.two_factor_enabled || !user.two_factor_secret) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: '2FA is not enabled for this account',
+        error: "Bad Request",
+        message: "2FA is not enabled for this account",
       });
       return;
     }
@@ -254,29 +266,28 @@ export const verify2FAToken = async (req: AuthRequest, res: Response): Promise<v
     // Vérifier le token
     const verified = speakeasy.totp.verify({
       secret: user.two_factor_secret,
-      encoding: 'base32',
+      encoding: "base32",
       token: parsed.data.token,
       window: 2,
     });
 
     if (!verified) {
       res.status(400).json({
-        error: 'InvalidToken',
-        message: 'Code de vérification invalide',
+        error: "InvalidToken",
+        message: "Code de vérification invalide",
       });
       return;
     }
 
     res.status(200).json({
-      message: '2FA token verified successfully',
+      message: "2FA token verified successfully",
     });
   } catch (error) {
-    console.error('Verify 2FA token error:', error);
+    console.error("Verify 2FA token error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to verify 2FA token',
+      error: "Internal Server Error",
+      message: "Failed to verify 2FA token",
       details: error instanceof Error ? error.message : String(error),
     });
   }
 };
-

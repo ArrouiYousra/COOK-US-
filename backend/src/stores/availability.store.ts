@@ -1,10 +1,10 @@
-import { supabaseAdmin } from '@config/supabaseClient';
+import { supabaseAdmin } from "@config/supabaseClient";
 import type {
   Availability,
   BlockedDate,
   CreateAvailabilityDTO,
   CreateBlockedDateDTO,
-} from '../types/database.types';
+} from "../types/database.types";
 
 export class AvailabilityStore {
   /**
@@ -12,23 +12,23 @@ export class AvailabilityStore {
    */
   static async createAvailability(
     cookProfileId: string,
-    availabilityData: CreateAvailabilityDTO
+    availabilityData: CreateAvailabilityDTO,
   ): Promise<Availability> {
     // Check if availability already exists (UNIQUE constraint)
     const existing = await this.getAvailabilityByCookDayMeal(
       cookProfileId,
       availabilityData.day_of_week,
-      availabilityData.meal_type
+      availabilityData.meal_type,
     );
 
     if (existing) {
       throw new Error(
-        'An availability already exists for this day and meal type. Update it instead.'
+        "An availability already exists for this day and meal type. Update it instead.",
       );
     }
 
     const { data, error } = await supabaseAdmin
-      .from('availabilities')
+      .from("availabilities")
       .insert({
         cook_profile_id: cookProfileId,
         day_of_week: availabilityData.day_of_week,
@@ -53,18 +53,18 @@ export class AvailabilityStore {
   static async getAvailabilityByCookDayMeal(
     cookProfileId: string,
     dayOfWeek: string,
-    mealType: string
+    mealType: string,
   ): Promise<Availability | null> {
     const { data, error } = await supabaseAdmin
-      .from('availabilities')
-      .select('*')
-      .eq('cook_profile_id', cookProfileId)
-      .eq('day_of_week', dayOfWeek)
-      .eq('meal_type', mealType)
+      .from("availabilities")
+      .select("*")
+      .eq("cook_profile_id", cookProfileId)
+      .eq("day_of_week", dayOfWeek)
+      .eq("meal_type", mealType)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get availability: ${error.message}`);
@@ -77,14 +77,14 @@ export class AvailabilityStore {
    * Get all availabilities for a cook
    */
   static async getAvailabilitiesByCook(
-    cookProfileId: string
+    cookProfileId: string,
   ): Promise<Availability[]> {
     const { data, error } = await supabaseAdmin
-      .from('availabilities')
-      .select('*')
-      .eq('cook_profile_id', cookProfileId)
-      .order('day_of_week', { ascending: true })
-      .order('meal_type', { ascending: true });
+      .from("availabilities")
+      .select("*")
+      .eq("cook_profile_id", cookProfileId)
+      .order("day_of_week", { ascending: true })
+      .order("meal_type", { ascending: true });
 
     if (error) {
       throw new Error(`Failed to get availabilities: ${error.message}`);
@@ -99,20 +99,20 @@ export class AvailabilityStore {
   static async updateAvailability(
     availabilityId: string,
     cookProfileId: string,
-    updates: Partial<CreateAvailabilityDTO> & { is_active?: boolean }
+    updates: Partial<CreateAvailabilityDTO> & { is_active?: boolean },
   ): Promise<Availability> {
     // Verify ownership
     const availability = await this.getAvailabilityById(availabilityId);
     if (!availability) {
-      throw new Error('Availability not found');
+      throw new Error("Availability not found");
     }
 
     if (availability.cook_profile_id !== cookProfileId) {
-      throw new Error('You can only update your own availabilities');
+      throw new Error("You can only update your own availabilities");
     }
 
     const { data, error } = await supabaseAdmin
-      .from('availabilities')
+      .from("availabilities")
       .update({
         day_of_week: updates.day_of_week,
         meal_type: updates.meal_type,
@@ -120,7 +120,7 @@ export class AvailabilityStore {
         end_time: updates.end_time,
         is_active: updates.is_active,
       })
-      .eq('id', availabilityId)
+      .eq("id", availabilityId)
       .select()
       .single();
 
@@ -136,22 +136,22 @@ export class AvailabilityStore {
    */
   static async deleteAvailability(
     availabilityId: string,
-    cookProfileId: string
+    cookProfileId: string,
   ): Promise<void> {
     // Verify ownership
     const availability = await this.getAvailabilityById(availabilityId);
     if (!availability) {
-      throw new Error('Availability not found');
+      throw new Error("Availability not found");
     }
 
     if (availability.cook_profile_id !== cookProfileId) {
-      throw new Error('You can only delete your own availabilities');
+      throw new Error("You can only delete your own availabilities");
     }
 
     const { error } = await supabaseAdmin
-      .from('availabilities')
+      .from("availabilities")
       .delete()
-      .eq('id', availabilityId);
+      .eq("id", availabilityId);
 
     if (error) {
       throw new Error(`Failed to delete availability: ${error.message}`);
@@ -161,15 +161,17 @@ export class AvailabilityStore {
   /**
    * Get availability by ID
    */
-  static async getAvailabilityById(availabilityId: string): Promise<Availability | null> {
+  static async getAvailabilityById(
+    availabilityId: string,
+  ): Promise<Availability | null> {
     const { data, error } = await supabaseAdmin
-      .from('availabilities')
-      .select('*')
-      .eq('id', availabilityId)
+      .from("availabilities")
+      .select("*")
+      .eq("id", availabilityId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get availability: ${error.message}`);
@@ -183,20 +185,20 @@ export class AvailabilityStore {
    */
   static async createBlockedDate(
     cookProfileId: string,
-    blockedDateData: CreateBlockedDateDTO
+    blockedDateData: CreateBlockedDateDTO,
   ): Promise<BlockedDate> {
     // Check if date is already blocked (UNIQUE constraint)
     const existing = await this.getBlockedDateByCookAndDate(
       cookProfileId,
-      blockedDateData.date
+      blockedDateData.date,
     );
 
     if (existing) {
-      throw new Error('This date is already blocked');
+      throw new Error("This date is already blocked");
     }
 
     const { data, error } = await supabaseAdmin
-      .from('blocked_dates')
+      .from("blocked_dates")
       .insert({
         cook_profile_id: cookProfileId,
         date: blockedDateData.date,
@@ -217,17 +219,17 @@ export class AvailabilityStore {
    */
   static async getBlockedDateByCookAndDate(
     cookProfileId: string,
-    date: string
+    date: string,
   ): Promise<BlockedDate | null> {
     const { data, error } = await supabaseAdmin
-      .from('blocked_dates')
-      .select('*')
-      .eq('cook_profile_id', cookProfileId)
-      .eq('date', date)
+      .from("blocked_dates")
+      .select("*")
+      .eq("cook_profile_id", cookProfileId)
+      .eq("date", date)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get blocked date: ${error.message}`);
@@ -241,20 +243,20 @@ export class AvailabilityStore {
    */
   static async getBlockedDatesByCook(
     cookProfileId: string,
-    filters?: { from_date?: string; to_date?: string }
+    filters?: { from_date?: string; to_date?: string },
   ): Promise<BlockedDate[]> {
     let query = supabaseAdmin
-      .from('blocked_dates')
-      .select('*')
-      .eq('cook_profile_id', cookProfileId)
-      .order('date', { ascending: true });
+      .from("blocked_dates")
+      .select("*")
+      .eq("cook_profile_id", cookProfileId)
+      .order("date", { ascending: true });
 
     if (filters?.from_date) {
-      query = query.gte('date', filters.from_date);
+      query = query.gte("date", filters.from_date);
     }
 
     if (filters?.to_date) {
-      query = query.lte('date', filters.to_date);
+      query = query.lte("date", filters.to_date);
     }
 
     const { data, error } = await query;
@@ -271,22 +273,22 @@ export class AvailabilityStore {
    */
   static async deleteBlockedDate(
     blockedDateId: string,
-    cookProfileId: string
+    cookProfileId: string,
   ): Promise<void> {
     // Verify ownership
     const blockedDate = await this.getBlockedDateById(blockedDateId);
     if (!blockedDate) {
-      throw new Error('Blocked date not found');
+      throw new Error("Blocked date not found");
     }
 
     if (blockedDate.cook_profile_id !== cookProfileId) {
-      throw new Error('You can only delete your own blocked dates');
+      throw new Error("You can only delete your own blocked dates");
     }
 
     const { error } = await supabaseAdmin
-      .from('blocked_dates')
+      .from("blocked_dates")
       .delete()
-      .eq('id', blockedDateId);
+      .eq("id", blockedDateId);
 
     if (error) {
       throw new Error(`Failed to delete blocked date: ${error.message}`);
@@ -296,15 +298,17 @@ export class AvailabilityStore {
   /**
    * Get blocked date by ID
    */
-  static async getBlockedDateById(blockedDateId: string): Promise<BlockedDate | null> {
+  static async getBlockedDateById(
+    blockedDateId: string,
+  ): Promise<BlockedDate | null> {
     const { data, error } = await supabaseAdmin
-      .from('blocked_dates')
-      .select('*')
-      .eq('id', blockedDateId)
+      .from("blocked_dates")
+      .select("*")
+      .eq("id", blockedDateId)
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
+      if (error.code === "PGRST116") {
         return null;
       }
       throw new Error(`Failed to get blocked date: ${error.message}`);
@@ -313,4 +317,3 @@ export class AvailabilityStore {
     return data as BlockedDate;
   }
 }
-

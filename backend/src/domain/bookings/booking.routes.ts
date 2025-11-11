@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createBooking,
   createPublicRequest,
@@ -9,8 +9,8 @@ import {
   cancelBooking,
   getMyProposals,
   getPublicRequests,
-} from './booking.controllers';
-import { authGuard } from '@core/middleware';
+} from "./booking.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -82,7 +82,7 @@ const router = Router();
  *       403:
  *         description: Forbidden (only clients can create bookings)
  */
-router.post('/', authGuard, createBooking);
+router.post("/", authGuard, createBooking);
 
 /**
  * @swagger
@@ -142,7 +142,7 @@ router.post('/', authGuard, createBooking);
  *       403:
  *         description: Forbidden (only clients can view their proposals)
  */
-router.get('/my-proposals', authGuard, getMyProposals);
+router.get("/my-proposals", authGuard, getMyProposals);
 
 /**
  * @swagger
@@ -175,7 +175,7 @@ router.get('/my-proposals', authGuard, getMyProposals);
  *       403:
  *         description: Forbidden (only cooks can view public requests)
  */
-router.get('/public', authGuard, getPublicRequests);
+router.get("/public", authGuard, getPublicRequests);
 
 /**
  * @swagger
@@ -240,7 +240,7 @@ router.get('/public', authGuard, getPublicRequests);
  *       403:
  *         description: Forbidden (only clients can create public requests)
  */
-router.post('/public', authGuard, createPublicRequest);
+router.post("/public", authGuard, createPublicRequest);
 
 /**
  * @swagger
@@ -270,7 +270,7 @@ router.post('/public', authGuard, createPublicRequest);
  *       200:
  *         description: List of bookings
  */
-router.get('/', authGuard, getBookings);
+router.get("/", authGuard, getBookings);
 
 /**
  * @swagger
@@ -294,7 +294,7 @@ router.get('/', authGuard, getBookings);
  *       404:
  *         description: Booking not found
  */
-router.get('/:id', authGuard, getBookingById);
+router.get("/:id", authGuard, getBookingById);
 
 /**
  * @swagger
@@ -318,7 +318,7 @@ router.get('/:id', authGuard, getBookingById);
  *       404:
  *         description: Booking not found
  */
-router.put('/:id/accept', authGuard, acceptBooking);
+router.put("/:id/accept", authGuard, acceptBooking);
 
 /**
  * @swagger
@@ -342,7 +342,7 @@ router.put('/:id/accept', authGuard, acceptBooking);
  *       404:
  *         description: Booking not found
  */
-router.put('/:id/reject', authGuard, rejectBooking);
+router.put("/:id/reject", authGuard, rejectBooking);
 
 /**
  * @swagger
@@ -377,7 +377,6 @@ router.put('/:id/reject', authGuard, rejectBooking);
  *       404:
  *         description: Booking not found
  */
-router.put('/:id/cancel', authGuard, cancelBooking);
+router.put("/:id/cancel", authGuard, cancelBooking);
 
 export default router;
-

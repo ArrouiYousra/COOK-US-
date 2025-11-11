@@ -1,14 +1,16 @@
-import { type Response } from 'express';
-import { type AuthRequest } from '@core/middleware';
-import { NotificationStore } from '@stores/notification.store';
-import { UserStore } from '@stores/user.store';
+import { type Response } from "express";
+import { type AuthRequest } from "@core/middleware";
+import { NotificationStore } from "@stores/notification.store";
 
-export const getMyNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getMyNotifications = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -23,7 +25,7 @@ export const getMyNotifications = async (req: AuthRequest, res: Response): Promi
     } = {};
 
     if (is_read !== undefined) {
-      filters.is_read = is_read === 'true';
+      filters.is_read = is_read === "true";
     }
 
     if (type) {
@@ -38,7 +40,10 @@ export const getMyNotifications = async (req: AuthRequest, res: Response): Promi
       filters.offset = parseInt(offset as string, 10);
     }
 
-    const result = await NotificationStore.getNotificationsByUser(req.user.id, filters);
+    const result = await NotificationStore.getNotificationsByUser(
+      req.user.id,
+      filters,
+    );
     const unreadCount = await NotificationStore.getUnreadCount(req.user.id);
 
     res.status(200).json({
@@ -49,20 +54,23 @@ export const getMyNotifications = async (req: AuthRequest, res: Response): Promi
       offset: filters.offset || 0,
     });
   } catch (error) {
-    console.error('Get notifications error:', error);
+    console.error("Get notifications error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get notifications',
+      error: "Internal Server Error",
+      message: "Failed to get notifications",
     });
   }
 };
 
-export const getNotificationById = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getNotificationById = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -70,17 +78,18 @@ export const getNotificationById = async (req: AuthRequest, res: Response): Prom
     const { notificationId } = req.params;
     if (!notificationId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Notification ID is required',
+        error: "Bad Request",
+        message: "Notification ID is required",
       });
       return;
     }
 
-    const notification = await NotificationStore.getNotificationById(notificationId);
+    const notification =
+      await NotificationStore.getNotificationById(notificationId);
     if (!notification) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Notification not found',
+        error: "Not Found",
+        message: "Notification not found",
       });
       return;
     }
@@ -88,8 +97,8 @@ export const getNotificationById = async (req: AuthRequest, res: Response): Prom
     // Verify ownership
     if (notification.user_id !== req.user.id) {
       res.status(403).json({
-        error: 'Forbidden',
-        message: 'You can only view your own notifications',
+        error: "Forbidden",
+        message: "You can only view your own notifications",
       });
       return;
     }
@@ -98,20 +107,23 @@ export const getNotificationById = async (req: AuthRequest, res: Response): Prom
       notification,
     });
   } catch (error) {
-    console.error('Get notification error:', error);
+    console.error("Get notification error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get notification',
+      error: "Internal Server Error",
+      message: "Failed to get notification",
     });
   }
 };
 
-export const markAsRead = async (req: AuthRequest, res: Response): Promise<void> => {
+export const markAsRead = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -119,43 +131,55 @@ export const markAsRead = async (req: AuthRequest, res: Response): Promise<void>
     const { notificationId } = req.params;
     if (!notificationId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Notification ID is required',
+        error: "Bad Request",
+        message: "Notification ID is required",
       });
       return;
     }
 
-    const notification = await NotificationStore.markAsRead(notificationId, req.user.id);
+    const notification = await NotificationStore.markAsRead(
+      notificationId,
+      req.user.id,
+    );
 
     res.status(200).json({
-      message: 'Notification marked as read',
+      message: "Notification marked as read",
       notification,
     });
   } catch (error) {
-    console.error('Mark as read error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to mark notification as read';
-    
-    if (errorMessage.includes('not found') || errorMessage.includes('only mark')) {
+    console.error("Mark as read error:", error);
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Failed to mark notification as read";
+
+    if (
+      errorMessage.includes("not found") ||
+      errorMessage.includes("only mark")
+    ) {
       res.status(400).json({
-        error: 'Bad Request',
+        error: "Bad Request",
         message: errorMessage,
       });
       return;
     }
 
     res.status(500).json({
-      error: 'Internal Server Error',
+      error: "Internal Server Error",
       message: errorMessage,
     });
   }
 };
 
-export const markAllAsRead = async (req: AuthRequest, res: Response): Promise<void> => {
+export const markAllAsRead = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -163,23 +187,26 @@ export const markAllAsRead = async (req: AuthRequest, res: Response): Promise<vo
     await NotificationStore.markAllAsRead(req.user.id);
 
     res.status(200).json({
-      message: 'All notifications marked as read',
+      message: "All notifications marked as read",
     });
   } catch (error) {
-    console.error('Mark all as read error:', error);
+    console.error("Mark all as read error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to mark all notifications as read',
+      error: "Internal Server Error",
+      message: "Failed to mark all notifications as read",
     });
   }
 };
 
-export const deleteNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteNotification = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -187,8 +214,8 @@ export const deleteNotification = async (req: AuthRequest, res: Response): Promi
     const { notificationId } = req.params;
     if (!notificationId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Notification ID is required',
+        error: "Bad Request",
+        message: "Notification ID is required",
       });
       return;
     }
@@ -196,33 +223,40 @@ export const deleteNotification = async (req: AuthRequest, res: Response): Promi
     await NotificationStore.deleteNotification(notificationId, req.user.id);
 
     res.status(200).json({
-      message: 'Notification deleted successfully',
+      message: "Notification deleted successfully",
     });
   } catch (error) {
-    console.error('Delete notification error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to delete notification';
-    
-    if (errorMessage.includes('not found') || errorMessage.includes('only delete')) {
+    console.error("Delete notification error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to delete notification";
+
+    if (
+      errorMessage.includes("not found") ||
+      errorMessage.includes("only delete")
+    ) {
       res.status(400).json({
-        error: 'Bad Request',
+        error: "Bad Request",
         message: errorMessage,
       });
       return;
     }
 
     res.status(500).json({
-      error: 'Internal Server Error',
+      error: "Internal Server Error",
       message: errorMessage,
     });
   }
 };
 
-export const getUnreadCount = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getUnreadCount = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -233,11 +267,10 @@ export const getUnreadCount = async (req: AuthRequest, res: Response): Promise<v
       unread_count: count,
     });
   } catch (error) {
-    console.error('Get unread count error:', error);
+    console.error("Get unread count error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get unread count',
+      error: "Internal Server Error",
+      message: "Failed to get unread count",
     });
   }
 };
-

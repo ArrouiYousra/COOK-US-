@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createReview,
   getReviewByBooking,
@@ -6,8 +6,8 @@ import {
   getMyReviews,
   updateReview,
   deleteReview,
-} from './review.controllers';
-import { authGuard } from '@core/middleware';
+} from "./review.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -46,7 +46,7 @@ const router = Router();
  *       400:
  *         description: Bad request (booking not completed, already reviewed, etc.)
  */
-router.post('/', authGuard, createReview);
+router.post("/", authGuard, createReview);
 
 /**
  * @swagger
@@ -60,7 +60,7 @@ router.post('/', authGuard, createReview);
  *       200:
  *         description: List of reviews written by user
  */
-router.get('/me', authGuard, getMyReviews);
+router.get("/me", authGuard, getMyReviews);
 
 /**
  * @swagger
@@ -82,7 +82,7 @@ router.get('/me', authGuard, getMyReviews);
  *       404:
  *         description: Review not found
  */
-router.get('/booking/:bookingId', authGuard, getReviewByBooking);
+router.get("/booking/:bookingId", authGuard, getReviewByBooking);
 
 /**
  * @swagger
@@ -102,7 +102,7 @@ router.get('/booking/:bookingId', authGuard, getReviewByBooking);
  *       200:
  *         description: List of reviews with average rating
  */
-router.get('/user/:userId', authGuard, getReviewsByUser);
+router.get("/user/:userId", authGuard, getReviewsByUser);
 
 /**
  * @swagger
@@ -136,7 +136,7 @@ router.get('/user/:userId', authGuard, getReviewsByUser);
  *       400:
  *         description: Bad request
  */
-router.put('/:reviewId', authGuard, updateReview);
+router.put("/:reviewId", authGuard, updateReview);
 
 /**
  * @swagger
@@ -158,7 +158,6 @@ router.put('/:reviewId', authGuard, updateReview);
  *       400:
  *         description: Bad request
  */
-router.delete('/:reviewId', authGuard, deleteReview);
+router.delete("/:reviewId", authGuard, deleteReview);
 
 export default router;
-

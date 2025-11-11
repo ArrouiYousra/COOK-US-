@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   register,
   registerClient,
@@ -15,9 +15,9 @@ import {
   resendVerification,
   oauthGoogle,
   oauthApple,
-} from './auth.controllers';
-import twoFactorRoutes from './two-factor.routes';
-import { authGuard } from '@core/middleware';
+} from "./auth.controllers";
+import twoFactorRoutes from "./two-factor.routes";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -73,7 +73,7 @@ const router = Router();
  *       400:
  *         description: Bad request
  */
-router.post('/register', register);
+router.post("/register", register);
 
 /**
  * @swagger
@@ -93,7 +93,7 @@ router.post('/register', register);
  *       400:
  *         description: Bad request
  */
-router.post('/register/client', registerClient);
+router.post("/register/client", registerClient);
 
 /**
  * @swagger
@@ -113,7 +113,7 @@ router.post('/register/client', registerClient);
  *       400:
  *         description: Bad request
  */
-router.post('/register/cook', registerCook);
+router.post("/register/cook", registerCook);
 
 /**
  * @swagger
@@ -156,7 +156,7 @@ router.post('/register/cook', registerCook);
  *       401:
  *         description: Authentication failed
  */
-router.post('/login', login);
+router.post("/login", login);
 
 /**
  * @swagger
@@ -202,7 +202,7 @@ router.post('/login', login);
  *       401:
  *         description: Token refresh failed - invalid or expired refresh token
  */
-router.post('/refresh', refreshToken);
+router.post("/refresh", refreshToken);
 
 /**
  * @swagger
@@ -218,7 +218,7 @@ router.post('/refresh', refreshToken);
  *       401:
  *         description: Unauthorized
  */
-router.post('/logout', authGuard, logout);
+router.post("/logout", authGuard, logout);
 
 /**
  * @swagger
@@ -234,7 +234,7 @@ router.post('/logout', authGuard, logout);
  *       401:
  *         description: Unauthorized
  */
-router.get('/me', authGuard, getCurrentUser);
+router.get("/me", authGuard, getCurrentUser);
 
 /**
  * @swagger
@@ -260,7 +260,7 @@ router.get('/me', authGuard, getCurrentUser);
  *       400:
  *         description: Bad request
  */
-router.post('/forgot-password', forgotPassword);
+router.post("/forgot-password", forgotPassword);
 
 /**
  * @swagger
@@ -286,7 +286,7 @@ router.post('/forgot-password', forgotPassword);
  *       400:
  *         description: Bad request
  */
-router.post('/resend-verification', resendVerification);
+router.post("/resend-verification", resendVerification);
 
 /**
  * @swagger
@@ -313,7 +313,7 @@ router.post('/resend-verification', resendVerification);
  *       400:
  *         description: Bad request or invalid token
  */
-router.post('/reset-password', resetPassword);
+router.post("/reset-password", resetPassword);
 
 /**
  * @swagger
@@ -347,7 +347,7 @@ router.post('/reset-password', resetPassword);
  *       400:
  *         description: Bad request
  */
-router.put('/change-password', authGuard, changePassword);
+router.put("/change-password", authGuard, changePassword);
 
 /**
  * @swagger
@@ -382,7 +382,7 @@ router.put('/change-password', authGuard, changePassword);
  *       400:
  *         description: Bad request or email already in use
  */
-router.put('/update-email', authGuard, updateEmail);
+router.put("/update-email", authGuard, updateEmail);
 
 /**
  * @swagger
@@ -413,7 +413,7 @@ router.put('/update-email', authGuard, updateEmail);
  *       400:
  *         description: Bad request
  */
-router.delete('/delete-account', authGuard, deleteAccount);
+router.delete("/delete-account", authGuard, deleteAccount);
 
 /**
  * @swagger
@@ -446,7 +446,7 @@ router.delete('/delete-account', authGuard, deleteAccount);
  *       500:
  *         description: OAuth initiation failed
  */
-router.post('/oauth/google', oauthGoogle);
+router.post("/oauth/google", oauthGoogle);
 
 /**
  * @swagger
@@ -479,10 +479,9 @@ router.post('/oauth/google', oauthGoogle);
  *       500:
  *         description: OAuth initiation failed
  */
-router.post('/oauth/apple', oauthApple);
+router.post("/oauth/apple", oauthApple);
 
 // 2FA routes
-router.use('/2fa', twoFactorRoutes);
+router.use("/2fa", twoFactorRoutes);
 
 export default router;
-

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   getMyAvailabilities,
   getCookAvailabilities,
@@ -8,8 +8,8 @@ import {
   getMyBlockedDates,
   createBlockedDate,
   deleteBlockedDate,
-} from './availability.controllers';
-import { authGuard } from '@core/middleware';
+} from "./availability.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -27,7 +27,7 @@ const router = Router();
  *       403:
  *         description: Forbidden (only cooks)
  */
-router.get('/me', authGuard, getMyAvailabilities);
+router.get("/me", authGuard, getMyAvailabilities);
 
 /**
  * @swagger
@@ -47,7 +47,7 @@ router.get('/me', authGuard, getMyAvailabilities);
  *       200:
  *         description: List of active availabilities
  */
-router.get('/cook/:cookId', authGuard, getCookAvailabilities);
+router.get("/cook/:cookId", authGuard, getCookAvailabilities);
 
 /**
  * @swagger
@@ -92,7 +92,7 @@ router.get('/cook/:cookId', authGuard, getCookAvailabilities);
  *       400:
  *         description: Bad request (already exists)
  */
-router.post('/', authGuard, createAvailability);
+router.post("/", authGuard, createAvailability);
 
 /**
  * @swagger
@@ -132,7 +132,7 @@ router.post('/', authGuard, createAvailability);
  *       200:
  *         description: Availability updated successfully
  */
-router.put('/:availabilityId', authGuard, updateAvailability);
+router.put("/:availabilityId", authGuard, updateAvailability);
 
 /**
  * @swagger
@@ -152,7 +152,7 @@ router.put('/:availabilityId', authGuard, updateAvailability);
  *       200:
  *         description: Availability deleted successfully
  */
-router.delete('/:availabilityId', authGuard, deleteAvailability);
+router.delete("/:availabilityId", authGuard, deleteAvailability);
 
 /**
  * @swagger
@@ -177,7 +177,7 @@ router.delete('/:availabilityId', authGuard, deleteAvailability);
  *       200:
  *         description: List of blocked dates
  */
-router.get('/blocked-dates/me', authGuard, getMyBlockedDates);
+router.get("/blocked-dates/me", authGuard, getMyBlockedDates);
 
 /**
  * @swagger
@@ -208,7 +208,7 @@ router.get('/blocked-dates/me', authGuard, getMyBlockedDates);
  *       400:
  *         description: Bad request (already blocked)
  */
-router.post('/blocked-dates', authGuard, createBlockedDate);
+router.post("/blocked-dates", authGuard, createBlockedDate);
 
 /**
  * @swagger
@@ -228,7 +228,6 @@ router.post('/blocked-dates', authGuard, createBlockedDate);
  *       200:
  *         description: Blocked date deleted successfully
  */
-router.delete('/blocked-dates/:blockedDateId', authGuard, deleteBlockedDate);
+router.delete("/blocked-dates/:blockedDateId", authGuard, deleteBlockedDate);
 
 export default router;
-

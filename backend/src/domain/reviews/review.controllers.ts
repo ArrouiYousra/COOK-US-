@@ -1,15 +1,18 @@
-import { type Response } from 'express';
-import { type AuthRequest } from '@core/middleware';
-import { ReviewStore } from '@stores/review.store';
-import { BookingStore } from '@stores/booking.store';
-import { UserStore } from '@stores/user.store';
+import { type Response } from "express";
+import { type AuthRequest } from "@core/middleware";
+import { ReviewStore } from "@stores/review.store";
+import { BookingStore } from "@stores/booking.store";
+import { UserStore } from "@stores/user.store";
 
-export const createReview = async (req: AuthRequest, res: Response): Promise<void> => {
+export const createReview = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -18,16 +21,16 @@ export const createReview = async (req: AuthRequest, res: Response): Promise<voi
 
     if (!booking_id || rating === undefined) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'booking_id and rating are required',
+        error: "Bad Request",
+        message: "booking_id and rating are required",
       });
       return;
     }
 
     if (rating < 0 || rating > 5) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Rating must be between 0 and 5',
+        error: "Bad Request",
+        message: "Rating must be between 0 and 5",
       });
       return;
     }
@@ -39,39 +42,43 @@ export const createReview = async (req: AuthRequest, res: Response): Promise<voi
     });
 
     res.status(201).json({
-      message: 'Review created successfully',
+      message: "Review created successfully",
       review,
     });
   } catch (error) {
-    console.error('Create review error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to create review';
-    
+    console.error("Create review error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to create review";
+
     if (
-      errorMessage.includes('not found') ||
-      errorMessage.includes('not completed') ||
-      errorMessage.includes('not a participant') ||
-      errorMessage.includes('already exists')
+      errorMessage.includes("not found") ||
+      errorMessage.includes("not completed") ||
+      errorMessage.includes("not a participant") ||
+      errorMessage.includes("already exists")
     ) {
       res.status(400).json({
-        error: 'Bad Request',
+        error: "Bad Request",
         message: errorMessage,
       });
       return;
     }
 
     res.status(500).json({
-      error: 'Internal Server Error',
+      error: "Internal Server Error",
       message: errorMessage,
     });
   }
 };
 
-export const getReviewByBooking = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getReviewByBooking = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -79,8 +86,8 @@ export const getReviewByBooking = async (req: AuthRequest, res: Response): Promi
     const { bookingId } = req.params;
     if (!bookingId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Booking ID is required',
+        error: "Bad Request",
+        message: "Booking ID is required",
       });
       return;
     }
@@ -89,8 +96,8 @@ export const getReviewByBooking = async (req: AuthRequest, res: Response): Promi
     const booking = await BookingStore.getBookingById(bookingId);
     if (!booking) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Booking not found',
+        error: "Not Found",
+        message: "Booking not found",
       });
       return;
     }
@@ -98,8 +105,8 @@ export const getReviewByBooking = async (req: AuthRequest, res: Response): Promi
     const user = await UserStore.getUserById(req.user.id);
     if (!user) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'User not found',
+        error: "Not Found",
+        message: "User not found",
       });
       return;
     }
@@ -109,8 +116,8 @@ export const getReviewByBooking = async (req: AuthRequest, res: Response): Promi
 
     if (!review) {
       res.status(404).json({
-        error: 'Not Found',
-        message: 'Review not found for this booking',
+        error: "Not Found",
+        message: "Review not found for this booking",
       });
       return;
     }
@@ -119,20 +126,23 @@ export const getReviewByBooking = async (req: AuthRequest, res: Response): Promi
       review,
     });
   } catch (error) {
-    console.error('Get review error:', error);
+    console.error("Get review error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get review',
+      error: "Internal Server Error",
+      message: "Failed to get review",
     });
   }
 };
 
-export const getReviewsByUser = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getReviewsByUser = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -140,8 +150,8 @@ export const getReviewsByUser = async (req: AuthRequest, res: Response): Promise
     const { userId } = req.params;
     if (!userId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'User ID is required',
+        error: "Bad Request",
+        message: "User ID is required",
       });
       return;
     }
@@ -164,7 +174,7 @@ export const getReviewsByUser = async (req: AuthRequest, res: Response): Promise
               }
             : null,
         };
-      })
+      }),
     );
 
     res.status(200).json({
@@ -173,25 +183,29 @@ export const getReviewsByUser = async (req: AuthRequest, res: Response): Promise
       average_rating:
         reviews.length > 0
           ? Math.round(
-              (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length) * 100
+              (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length) *
+                100,
             ) / 100
           : null,
     });
   } catch (error) {
-    console.error('Get reviews error:', error);
+    console.error("Get reviews error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get reviews',
+      error: "Internal Server Error",
+      message: "Failed to get reviews",
     });
   }
 };
 
-export const getMyReviews = async (req: AuthRequest, res: Response): Promise<void> => {
+export const getMyReviews = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -214,7 +228,7 @@ export const getMyReviews = async (req: AuthRequest, res: Response): Promise<voi
               }
             : null,
         };
-      })
+      }),
     );
 
     res.status(200).json({
@@ -222,20 +236,23 @@ export const getMyReviews = async (req: AuthRequest, res: Response): Promise<voi
       count: reviewsWithReviewees.length,
     });
   } catch (error) {
-    console.error('Get my reviews error:', error);
+    console.error("Get my reviews error:", error);
     res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get reviews',
+      error: "Internal Server Error",
+      message: "Failed to get reviews",
     });
   }
 };
 
-export const updateReview = async (req: AuthRequest, res: Response): Promise<void> => {
+export const updateReview = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -245,16 +262,16 @@ export const updateReview = async (req: AuthRequest, res: Response): Promise<voi
 
     if (!reviewId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Review ID is required',
+        error: "Bad Request",
+        message: "Review ID is required",
       });
       return;
     }
 
     if (rating !== undefined && (rating < 0 || rating > 5)) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Rating must be between 0 and 5',
+        error: "Bad Request",
+        message: "Rating must be between 0 and 5",
       });
       return;
     }
@@ -265,34 +282,41 @@ export const updateReview = async (req: AuthRequest, res: Response): Promise<voi
     });
 
     res.status(200).json({
-      message: 'Review updated successfully',
+      message: "Review updated successfully",
       review,
     });
   } catch (error) {
-    console.error('Update review error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to update review';
-    
-    if (errorMessage.includes('not found') || errorMessage.includes('only update')) {
+    console.error("Update review error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to update review";
+
+    if (
+      errorMessage.includes("not found") ||
+      errorMessage.includes("only update")
+    ) {
       res.status(400).json({
-        error: 'Bad Request',
+        error: "Bad Request",
         message: errorMessage,
       });
       return;
     }
 
     res.status(500).json({
-      error: 'Internal Server Error',
+      error: "Internal Server Error",
       message: errorMessage,
     });
   }
 };
 
-export const deleteReview = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deleteReview = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
-        error: 'Unauthorized',
-        message: 'User not authenticated',
+        error: "Unauthorized",
+        message: "User not authenticated",
       });
       return;
     }
@@ -300,8 +324,8 @@ export const deleteReview = async (req: AuthRequest, res: Response): Promise<voi
     const { reviewId } = req.params;
     if (!reviewId) {
       res.status(400).json({
-        error: 'Bad Request',
-        message: 'Review ID is required',
+        error: "Bad Request",
+        message: "Review ID is required",
       });
       return;
     }
@@ -309,24 +333,27 @@ export const deleteReview = async (req: AuthRequest, res: Response): Promise<voi
     await ReviewStore.deleteReview(reviewId, req.user.id);
 
     res.status(200).json({
-      message: 'Review deleted successfully',
+      message: "Review deleted successfully",
     });
   } catch (error) {
-    console.error('Delete review error:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to delete review';
-    
-    if (errorMessage.includes('not found') || errorMessage.includes('only delete')) {
+    console.error("Delete review error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to delete review";
+
+    if (
+      errorMessage.includes("not found") ||
+      errorMessage.includes("only delete")
+    ) {
       res.status(400).json({
-        error: 'Bad Request',
+        error: "Bad Request",
         message: errorMessage,
       });
       return;
     }
 
     res.status(500).json({
-      error: 'Internal Server Error',
+      error: "Internal Server Error",
       message: errorMessage,
     });
   }
 };
-

@@ -1,10 +1,10 @@
-import { NotificationStore } from '@stores/notification.store';
-import { UserStore } from '@stores/user.store';
-import { PushService } from './push.service';
-import { SmsService } from './sms.service';
-import { EmailService } from './email.service';
-import { supabaseAdmin } from '@config/supabaseClient';
-import type { CreateNotificationDTO } from '../../types/database.types';
+import { NotificationStore } from "@stores/notification.store";
+import { UserStore } from "@stores/user.store";
+import { PushService } from "./push.service";
+import { SmsService } from "./sms.service";
+import { EmailService } from "./email.service";
+import { supabaseAdmin } from "@config/supabaseClient";
+import type { CreateNotificationDTO } from "../../types/database.types";
 
 /**
  * Service unifié pour envoyer des notifications
@@ -14,17 +14,19 @@ export class NotificationService {
   /**
    * Récupérer les préférences de notifications détaillées d'un utilisateur
    */
-  private static async getUserNotificationPreferences(userId: string): Promise<any> {
+  private static async getUserNotificationPreferences(
+    userId: string,
+  ): Promise<any> {
     try {
       const { data } = await supabaseAdmin
-        .from('users')
-        .select('notification_preferences')
-        .eq('id', userId)
+        .from("users")
+        .select("notification_preferences")
+        .eq("id", userId)
         .single();
 
       return (data?.notification_preferences as any) || {};
     } catch (error) {
-      console.warn('Failed to get notification preferences, using defaults');
+      console.warn("Failed to get notification preferences, using defaults");
       return {};
     }
   }
@@ -34,37 +36,38 @@ export class NotificationService {
    */
   private static shouldSendNotification(
     notificationType: string,
-    channel: 'email' | 'sms' | 'push',
+    channel: "email" | "sms" | "push",
     user: any,
-    preferences: any
+    preferences: any,
   ): boolean {
     // Vérifier d'abord les préférences globales
     if (!user.notifications_enabled) return false;
 
-    if (channel === 'email' && !user.email_notifications) return false;
-    if (channel === 'sms' && (!user.sms_notifications || !user.phone)) return false;
-    if (channel === 'push' && !user.fcm_token) return false;
+    if (channel === "email" && !user.email_notifications) return false;
+    if (channel === "sms" && (!user.sms_notifications || !user.phone))
+      return false;
+    if (channel === "push" && !user.fcm_token) return false;
 
     // Mapper les types de notifications vers les clés de préférences
     const preferenceKeyMap: Record<string, string> = {
-      'BOOKING_REQUEST': 'booking_request',
-      'BOOKING_ACCEPTED': 'booking_accepted',
-      'BOOKING_CONFIRMED': 'booking_confirmed',
-      'BOOKING_CANCELLED': 'booking_cancelled',
-      'BOOKING_REMINDER': 'booking_reminder',
-      'REVIEW_RECEIVED': 'review_received',
-      'MESSAGE_RECEIVED': 'message_received',
-      'PAYMENT_RECEIVED': 'payment_received',
-      'DISPUTE_OPENED': 'dispute_opened',
-      'PROFILE_APPROVED': 'profile_approved',
-      'PROFILE_REJECTED': 'profile_rejected',
-      'RESERVATION_CREATED': 'reservation_created',
-      'RESERVATION_ACCEPTED': 'reservation_accepted',
-      'RESERVATION_REJECTED': 'reservation_rejected',
-      'RESERVATION_CANCELLED': 'reservation_cancelled',
-      'PROPOSAL_RECEIVED': 'proposal_received',
-      'PROPOSAL_ACCEPTED': 'proposal_accepted',
-      'PROPOSAL_REJECTED': 'proposal_rejected',
+      BOOKING_REQUEST: "booking_request",
+      BOOKING_ACCEPTED: "booking_accepted",
+      BOOKING_CONFIRMED: "booking_confirmed",
+      BOOKING_CANCELLED: "booking_cancelled",
+      BOOKING_REMINDER: "booking_reminder",
+      REVIEW_RECEIVED: "review_received",
+      MESSAGE_RECEIVED: "message_received",
+      PAYMENT_RECEIVED: "payment_received",
+      DISPUTE_OPENED: "dispute_opened",
+      PROFILE_APPROVED: "profile_approved",
+      PROFILE_REJECTED: "profile_rejected",
+      RESERVATION_CREATED: "reservation_created",
+      RESERVATION_ACCEPTED: "reservation_accepted",
+      RESERVATION_REJECTED: "reservation_rejected",
+      RESERVATION_CANCELLED: "reservation_cancelled",
+      PROPOSAL_RECEIVED: "proposal_received",
+      PROPOSAL_ACCEPTED: "proposal_accepted",
+      PROPOSAL_REJECTED: "proposal_rejected",
     };
 
     const preferenceKey = preferenceKeyMap[notificationType];
@@ -88,7 +91,7 @@ export class NotificationService {
    */
   static async sendNotification(
     userId: string,
-    notificationData: CreateNotificationDTO
+    notificationData: CreateNotificationDTO,
   ): Promise<void> {
     try {
       // 1. Toujours créer la notification en base de données
@@ -100,7 +103,9 @@ export class NotificationService {
       // 2. Récupérer l'utilisateur et ses préférences
       const user = await UserStore.getUserById(userId);
       if (!user) {
-        console.warn(`User ${userId} not found, notification created in DB only`);
+        console.warn(
+          `User ${userId} not found, notification created in DB only`,
+        );
         return;
       }
 
@@ -108,61 +113,76 @@ export class NotificationService {
 
       // 3. Envoyer push notification si activé
       if (
-        this.shouldSendNotification(notificationData.type, 'push', user, preferences) &&
+        this.shouldSendNotification(
+          notificationData.type,
+          "push",
+          user,
+          preferences,
+        ) &&
         PushService.isConfigured()
       ) {
         try {
           await PushService.sendPushNotification(
             user.fcm_token!,
-            notificationData.title || 'Notification',
-            notificationData.message || '',
+            notificationData.title || "Notification",
+            notificationData.message || "",
             {
               type: notificationData.type,
               notificationId: notification.id,
-              actionUrl: notificationData.action_url || '',
-            }
+              actionUrl: notificationData.action_url || "",
+            },
           );
         } catch (pushError) {
-          console.error('Failed to send push notification:', pushError);
+          console.error("Failed to send push notification:", pushError);
         }
       }
 
       // 4. Envoyer email si activé
       if (
-        this.shouldSendNotification(notificationData.type, 'email', user, preferences) &&
+        this.shouldSendNotification(
+          notificationData.type,
+          "email",
+          user,
+          preferences,
+        ) &&
         EmailService
       ) {
         try {
           await EmailService.sendEmail(
             user.email,
-            notificationData.title || 'Notification',
+            notificationData.title || "Notification",
             `
-              <h1>${notificationData.title || 'Notification'}</h1>
-              <p>${notificationData.message || ''}</p>
-              ${notificationData.action_url ? `<p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}${notificationData.action_url}">Voir les détails</a></p>` : ''}
-            `
+              <h1>${notificationData.title || "Notification"}</h1>
+              <p>${notificationData.message || ""}</p>
+              ${notificationData.action_url ? `<p><a href="${process.env.FRONTEND_URL || "http://localhost:3000"}${notificationData.action_url}">Voir les détails</a></p>` : ""}
+            `,
           );
         } catch (emailError) {
-          console.error('Failed to send email notification:', emailError);
+          console.error("Failed to send email notification:", emailError);
         }
       }
 
       // 5. Envoyer SMS si activé
       if (
-        this.shouldSendNotification(notificationData.type, 'sms', user, preferences) &&
+        this.shouldSendNotification(
+          notificationData.type,
+          "sms",
+          user,
+          preferences,
+        ) &&
         SmsService.isConfigured()
       ) {
         try {
           await SmsService.sendSms(
             user.phone!,
-            `${notificationData.title || 'Notification'}: ${notificationData.message || ''}`
+            `${notificationData.title || "Notification"}: ${notificationData.message || ""}`,
           );
         } catch (smsError) {
-          console.error('Failed to send SMS notification:', smsError);
+          console.error("Failed to send SMS notification:", smsError);
         }
       }
     } catch (error) {
-      console.error('Error sending notification:', error);
+      console.error("Error sending notification:", error);
       // Lancer l'erreur seulement si la création en DB échoue
       throw error;
     }
@@ -181,7 +201,7 @@ export class NotificationService {
       numberOfGuests: number;
       totalPrice: number;
       address: string;
-    }
+    },
   ): Promise<void> {
     const user = await UserStore.getUserById(userId);
     if (!user) return;
@@ -189,8 +209,8 @@ export class NotificationService {
     // Notification en base
     await this.sendNotification(userId, {
       user_id: userId,
-      type: 'BOOKING_CONFIRMED',
-      title: 'Réservation confirmée',
+      type: "BOOKING_CONFIRMED",
+      title: "Réservation confirmée",
       message: `Votre réservation avec ${bookingData.cookName} est confirmée pour le ${bookingData.date} à ${bookingData.time}.`,
       action_url: `/dashboard/client/bookings/${bookingData.bookingId}`,
       metadata: {
@@ -209,16 +229,19 @@ export class NotificationService {
           time: bookingData.time,
         });
       } catch (error) {
-        console.error('Failed to send booking confirmation push:', error);
+        console.error("Failed to send booking confirmation push:", error);
       }
     }
 
     // Email spécialisé
     if (user.email_notifications) {
       try {
-        await EmailService.sendBookingConfirmationEmail(user.email, bookingData);
+        await EmailService.sendBookingConfirmationEmail(
+          user.email,
+          bookingData,
+        );
       } catch (error) {
-        console.error('Failed to send booking confirmation email:', error);
+        console.error("Failed to send booking confirmation email:", error);
       }
     }
 
@@ -232,7 +255,7 @@ export class NotificationService {
           time: bookingData.time,
         });
       } catch (error) {
-        console.error('Failed to send booking confirmation SMS:', error);
+        console.error("Failed to send booking confirmation SMS:", error);
       }
     }
   }
@@ -246,12 +269,12 @@ export class NotificationService {
       bookingId: string;
       amount: number;
       date: string;
-    }
+    },
   ): Promise<void> {
     await this.sendNotification(userId, {
       user_id: userId,
-      type: 'PAYMENT_RECEIVED',
-      title: 'Paiement confirmé',
+      type: "PAYMENT_RECEIVED",
+      title: "Paiement confirmé",
       message: `Votre paiement de ${paymentData.amount.toFixed(2)}€ pour la réservation du ${paymentData.date} a été confirmé.`,
       action_url: `/dashboard/client/bookings/${paymentData.bookingId}`,
       metadata: {
@@ -272,15 +295,15 @@ export class NotificationService {
       date: string;
       time: string;
       price: number;
-    }
+    },
   ): Promise<void> {
     const user = await UserStore.getUserById(userId);
     if (!user) return;
 
     await this.sendNotification(userId, {
       user_id: userId,
-      type: 'PROPOSAL_RECEIVED',
-      title: 'Nouvelle proposition reçue',
+      type: "PROPOSAL_RECEIVED",
+      title: "Nouvelle proposition reçue",
       message: `${proposalData.cookName} a proposé ses services pour le ${proposalData.date} à ${proposalData.time}.`,
       action_url: `/dashboard/client/requests/${proposalData.proposalId}/proposals`,
       metadata: {
@@ -291,7 +314,14 @@ export class NotificationService {
 
     // Email spécialisé
     const preferences = await this.getUserNotificationPreferences(userId);
-    if (this.shouldSendNotification('PROPOSAL_RECEIVED', 'email', user, preferences)) {
+    if (
+      this.shouldSendNotification(
+        "PROPOSAL_RECEIVED",
+        "email",
+        user,
+        preferences,
+      )
+    ) {
       try {
         await EmailService.sendProposalReceivedEmail(user.email, {
           proposalId: proposalData.proposalId,
@@ -301,12 +331,14 @@ export class NotificationService {
           price: proposalData.price,
         });
       } catch (error) {
-        console.error('Failed to send proposal received email:', error);
+        console.error("Failed to send proposal received email:", error);
       }
     }
 
     // SMS spécialisé
-    if (this.shouldSendNotification('PROPOSAL_RECEIVED', 'sms', user, preferences)) {
+    if (
+      this.shouldSendNotification("PROPOSAL_RECEIVED", "sms", user, preferences)
+    ) {
       try {
         await SmsService.sendProposalReceivedSms(user.phone!, {
           proposalId: proposalData.proposalId,
@@ -314,7 +346,7 @@ export class NotificationService {
           date: proposalData.date,
         });
       } catch (error) {
-        console.error('Failed to send proposal received SMS:', error);
+        console.error("Failed to send proposal received SMS:", error);
       }
     }
   }
@@ -332,12 +364,12 @@ export class NotificationService {
       clientName: string;
       date: string;
       proposedPrice: number;
-    }
+    },
   ): Promise<void> {
     await this.sendNotification(cookUserId, {
       user_id: cookUserId,
-      type: 'RESERVATION_CREATED',
-      title: 'Proposition envoyée',
+      type: "RESERVATION_CREATED",
+      title: "Proposition envoyée",
       message: `Votre proposition pour la demande du ${reservationData.date} a été envoyée avec succès.`,
       action_url: `/dashboard/cook/reservations`,
       metadata: {
@@ -360,15 +392,15 @@ export class NotificationService {
       date: string;
       proposedPrice: number;
       depositAmount: number;
-    }
+    },
   ): Promise<void> {
     const user = await UserStore.getUserById(cookUserId);
     if (!user) return;
 
     await this.sendNotification(cookUserId, {
       user_id: cookUserId,
-      type: 'RESERVATION_ACCEPTED',
-      title: '🎉 Proposition acceptée !',
+      type: "RESERVATION_ACCEPTED",
+      title: "🎉 Proposition acceptée !",
       message: `${reservationData.clientName} a accepté votre proposition pour le ${reservationData.date}.`,
       action_url: `/dashboard/cook/bookings/${reservationData.bookingId}`,
       metadata: {
@@ -381,33 +413,47 @@ export class NotificationService {
 
     // Email spécialisé
     const preferences = await this.getUserNotificationPreferences(cookUserId);
-    if (this.shouldSendNotification('RESERVATION_ACCEPTED', 'email', user, preferences)) {
+    if (
+      this.shouldSendNotification(
+        "RESERVATION_ACCEPTED",
+        "email",
+        user,
+        preferences,
+      )
+    ) {
       try {
         await EmailService.sendEmail(
           user.email,
-          '🎉 Votre proposition a été acceptée !',
+          "🎉 Votre proposition a été acceptée !",
           `
             <h1>Félicitations !</h1>
             <p>Votre proposition pour le ${reservationData.date} a été acceptée par ${reservationData.clientName}.</p>
             <p><strong>Prix total :</strong> ${reservationData.proposedPrice.toFixed(2)}€</p>
             <p><strong>Acompte à recevoir :</strong> ${reservationData.depositAmount.toFixed(2)}€ (30%)</p>
-            <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard/cook/bookings/${reservationData.bookingId}">Voir les détails</a></p>
-          `
+            <p><a href="${process.env.FRONTEND_URL || "http://localhost:3000"}/dashboard/cook/bookings/${reservationData.bookingId}">Voir les détails</a></p>
+          `,
         );
       } catch (error) {
-        console.error('Failed to send reservation accepted email:', error);
+        console.error("Failed to send reservation accepted email:", error);
       }
     }
 
     // SMS spécialisé
-    if (this.shouldSendNotification('RESERVATION_ACCEPTED', 'sms', user, preferences)) {
+    if (
+      this.shouldSendNotification(
+        "RESERVATION_ACCEPTED",
+        "sms",
+        user,
+        preferences,
+      )
+    ) {
       try {
         await SmsService.sendSms(
           user.phone!,
-          `🎉 Votre proposition pour le ${reservationData.date} a été acceptée par ${reservationData.clientName} ! Prix: ${reservationData.proposedPrice.toFixed(2)}€`
+          `🎉 Votre proposition pour le ${reservationData.date} a été acceptée par ${reservationData.clientName} ! Prix: ${reservationData.proposedPrice.toFixed(2)}€`,
         );
       } catch (error) {
-        console.error('Failed to send reservation accepted SMS:', error);
+        console.error("Failed to send reservation accepted SMS:", error);
       }
     }
   }
@@ -423,13 +469,13 @@ export class NotificationService {
       clientName: string;
       date: string;
       rejectionReason?: string;
-    }
+    },
   ): Promise<void> {
     await this.sendNotification(cookUserId, {
       user_id: cookUserId,
-      type: 'RESERVATION_REJECTED',
-      title: 'Proposition refusée',
-      message: `${reservationData.clientName} a refusé votre proposition pour le ${reservationData.date}.${reservationData.rejectionReason ? ` Raison : ${reservationData.rejectionReason}` : ''}`,
+      type: "RESERVATION_REJECTED",
+      title: "Proposition refusée",
+      message: `${reservationData.clientName} a refusé votre proposition pour le ${reservationData.date}.${reservationData.rejectionReason ? ` Raison : ${reservationData.rejectionReason}` : ""}`,
       action_url: `/dashboard/cook/reservations`,
       metadata: {
         reservation_id: reservationData.reservationId,
@@ -451,13 +497,13 @@ export class NotificationService {
       cookName: string;
       date: string;
       cancellationReason?: string;
-    }
+    },
   ): Promise<void> {
     await this.sendNotification(clientUserId, {
       user_id: clientUserId,
-      type: 'RESERVATION_CANCELLED',
-      title: 'Proposition annulée',
-      message: `${reservationData.cookName} a annulé sa proposition pour le ${reservationData.date}.${reservationData.cancellationReason ? ` Raison : ${reservationData.cancellationReason}` : ''}`,
+      type: "RESERVATION_CANCELLED",
+      title: "Proposition annulée",
+      message: `${reservationData.cookName} a annulé sa proposition pour le ${reservationData.date}.${reservationData.cancellationReason ? ` Raison : ${reservationData.cancellationReason}` : ""}`,
       action_url: `/dashboard/client/requests/${reservationData.bookingId}/proposals`,
       metadata: {
         reservation_id: reservationData.reservationId,
@@ -480,15 +526,15 @@ export class NotificationService {
       date: string;
       proposedPrice: number;
       depositAmount: number;
-    }
+    },
   ): Promise<void> {
     const user = await UserStore.getUserById(clientUserId);
     if (!user) return;
 
     await this.sendNotification(clientUserId, {
       user_id: clientUserId,
-      type: 'PROPOSAL_ACCEPTED',
-      title: '🎉 Proposition acceptée !',
+      type: "PROPOSAL_ACCEPTED",
+      title: "🎉 Proposition acceptée !",
       message: `Vous avez accepté la proposition de ${proposalData.cookName} pour le ${proposalData.date}.`,
       action_url: `/dashboard/client/bookings/${proposalData.bookingId}`,
       metadata: {
@@ -501,33 +547,42 @@ export class NotificationService {
 
     // Email spécialisé
     const preferences = await this.getUserNotificationPreferences(clientUserId);
-    if (this.shouldSendNotification('PROPOSAL_ACCEPTED', 'email', user, preferences)) {
+    if (
+      this.shouldSendNotification(
+        "PROPOSAL_ACCEPTED",
+        "email",
+        user,
+        preferences,
+      )
+    ) {
       try {
         await EmailService.sendEmail(
           user.email,
-          '🎉 Proposition acceptée !',
+          "🎉 Proposition acceptée !",
           `
             <h1>Félicitations !</h1>
             <p>Vous avez accepté la proposition de ${proposalData.cookName} pour le ${proposalData.date}.</p>
             <p><strong>Prix total :</strong> ${proposalData.proposedPrice.toFixed(2)}€</p>
             <p><strong>Acompte à payer :</strong> ${proposalData.depositAmount.toFixed(2)}€ (30% non remboursable)</p>
-            <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard/client/bookings/${proposalData.bookingId}">Procéder au paiement</a></p>
-          `
+            <p><a href="${process.env.FRONTEND_URL || "http://localhost:3000"}/dashboard/client/bookings/${proposalData.bookingId}">Procéder au paiement</a></p>
+          `,
         );
       } catch (error) {
-        console.error('Failed to send proposal accepted email:', error);
+        console.error("Failed to send proposal accepted email:", error);
       }
     }
 
     // SMS spécialisé
-    if (this.shouldSendNotification('PROPOSAL_ACCEPTED', 'sms', user, preferences)) {
+    if (
+      this.shouldSendNotification("PROPOSAL_ACCEPTED", "sms", user, preferences)
+    ) {
       try {
         await SmsService.sendSms(
           user.phone!,
-          `🎉 Vous avez accepté la proposition de ${proposalData.cookName} pour le ${proposalData.date}. Acompte: ${proposalData.depositAmount.toFixed(2)}€`
+          `🎉 Vous avez accepté la proposition de ${proposalData.cookName} pour le ${proposalData.date}. Acompte: ${proposalData.depositAmount.toFixed(2)}€`,
         );
       } catch (error) {
-        console.error('Failed to send proposal accepted SMS:', error);
+        console.error("Failed to send proposal accepted SMS:", error);
       }
     }
   }
@@ -543,13 +598,13 @@ export class NotificationService {
       clientName: string;
       date: string;
       rejectionReason?: string;
-    }
+    },
   ): Promise<void> {
     await this.sendNotification(cookUserId, {
       user_id: cookUserId,
-      type: 'PROPOSAL_REJECTED',
-      title: 'Proposition refusée',
-      message: `${proposalData.clientName} a refusé votre proposition pour le ${proposalData.date}.${proposalData.rejectionReason ? ` Raison : ${proposalData.rejectionReason}` : ''}`,
+      type: "PROPOSAL_REJECTED",
+      title: "Proposition refusée",
+      message: `${proposalData.clientName} a refusé votre proposition pour le ${proposalData.date}.${proposalData.rejectionReason ? ` Raison : ${proposalData.rejectionReason}` : ""}`,
       action_url: `/dashboard/cook/reservations`,
       metadata: {
         reservation_id: proposalData.reservationId,

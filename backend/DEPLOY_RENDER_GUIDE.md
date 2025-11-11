@@ -110,7 +110,8 @@ Render doit savoir que votre code est dans le dossier `backend/`, pas à la raci
 → Vérifiez que toutes les variables d'environnement sont bien ajoutées
 
 ### ❌ Erreur de build
-→ Testez localement : `npm run build`
+→ Testez localement : `npm run prebuild` (vérifie lint + types avant le build)
+→ Ou séparément : `npm run type-check` et `npm run lint`
 → Vérifiez que TypeScript compile sans erreur
 
 ---
@@ -135,6 +136,38 @@ Votre backend est maintenant en ligne !
 **URL de votre API** : `https://votre-service.onrender.com`
 
 Utilisez cette URL dans votre frontend pour les appels API.
+
+---
+
+## 🔍 Scripts de Vérification (Avant Déploiement)
+
+Avant de déployer, utilisez ces commandes pour vérifier votre code :
+
+### ✅ Vérifier toutes les erreurs TypeScript
+```bash
+npm run type-check
+```
+Affiche toutes les erreurs TypeScript sans compiler (commande magique : `tsc --noEmit`).
+
+### ✅ Vérifier toutes les erreurs ESLint
+```bash
+npm run lint
+```
+Affiche toutes les erreurs de qualité de code (imports manquants, variables non utilisées, etc.).
+
+### ✅ Corriger automatiquement les erreurs ESLint
+```bash
+npm run lint:fix
+```
+Corrige automatiquement les erreurs ESLint qui peuvent l'être.
+
+### ✅ Vérification complète avant build
+```bash
+npm run prebuild
+```
+Exécute `lint` puis `type-check` - vous voyez toutes les erreurs avant même de tenter la compilation. **C'est la commande que tous les seniors utilisent avant un déploiement !** 🚀
+
+💡 **Astuce** : Le script `prebuild` s'exécute automatiquement avant `npm run build` grâce au hook npm `prebuild`.
 
 ---
 

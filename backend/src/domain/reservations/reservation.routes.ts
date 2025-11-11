@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router } from "express";
 import {
   createReservation,
   getReservationsByBookingId,
@@ -7,8 +7,8 @@ import {
   rejectReservation,
   cancelReservation,
   getReservationById,
-} from './reservation.controllers';
-import { authGuard } from '@core/middleware';
+} from "./reservation.controllers";
+import { authGuard } from "@core/middleware";
 
 const router = Router();
 
@@ -54,7 +54,7 @@ const router = Router();
  *       403:
  *         description: Forbidden (only cooks can create reservations)
  */
-router.post('/', authGuard, createReservation);
+router.post("/", authGuard, createReservation);
 
 /**
  * @swagger
@@ -78,7 +78,7 @@ router.post('/', authGuard, createReservation);
  *       200:
  *         description: List of reservations with stats
  */
-router.get('/booking/:bookingId', authGuard, getReservationsByBookingId);
+router.get("/booking/:bookingId", authGuard, getReservationsByBookingId);
 
 /**
  * @swagger
@@ -98,7 +98,7 @@ router.get('/booking/:bookingId', authGuard, getReservationsByBookingId);
  *       200:
  *         description: List of my reservations
  */
-router.get('/my-proposals', authGuard, getMyReservations);
+router.get("/my-proposals", authGuard, getMyReservations);
 
 /**
  * @swagger
@@ -120,7 +120,7 @@ router.get('/my-proposals', authGuard, getMyReservations);
  *       404:
  *         description: Reservation not found
  */
-router.get('/:reservationId', authGuard, getReservationById);
+router.get("/:reservationId", authGuard, getReservationById);
 
 /**
  * @swagger
@@ -144,7 +144,7 @@ router.get('/:reservationId', authGuard, getReservationById);
  *       403:
  *         description: Forbidden (only clients can accept reservations)
  */
-router.put('/:reservationId/accept', authGuard, acceptReservation);
+router.put("/:reservationId/accept", authGuard, acceptReservation);
 
 /**
  * @swagger
@@ -176,7 +176,7 @@ router.put('/:reservationId/accept', authGuard, acceptReservation);
  *       403:
  *         description: Forbidden (only clients can reject reservations)
  */
-router.put('/:reservationId/reject', authGuard, rejectReservation);
+router.put("/:reservationId/reject", authGuard, rejectReservation);
 
 /**
  * @swagger
@@ -208,6 +208,6 @@ router.put('/:reservationId/reject', authGuard, rejectReservation);
  *       403:
  *         description: Forbidden (only cooks can cancel their reservations)
  */
-router.put('/:reservationId/cancel', authGuard, cancelReservation);
+router.put("/:reservationId/cancel", authGuard, cancelReservation);
 
 export default router;
