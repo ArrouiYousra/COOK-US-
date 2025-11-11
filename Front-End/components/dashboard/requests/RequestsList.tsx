@@ -216,6 +216,18 @@ export function RequestsList({ status }: RequestsListProps) {
         const title = lines[0] || (booking as any).title || "Demande de repas";
         const description = lines.slice(1).join("\n\n") || (booking as any).description || "Aucune description";
         
+        // Construire l'adresse complète depuis l'objet address enrichi
+        let fullAddress = "Adresse non spécifiée";
+        if ((booking as any).address) {
+          const addr = (booking as any).address;
+          fullAddress = `${addr.street_number || ""} ${addr.street || ""}, ${addr.postal_code || ""} ${addr.city || ""}`.trim();
+          if (!fullAddress || fullAddress === ",") {
+            fullAddress = addr.label || "Adresse non spécifiée";
+          }
+        } else if ((booking as any).location?.address) {
+          fullAddress = (booking as any).location.address;
+        }
+        
         return {
           id: booking.id,
           title,
@@ -224,7 +236,8 @@ export function RequestsList({ status }: RequestsListProps) {
           timeSlot,
           guestCount: booking.numberOfGuests || booking.number_of_guests,
           budget: booking.totalPrice || booking.total_price || booking.budget || 0,
-          address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+          address: fullAddress,
+          addressData: (booking as any).address, // Conserver l'objet address complet pour la carte
           status: "pending",
           proposalCount,
         };
@@ -257,6 +270,18 @@ export function RequestsList({ status }: RequestsListProps) {
           ? `${booking.start_time} - ${booking.end_time}`
           : "Non spécifié";
         
+        // Construire l'adresse complète depuis l'objet address enrichi
+        let fullAddress = "Adresse non spécifiée";
+        if ((booking as any).address) {
+          const addr = (booking as any).address;
+          fullAddress = `${addr.street_number || ""} ${addr.street || ""}, ${addr.postal_code || ""} ${addr.city || ""}`.trim();
+          if (!fullAddress || fullAddress === ",") {
+            fullAddress = addr.label || "Adresse non spécifiée";
+          }
+        } else if ((booking as any).location?.address) {
+          fullAddress = (booking as any).location.address;
+        }
+        
         return {
           id: booking.id,
           title: (booking as any).title || booking.specialRequests || "Repas confirmé",
@@ -265,7 +290,8 @@ export function RequestsList({ status }: RequestsListProps) {
           timeSlot,
           guestCount: booking.numberOfGuests || booking.number_of_guests,
           budget: booking.totalPrice || booking.total_price || booking.budget || 0,
-          address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+          address: fullAddress,
+          addressData: (booking as any).address, // Conserver l'objet address complet pour la carte
           status: "confirmed",
           cookName,
           cookRating,
@@ -293,6 +319,18 @@ export function RequestsList({ status }: RequestsListProps) {
           ? `${booking.start_time} - ${booking.end_time}`
           : "Non spécifié";
         
+        // Construire l'adresse complète depuis l'objet address enrichi
+        let fullAddress = "Adresse non spécifiée";
+        if ((booking as any).address) {
+          const addr = (booking as any).address;
+          fullAddress = `${addr.street_number || ""} ${addr.street || ""}, ${addr.postal_code || ""} ${addr.city || ""}`.trim();
+          if (!fullAddress || fullAddress === ",") {
+            fullAddress = addr.label || "Adresse non spécifiée";
+          }
+        } else if ((booking as any).location?.address) {
+          fullAddress = (booking as any).location.address;
+        }
+        
         return {
           id: booking.id,
           title: (booking as any).title || booking.specialRequests || "Repas terminé",
@@ -301,7 +339,8 @@ export function RequestsList({ status }: RequestsListProps) {
           timeSlot,
           guestCount: booking.numberOfGuests || booking.number_of_guests,
           budget: booking.totalPrice || booking.total_price || booking.budget || 0,
-          address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+          address: fullAddress,
+          addressData: (booking as any).address, // Conserver l'objet address complet pour la carte
           status: "completed",
           cookName,
           cookRating,
@@ -324,18 +363,25 @@ export function RequestsList({ status }: RequestsListProps) {
     }
     return requests
       .filter((req) => {
-        const address = req.address || (req as any).location?.address;
-        const location = (req as any).address?.location || (req as any).location?.location;
-        return address && location;
+        // Vérifier si l'adresse a des coordonnées (depuis addressData.location PostGIS)
+        const addressData = (req as any).addressData;
+        if (addressData?.location) {
+          return true;
+        }
+        return false;
       })
       .map((request) => {
-        const location = (request as any).address?.location || (request as any).location?.location;
-        const locationObj = location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
-        if (!locationObj) return null;
+        // Récupérer les coordonnées depuis addressData.location (PostGIS POINT)
+        const addressData = (request as any).addressData;
+        if (!addressData?.location) return null;
 
-        const lat = locationObj.lat ?? locationObj.latitude;
-        const lng = locationObj.lng ?? locationObj.longitude;
-        if (!lat || !lng) return null;
+        // PostGIS retourne location comme { lat, lng } ou { latitude, longitude }
+        const location = addressData.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
+        if (!location) return null;
+
+        const lat = location.lat ?? location.latitude;
+        const lng = location.lng ?? location.longitude;
+        if (!lat || !lng || lat === 0 || lng === 0) return null;
 
         const statusLower = (request.status || "").toLowerCase();
         let color = "#3b82f6"; // Bleu par défaut

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, XCircle, Map, List, Navigation, Filter, ArrowUpDown, TrendingUp, Star, MessageSquare } from "lucide-react";
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, XCircle, Map, List, Navigation, Filter, ArrowUpDown, TrendingUp, Star, MessageSquare, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReservationsList } from "@/components/dashboard/reservations/ReservationsList";
 import { apiClient } from "@/lib/api/client";
@@ -52,6 +52,7 @@ export default function RequestProposalsPage() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [distances, setDistances] = useState<Record<string, { distance: number; distance_km: string; duration_minutes: number }>>({});
   const [bookingAddress, setBookingAddress] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedReservationForRoute, setSelectedReservationForRoute] = useState<string | null>(null); // ID de la réservation sélectionnée pour afficher l'itinéraire
 
   // NE PAS AFFICHER LE CONTENU SI L'UTILISATEUR N'EST PAS AUTHENTIFIÉ
   // Le useAuthGuard redirige automatiquement vers /auth/login si non authentifié
@@ -402,62 +403,102 @@ export default function RequestProposalsPage() {
       {/* Vue Carte ou Liste */}
       {viewMode === "map" ? (
         bookingAddress ? (
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg" style={{ height: "600px" }}>
-            <MapboxMap
-            center={[bookingAddress.lat, bookingAddress.lng]}
-            zoom={11}
-            markers={[
-              {
-                id: "booking-address",
-                lat: bookingAddress.lat,
-                lng: bookingAddress.lng,
-                title: "Votre adresse",
-                description: booking?.address?.address || "Adresse de la demande",
-                color: "#3b82f6",
-              },
-              ...sortedReservations
-                .filter(r => {
-                  const cookLoc = (r.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
-                  return !!cookLoc;
-                })
-                .map((reservation) => {
-                  const cookLocation = (reservation.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
-                  if (!cookLocation) return null;
-                  
-                  const cookLat = cookLocation.lat ?? cookLocation.latitude;
-                  const cookLng = cookLocation.lng ?? cookLocation.longitude;
-                  if (!cookLat || !cookLng) return null;
-                  
-                  const distance = distances[reservation.id];
-                  
-                  return {
-                    id: reservation.id,
-                    lat: cookLat,
-                    lng: cookLng,
-                    title: `${reservation.cook?.user?.first_name || "Cuisinier"} ${reservation.cook?.user?.last_name || ""}`,
-                    description: `${reservation.proposed_price.toFixed(2)}€${distance ? ` • ${distance.distance_km}` : ""}`,
-                    color: reservation.status === "PENDING" ? "#10b981" : "#6b7280",
-                  };
-                })
-                .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
-            ]}
-            route={(() => {
-              const firstReservation = sortedReservations[0];
-              if (!firstReservation?.cook) return undefined;
-              const cookLoc = (firstReservation.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
-              if (!cookLoc) return undefined;
-              const cookLat = cookLoc.lat ?? cookLoc.latitude;
-              const cookLng = cookLoc.lng ?? cookLoc.longitude;
-              if (!cookLat || !cookLng) return undefined;
-              return {
-                origin: [bookingAddress.lat, bookingAddress.lng] as [number, number],
-                destination: [cookLat, cookLng] as [number, number],
-                color: "#10b981",
-              };
+          <div className="space-y-4">
+            {/* Contrôles de la carte */}
+            {selectedReservationForRoute && (() => {
+              const reservation = sortedReservations.find(r => r.id === selectedReservationForRoute);
+              if (!reservation) return null;
+              const distance = distances[reservation.id];
+              return (
+                <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Navigation className="w-5 h-5 text-green-600 dark:text-green-400" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        Itinéraire vers : {reservation.cook?.user?.first_name} {reservation.cook?.user?.last_name}
+                      </p>
+                      {distance && (
+                        <p className="text-xs text-muted-foreground">
+                          {distance.distance_km} • {distance.duration_minutes} min
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedReservationForRoute(null)}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              );
             })()}
-              height="100%"
-              interactive={true}
-            />
+            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg" style={{ height: "600px" }}>
+              <MapboxMap
+                center={[bookingAddress.lat, bookingAddress.lng]}
+                zoom={11}
+                markers={[
+                  {
+                    id: "booking-address",
+                    lat: bookingAddress.lat,
+                    lng: bookingAddress.lng,
+                    title: "Votre adresse",
+                    description: booking?.address?.address || "Adresse de la demande",
+                    color: "#3b82f6",
+                  },
+                  ...sortedReservations
+                    .filter(r => {
+                      const cookLoc = (r.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
+                      return !!cookLoc;
+                    })
+                    .map((reservation) => {
+                      const cookLocation = (reservation.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
+                      if (!cookLocation) return null;
+                      
+                      const cookLat = cookLocation.lat ?? cookLocation.latitude;
+                      const cookLng = cookLocation.lng ?? cookLocation.longitude;
+                      if (!cookLat || !cookLng) return null;
+                      
+                      const distance = distances[reservation.id];
+                      
+                      return {
+                        id: reservation.id,
+                        lat: cookLat,
+                        lng: cookLng,
+                        title: `${reservation.cook?.user?.first_name || "Cuisinier"} ${reservation.cook?.user?.last_name || ""}`,
+                        description: `${reservation.proposed_price.toFixed(2)}€${distance ? ` • ${distance.distance_km} • ${distance.duration_minutes} min` : ""}`,
+                        color: reservation.status === "PENDING" ? "#10b981" : "#6b7280",
+                        distance: distance?.distance_km,
+                        duration: distance?.duration_minutes,
+                      };
+                    })
+                    .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
+                ]}
+                route={(() => {
+                  if (!selectedReservationForRoute) return undefined;
+                  const reservation = sortedReservations.find(r => r.id === selectedReservationForRoute);
+                  if (!reservation?.cook) return undefined;
+                  const cookLoc = (reservation.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
+                  if (!cookLoc) return undefined;
+                  const cookLat = cookLoc.lat ?? cookLoc.latitude;
+                  const cookLng = cookLoc.lng ?? cookLoc.longitude;
+                  if (!cookLat || !cookLng) return undefined;
+                  return {
+                    origin: [bookingAddress.lat, bookingAddress.lng] as [number, number],
+                    destination: [cookLat, cookLng] as [number, number],
+                    color: "#10b981",
+                  };
+                })()}
+                onMarkerClick={(marker) => {
+                  if (marker.id === "booking-address") return;
+                  // Sélectionner la réservation pour afficher l'itinéraire
+                  setSelectedReservationForRoute(marker.id);
+                }}
+                height="100%"
+                interactive={true}
+              />
+            </div>
           </div>
         ) : (
           <div className="bg-card border border-border rounded-xl p-8 text-center">

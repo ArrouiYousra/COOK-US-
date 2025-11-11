@@ -1701,6 +1701,43 @@ class ApiClient {
     return response.data;
   }
 
+  // ========== ADDRESSES ==========
+
+  /**
+   * Récupérer mes adresses (client)
+   */
+  async getMyAddresses(): Promise<{ addresses: any[]; count: number }> {
+    const response = await this.client.get<{ addresses: any[]; count: number }>("/addresses/me");
+    return response.data;
+  }
+
+  /**
+   * Créer une adresse pour le client
+   * @param data - Données de l'adresse
+   */
+  async createAddress(data: {
+    type?: "HOME" | "VACATION_RENTAL" | "WORK" | "OTHER";
+    label?: string;
+    street: string;
+    street_number: string;
+    complement?: string;
+    city: string;
+    postal_code: string;
+    country?: string;
+    latitude: number;
+    longitude: number;
+    access_code?: string;
+    access_notes?: string;
+    parking_info?: string;
+    has_oven?: boolean;
+    has_dishwasher?: boolean;
+    kitchen_notes?: string;
+    is_default?: boolean;
+  }): Promise<{ message: string; address: any }> {
+    const response = await this.client.post<{ message: string; address: any }>("/addresses", data);
+    return response.data;
+  }
+
   /**
    * Récupérer le token Mapbox pour le frontend (sécurisé)
    */

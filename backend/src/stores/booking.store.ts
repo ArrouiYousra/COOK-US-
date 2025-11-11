@@ -398,12 +398,47 @@ export class BookingStore {
 
     const bookings = (data as Booking[]) || [];
 
+    // Enrichir les bookings avec les adresses si disponibles
+    const enrichedBookings = await Promise.allSettled(
+      bookings.map(async (booking) => {
+        try {
+          let address = null;
+          if (booking.address_id) {
+            const { data: addressData, error: addressError } = await supabaseAdmin
+              .from("addresses")
+              .select("*")
+              .eq("id", booking.address_id)
+              .single();
+
+            if (!addressError && addressData) {
+              address = addressData;
+            }
+          }
+
+          return {
+            ...booking,
+            address,
+          };
+        } catch (error) {
+          console.error(`Error enriching booking ${booking.id} with address:`, error);
+          return booking;
+        }
+      }),
+    );
+
+    const validBookings = enrichedBookings
+      .filter(
+        (result): result is PromiseFulfilledResult<any> =>
+          result.status === "fulfilled",
+      )
+      .map((result) => result.value);
+
     // Log pour déboguer
     if (role === "CLIENT") {
       console.log(
-        `[BookingStore.getBookingsForUser] Client ${userId}: ${bookings.length} bookings trouvés`,
+        `[BookingStore.getBookingsForUser] Client ${userId}: ${validBookings.length} bookings trouvés`,
       );
-      bookings.forEach((b, index) => {
+      validBookings.forEach((b, index) => {
         console.log(`[BookingStore] Booking #${index + 1}:`, {
           id: b.id?.slice(0, 8),
           status: b.status,
@@ -411,12 +446,14 @@ export class BookingStore {
           cook_profile_id_is_null: b.cook_profile_id === null,
           client_profile_id: b.client_profile_id,
           booking_date: b.booking_date,
+          has_address: !!b.address,
+          address_id: b.address_id,
         });
       });
     }
 
     return {
-      bookings,
+      bookings: validBookings,
       count: count || 0,
     };
   }

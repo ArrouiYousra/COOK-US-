@@ -38,10 +38,14 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
   const router = useRouter();
   const { fetchBookings } = useBookingStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [clientAddresses, setClientAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<string>(initialData?.address || "");
   const [addressCoordinates, setAddressCoordinates] = useState<{ lat: number; lng: number } | undefined>();
+  const [isNewAddress, setIsNewAddress] = useState(false);
   const [nearbyCooksCount, setNearbyCooksCount] = useState<number | null>(null);
   const [isCheckingCooks, setIsCheckingCooks] = useState(false);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(true);
   const [addressDetails, setAddressDetails] = useState<{
     city?: string;
     postalCode?: string;
@@ -76,6 +80,14 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
     try {
       setIsSubmitting(true);
       
+      // Vérifier que l'adresse est sélectionnée avec ses coordonnées
+      if (!addressCoordinates || !selectedAddress) {
+        setErrorMessage("Veuillez sélectionner une adresse valide sur la carte.");
+        setTimeout(() => setErrorMessage(null), 5000);
+        setIsSubmitting(false);
+        return;
+      }
+
       // Parser le créneau horaire pour extraire start_time et end_time
       let start_time: string | undefined;
       let end_time: string | undefined;
@@ -92,8 +104,53 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
           meal_type = "DINNER";
         }
       }
+
+      // Déterminer l'ID de l'adresse à utiliser
+      let addressId: string | undefined;
       
-      // Créer la demande publique via l'API
+      if (isNewAddress && addressCoordinates) {
+        // Étape 1 : Créer une nouvelle adresse dans la base de données via Mapbox
+        try {
+          // Extraire les composants de l'adresse depuis les détails Mapbox
+          const addressParts = selectedAddress.split(',').map(s => s.trim());
+          const streetAndNumber = addressParts[0] || selectedAddress;
+          const postalCode = addressDetails?.postalCode || addressParts.find(p => /^\d{5}$/.test(p)) || "";
+          const city = addressDetails?.city || addressParts.find(p => p && !/^\d{5}$/.test(p) && p !== streetAndNumber) || "";
+          
+          // Créer l'adresse via l'API
+          const addressResponse = await apiClient.createAddress({
+            type: "HOME",
+            label: "Adresse de la demande",
+            street: streetAndNumber.split(/\d+/)[0]?.trim() || streetAndNumber,
+            street_number: streetAndNumber.match(/\d+/)?.[0] || "1",
+            city: city || "",
+            postal_code: postalCode || "",
+            country: addressDetails?.country || "FR",
+            latitude: addressCoordinates.lat,
+            longitude: addressCoordinates.lng,
+            is_default: false,
+          });
+          
+          addressId = addressResponse.address?.id;
+        } catch (addressError: any) {
+          console.error("Erreur lors de la création de l'adresse:", addressError);
+          setErrorMessage("Erreur lors de la création de l'adresse. Veuillez réessayer.");
+          setTimeout(() => setErrorMessage(null), 5000);
+          setIsSubmitting(false);
+          return;
+        }
+      } else if (selectedAddressId) {
+        // Utiliser l'adresse existante sélectionnée
+        addressId = selectedAddressId;
+      } else {
+        // Aucune adresse sélectionnée
+        setErrorMessage("Veuillez sélectionner une adresse existante ou en créer une nouvelle.");
+        setTimeout(() => setErrorMessage(null), 5000);
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Étape 2 : Créer la demande publique via l'API avec address_id
       const response = await apiClient.createPublicRequest({
         booking_date: data.date,
         meal_type,
@@ -104,8 +161,7 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
         need_table_setting: data.setTable || false,
         need_dishes: data.includeDishes || false,
         special_requests: `${data.title}\n\n${data.description}`,
-        // TODO: Gérer address_id si vous avez une table addresses
-        // address_id: addressId,
+        address_id: addressId, // Associer l'adresse créée à la demande
       });
       
       // Afficher un message de succès
@@ -134,6 +190,42 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
       setIsSubmitting(false);
     }
   };
+
+  // Charger les adresses du client au montage
+  useEffect(() => {
+    const loadAddresses = async () => {
+      try {
+        setIsLoadingAddresses(true);
+        const response = await apiClient.getMyAddresses();
+        setClientAddresses(response.addresses || []);
+        
+        // Sélectionner l'adresse par défaut si disponible
+        const defaultAddress = response.addresses?.find((addr: any) => addr.is_default);
+        if (defaultAddress) {
+          setSelectedAddressId(defaultAddress.id);
+          setSelectedAddress(
+            `${defaultAddress.street_number} ${defaultAddress.street}, ${defaultAddress.postal_code} ${defaultAddress.city}`
+          );
+          // Récupérer les coordonnées depuis la location PostGIS
+          if (defaultAddress.location) {
+            const location = defaultAddress.location as { lat?: number; lng?: number; latitude?: number; longitude?: number };
+            setAddressCoordinates({
+              lat: location.lat ?? location.latitude ?? 0,
+              lng: location.lng ?? location.longitude ?? 0,
+            });
+          }
+          setIsNewAddress(false);
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement des adresses:", error);
+        // Continuer sans adresses - l'utilisateur pourra en créer une nouvelle
+      } finally {
+        setIsLoadingAddresses(false);
+      }
+    };
+
+    loadAddresses();
+  }, []);
 
   const setTable = watch("setTable") ?? false;
   const includeDishes = watch("includeDishes") ?? false;
@@ -422,35 +514,129 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
         </div>
       </div>
 
-      {/* Adresse avec autocomplete Mapbox */}
+      {/* Adresse : Sélectionner une existante ou créer une nouvelle */}
       <div>
-        <Label htmlFor="address" className="text-foreground flex items-center gap-2">
+        <Label htmlFor="address" className="text-foreground flex items-center gap-2 mb-2">
           Adresse complète *
           {addressCoordinates && (
             <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
           )}
         </Label>
-        <MapboxAutocomplete
-          value={selectedAddress}
-          onChange={(address, coordinates) => {
-            setSelectedAddress(address);
-            setAddressCoordinates(coordinates);
-            setValue("address", address, { shouldValidate: true });
-          }}
-          placeholder="Rechercher une adresse..."
-          country="FR"
-          onSelect={(suggestion) => {
-            setAddressCoordinates({
-              lat: suggestion.latitude,
-              lng: suggestion.longitude,
-            });
-            setAddressDetails({
-              city: suggestion.city,
-              postalCode: suggestion.postalCode,
-              country: suggestion.country,
-            });
-          }}
-        />
+        
+        {/* Sélecteur : Adresse existante ou nouvelle */}
+        <div className="mb-3">
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant={!isNewAddress ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setIsNewAddress(false);
+                setSelectedAddress("");
+                setAddressCoordinates(undefined);
+                setAddressDetails(null);
+              }}
+            >
+              Utiliser une adresse existante
+            </Button>
+            <Button
+              type="button"
+              variant={isNewAddress ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setIsNewAddress(true);
+                setSelectedAddressId(null);
+                setSelectedAddress("");
+                setAddressCoordinates(undefined);
+                setAddressDetails(null);
+              }}
+            >
+              Créer une nouvelle adresse
+            </Button>
+          </div>
+        </div>
+
+        {!isNewAddress ? (
+          /* Sélectionner une adresse existante */
+          <div>
+            {isLoadingAddresses ? (
+              <div className="flex items-center gap-2 py-4">
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Chargement des adresses...</span>
+              </div>
+            ) : clientAddresses.length > 0 ? (
+              <select
+                value={selectedAddressId || ""}
+                onChange={(e) => {
+                  const addressId = e.target.value;
+                  setSelectedAddressId(addressId);
+                  const address = clientAddresses.find((addr: any) => addr.id === addressId);
+                  if (address) {
+                    setSelectedAddress(
+                      `${address.street_number} ${address.street}, ${address.postal_code} ${address.city}`
+                    );
+                    // Récupérer les coordonnées depuis la location PostGIS
+                    if (address.location) {
+                      const location = address.location as { lat?: number; lng?: number; latitude?: number; longitude?: number };
+                      setAddressCoordinates({
+                        lat: location.lat ?? location.latitude ?? 0,
+                        lng: location.lng ?? location.longitude ?? 0,
+                      });
+                    }
+                    setValue("address", selectedAddress, { shouldValidate: true });
+                  }
+                }}
+                className="w-full px-3 py-2 rounded-lg border bg-background text-foreground border-border focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="">Sélectionnez une adresse...</option>
+                {clientAddresses.map((addr: any) => (
+                  <option key={addr.id} value={addr.id}>
+                    {addr.is_default && "⭐ "}
+                    {addr.label || `${addr.street_number} ${addr.street}, ${addr.postal_code} ${addr.city}`}
+                    {addr.is_default && " (Par défaut)"}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="p-4 bg-muted/50 rounded-lg border border-border text-center">
+                <p className="text-sm text-muted-foreground mb-2">
+                  Aucune adresse enregistrée. Créez-en une nouvelle.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsNewAddress(true)}
+                >
+                  Créer une nouvelle adresse
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Créer une nouvelle adresse via Mapbox */
+          <MapboxAutocomplete
+            value={selectedAddress}
+            onChange={(address, coordinates) => {
+              setSelectedAddress(address);
+              setAddressCoordinates(coordinates);
+              setValue("address", address, { shouldValidate: true });
+            }}
+            placeholder="Rechercher une adresse..."
+            country="FR"
+            onSelect={(suggestion) => {
+              setAddressCoordinates({
+                lat: suggestion.latitude,
+                lng: suggestion.longitude,
+              });
+              setAddressDetails({
+                city: suggestion.city,
+                postalCode: suggestion.postalCode,
+                country: suggestion.country,
+              });
+            }}
+          />
+        )}
         <div className="flex items-center justify-between mt-1">
           {errors.address ? (
             <p className="text-sm text-destructive flex items-center gap-1">
