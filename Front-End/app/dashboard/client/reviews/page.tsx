@@ -87,17 +87,10 @@ export default function ClientReviewsPage() {
               cookName,
               cookAvatar: reviewee?.avatar_url,
               rating: review.rating,
-              detailedRatings: {
-                // TODO: Les notes détaillées ne sont pas encore dans le schéma de la DB
-                // Pour l'instant, on utilise des valeurs par défaut
-                quality: review.rating,
-                punctuality: review.rating,
-                cleanliness: review.rating,
-                communication: review.rating,
-              },
+              detailedRatings: review.detailed_ratings || undefined,
               comment: review.comment || "",
-              photos: [], // TODO: Les photos ne sont pas encore dans le schéma de la DB
-              isRecommended: review.rating >= 4, // Considérer comme recommandé si note >= 4
+              photos: review.photos || [],
+              isRecommended: review.is_recommended || false,
               createdAt: review.created_at,
               bookingDate: bookingData?.date || review.created_at,
             };

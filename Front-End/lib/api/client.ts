@@ -1140,10 +1140,32 @@ class ApiClient {
   }
 
   /**
+   * Uploader une image pour un avis
+   */
+  async uploadReviewImage(imageBase64: string): Promise<{ message: string; image_url: string }> {
+    const response = await this.client.post<{ message: string; image_url: string }>("/reviews/upload-image", {
+      image_base64: imageBase64,
+    });
+    return response.data;
+  }
+
+  /**
    * Créer un avis
    * @param data - Données de l'avis
    */
-  async createReview(data: { booking_id: string; rating: number; comment?: string }): Promise<{ message: string; review: any }> {
+  async createReview(data: { 
+    booking_id: string; 
+    rating: number; 
+    comment?: string;
+    detailed_ratings?: {
+      quality?: number;
+      punctuality?: number;
+      cleanliness?: number;
+      communication?: number;
+    };
+    photos?: string[];
+    is_recommended?: boolean;
+  }): Promise<{ message: string; review: any }> {
     const response = await this.client.post<{ message: string; review: any }>("/reviews", data);
     return response.data;
   }

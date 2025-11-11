@@ -426,6 +426,14 @@ export interface Review {
   reviewee_id: string; // User being reviewed
   rating: number; // 0 to 5
   comment: string | null;
+  detailed_ratings: {
+    quality?: number;
+    punctuality?: number;
+    cleanliness?: number;
+    communication?: number;
+  } | null;
+  photos: string[] | null; // URLs des photos
+  is_recommended: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -435,6 +443,14 @@ export interface CreateReviewDTO {
   booking_id: string;
   rating: number; // 0 to 5
   comment?: string;
+  detailed_ratings?: {
+    quality?: number;
+    punctuality?: number;
+    cleanliness?: number;
+    communication?: number;
+  };
+  photos?: string[]; // URLs des photos (après upload)
+  is_recommended?: boolean;
 }
 
 // Availabilities table

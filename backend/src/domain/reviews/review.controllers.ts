@@ -3,6 +3,7 @@ import { type AuthRequest } from "@core/middleware";
 import { ReviewStore } from "@stores/review.store";
 import { BookingStore } from "@stores/booking.store";
 import { UserStore } from "@stores/user.store";
+import { ReviewImageService } from "@core/services/review-image.service";
 
 export const createReview = async (
   req: AuthRequest,
@@ -17,7 +18,7 @@ export const createReview = async (
       return;
     }
 
-    const { booking_id, rating, comment } = req.body;
+    const { booking_id, rating, comment, detailed_ratings, photos, is_recommended } = req.body;
 
     if (!booking_id || rating === undefined) {
       res.status(400).json({
@@ -35,10 +36,46 @@ export const createReview = async (
       return;
     }
 
+    // Valider les notes détaillées si fournies
+    if (detailed_ratings) {
+      const validKeys = ["quality", "punctuality", "cleanliness", "communication"];
+      for (const key of validKeys) {
+        if (detailed_ratings[key] !== undefined) {
+          if (detailed_ratings[key] < 0 || detailed_ratings[key] > 5) {
+            res.status(400).json({
+              error: "Bad Request",
+              message: `Rating ${key} must be between 0 and 5`,
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    // Valider les photos si fournies
+    if (photos && !Array.isArray(photos)) {
+      res.status(400).json({
+        error: "Bad Request",
+        message: "photos must be an array",
+      });
+      return;
+    }
+
+    if (photos && photos.length > 5) {
+      res.status(400).json({
+        error: "Bad Request",
+        message: "Maximum 5 photos allowed",
+      });
+      return;
+    }
+
     const review = await ReviewStore.createReview(req.user.id, {
       booking_id,
       rating,
       comment,
+      detailed_ratings,
+      photos,
+      is_recommended: is_recommended || false,
     });
 
     res.status(201).json({
@@ -343,6 +380,62 @@ export const deleteReview = async (
     if (
       errorMessage.includes("not found") ||
       errorMessage.includes("only delete")
+    ) {
+      res.status(400).json({
+        error: "Bad Request",
+        message: errorMessage,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: errorMessage,
+    });
+  }
+};
+
+export const uploadReviewImage = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: "Unauthorized",
+        message: "User not authenticated",
+      });
+      return;
+    }
+
+    const { image_base64 } = req.body;
+
+    if (!image_base64) {
+      res.status(400).json({
+        error: "Bad Request",
+        message: "image_base64 is required",
+      });
+      return;
+    }
+
+    const imageUrl = await ReviewImageService.uploadReviewImageFromBase64(
+      req.user.id,
+      image_base64,
+    );
+
+    res.status(200).json({
+      message: "Image uploaded successfully",
+      image_url: imageUrl,
+    });
+  } catch (error) {
+    console.error("Upload review image error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to upload image";
+
+    if (
+      errorMessage.includes("Format") ||
+      errorMessage.includes("taille") ||
+      errorMessage.includes("size")
     ) {
       res.status(400).json({
         error: "Bad Request",

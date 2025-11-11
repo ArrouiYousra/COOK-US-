@@ -111,6 +111,9 @@ export class ReviewStore {
         reviewee_id: revieweeId,
         rating: reviewData.rating,
         comment: reviewData.comment || null,
+        detailed_ratings: reviewData.detailed_ratings || null,
+        photos: reviewData.photos || null,
+        is_recommended: reviewData.is_recommended || false,
       })
       .select()
       .single();

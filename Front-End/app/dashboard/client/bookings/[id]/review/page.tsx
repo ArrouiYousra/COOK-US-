@@ -189,10 +189,36 @@ export default function ReviewPage() {
     setError(null);
 
     try {
+      // Uploader les photos si présentes
+      const uploadedPhotoUrls: string[] = [];
+      if (photos.length > 0) {
+        for (const photoBase64 of photos) {
+          try {
+            const uploadResult = await apiClient.uploadReviewImage(photoBase64);
+            uploadedPhotoUrls.push(uploadResult.image_url);
+          } catch (uploadErr: any) {
+            console.error("Erreur lors de l'upload d'une photo:", uploadErr);
+            // Continuer même si une photo échoue
+          }
+        }
+      }
+
+      // Préparer les notes détaillées (seulement si au moins une est remplie)
+      const detailedRatingsData = 
+        detailedRatings.quality > 0 || 
+        detailedRatings.punctuality > 0 || 
+        detailedRatings.cleanliness > 0 || 
+        detailedRatings.communication > 0
+          ? detailedRatings
+          : undefined;
+
       await apiClient.createReview({
         booking_id: bookingId,
         rating,
         comment: comment.trim() || undefined,
+        detailed_ratings: detailedRatingsData,
+        photos: uploadedPhotoUrls.length > 0 ? uploadedPhotoUrls : undefined,
+        is_recommended: isRecommending,
       });
 
       // Rediriger vers la page de détails de la réservation

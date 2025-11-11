@@ -6,6 +6,7 @@ import {
   getMyReviews,
   updateReview,
   deleteReview,
+  uploadReviewImage,
 } from "./review.controllers";
 import { authGuard } from "@core/middleware";
 
@@ -159,5 +160,33 @@ router.put("/:reviewId", authGuard, updateReview);
  *         description: Bad request
  */
 router.delete("/:reviewId", authGuard, deleteReview);
+
+/**
+ * @swagger
+ * /api/reviews/upload-image:
+ *   post:
+ *     summary: Upload an image for a review
+ *     tags: [Reviews]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - image_base64
+ *             properties:
+ *               image_base64:
+ *                 type: string
+ *                 description: Base64 encoded image
+ *     responses:
+ *       200:
+ *         description: Image uploaded successfully
+ *       400:
+ *         description: Bad request (invalid format, size, etc.)
+ */
+router.post("/upload-image", authGuard, uploadReviewImage);
 
 export default router;
