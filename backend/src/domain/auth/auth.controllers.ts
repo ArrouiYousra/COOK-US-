@@ -28,11 +28,20 @@ const refreshTokenMaxAgeSeconds = Number(
 ); // 14j
 
 // Détecter si on est en cross-origin (frontend et backend sur des domaines différents)
-const isCrossOrigin = isProduction && (
-  frontendUrl.includes("vercel.app") || 
-  frontendUrl.includes("onrender.com") ||
-  process.env.BACKEND_URL?.includes("onrender.com")
-);
+// En production, si le frontend n'est pas sur localhost, c'est probablement cross-origin
+// (frontend sur Vercel, backend sur Render = cross-origin)
+const isCrossOrigin = isProduction && !frontendUrl.includes("localhost") && !frontendUrl.includes("127.0.0.1");
+
+// Log pour vérifier la détection
+if (isProduction) {
+  console.log("[Auth] Cross-origin detection:", {
+    isCrossOrigin,
+    isProduction,
+    frontendUrl,
+    backendUrl: process.env.BACKEND_URL,
+    reason: isCrossOrigin ? "Production avec frontend externe" : "Local ou même domaine",
+  });
+}
 
 const cookieBaseOptions = {
   httpOnly: true,
@@ -42,10 +51,31 @@ const cookieBaseOptions = {
 };
 
 const setSessionCookies = (res: Response, session: Session): void => {
-  res.cookie("access_token", session.access_token, {
+  // Supprimer les anciens cookies avec différentes configurations pour éviter les conflits
+  // Cela garantit que les nouveaux cookies avec la bonne configuration seront utilisés
+  res.clearCookie("access_token", { path: "/" });
+  res.clearCookie("refresh_token", { path: "/" });
+  res.clearCookie("access_token", { path: "/", domain: undefined });
+  res.clearCookie("refresh_token", { path: "/", domain: undefined });
+  
+  const cookieOptions = {
     ...cookieBaseOptions,
     maxAge: accessTokenMaxAgeSeconds * 1000,
-  });
+  };
+  
+  // Log pour déboguer la configuration des cookies
+  if (process.env.NODE_ENV === "production") {
+    console.log("[Auth] Setting cookies with options:", {
+      httpOnly: cookieOptions.httpOnly,
+      secure: cookieOptions.secure,
+      sameSite: cookieOptions.sameSite,
+      path: cookieOptions.path,
+      isCrossOrigin,
+      frontendUrl,
+    });
+  }
+  
+  res.cookie("access_token", session.access_token, cookieOptions);
 
   if (session.refresh_token) {
     res.cookie("refresh_token", session.refresh_token, {
