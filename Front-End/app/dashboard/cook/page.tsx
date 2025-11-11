@@ -30,23 +30,25 @@ export default function CookDashboardPage() {
   const [upcomingBookings, setUpcomingBookings] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
 
-  // Vérifier l'authentification au montage
+  // Vérifier l'authentification au montage (une seule fois)
   useEffect(() => {
+    if (isAuthLoading) return;
+    
     const verifyAuth = async () => {
-      if (!isAuthenticated && !isAuthLoading) {
+      if (!isAuthenticated) {
         try {
           await checkAuth();
         } catch (error) {
           console.warn("Authentification échouée, redirection vers la page de connexion");
-          router.push("/auth/login");
+          // Utiliser router.replace pour éviter d'ajouter une entrée dans l'historique
+          router.replace("/auth/login");
         }
       }
     };
 
-    if (!isAuthLoading) {
-      verifyAuth();
-    }
-  }, [isAuthenticated, checkAuth, router, isAuthLoading]);
+    verifyAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Exécuter une seule fois au montage
 
   // Charger les données du dashboard
   useEffect(() => {

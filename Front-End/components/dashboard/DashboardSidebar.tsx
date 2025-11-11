@@ -201,7 +201,14 @@ export function DashboardSidebar() {
                       <Link
                         key={item.href}
                         href={item.href}
-                        onClick={() => setIsMobileOpen(false)}
+                        onClick={(e) => {
+                          setIsMobileOpen(false);
+                          // Empêcher la navigation si on est déjà sur cette page
+                          if (isActive) {
+                            e.preventDefault();
+                            return;
+                          }
+                        }}
                         className={cn(
                           "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group",
                           isActive

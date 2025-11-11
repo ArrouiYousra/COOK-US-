@@ -14,6 +14,8 @@ import {
   UtensilsCrossed,
   Loader2,
   AlertCircle,
+  Navigation,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +30,7 @@ interface ReservationsListProps {
   onAccept?: (reservationId: string) => void;
   onReject?: (reservationId: string) => void;
   showActions?: boolean; // Pour afficher les boutons accepter/refuser (côté client)
+  distances?: Record<string, { distance: number; distance_km: string; duration_minutes: number }>; // Distances calculées
 }
 
 /**
@@ -40,6 +43,7 @@ export function ReservationsList({
   onAccept,
   onReject,
   showActions = true,
+  distances = {},
 }: ReservationsListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -177,7 +181,7 @@ export function ReservationsList({
                 </div>
 
                 {/* Prix et note */}
-                <div className="flex items-center gap-4 mb-3">
+                <div className="flex items-center gap-4 mb-3 flex-wrap">
                   <div className="flex items-center gap-1">
                     <Euro className="w-4 h-4 text-muted-foreground" />
                     <span className="text-2xl font-bold">{reservation.proposed_price.toFixed(2)}</span>
@@ -193,6 +197,15 @@ export function ReservationsList({
                     <div className="text-sm text-muted-foreground">
                       {reservation.proposed_hours}h
                       {reservation.proposed_hourly_rate && ` × ${reservation.proposed_hourly_rate}€/h`}
+                    </div>
+                  )}
+                  {distances[reservation.id] && (
+                    <div className="flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 px-2 py-1 rounded-full">
+                      <Navigation className="w-4 h-4" />
+                      <span className="font-medium">{distances[reservation.id].distance_km}</span>
+                      <span className="text-xs text-muted-foreground">
+                        ({distances[reservation.id].duration_minutes} min)
+                      </span>
                     </div>
                   )}
                 </div>

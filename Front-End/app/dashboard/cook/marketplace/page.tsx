@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -18,9 +18,15 @@ import {
   X,
   Map,
   List,
+  Navigation,
+  ArrowUpDown,
+  TrendingUp,
+  Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
@@ -44,6 +50,14 @@ export default function MarketplacePage() {
   const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [cookLocation, setCookLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [cookProfile, setCookProfile] = useState<any>(null);
+  const [distances, setDistances] = useState<Record<string, { distance: number; distance_km: string; duration_minutes: number }>>({});
+  const [sortBy, setSortBy] = useState<"date" | "distance" | "guests" | "budget">("date");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [maxDistance, setMaxDistance] = useState<number | null>(null); // Filtre par distance max
+  const [minBudget, setMinBudget] = useState<number | null>(null); // Filtre par budget min
+  const [maxBudget, setMaxBudget] = useState<number | null>(null); // Filtre par budget max
 
   // Vérifier l'authentification au montage
   useEffect(() => {
@@ -63,6 +77,39 @@ export default function MarketplacePage() {
     }
   }, [isAuthenticated, checkAuth, router, isAuthLoading]);
 
+  // Charger le profil cuisinier et sa localisation
+  useEffect(() => {
+    const loadCookProfile = async () => {
+      if (isAuthLoading || !isAuthenticated || !user) return;
+
+      try {
+        const profile = await apiClient.getMyProfile();
+        if (profile.cookProfile) {
+          setCookProfile(profile.cookProfile);
+          // Récupérer la localisation du cuisinier
+          if (profile.cookProfile.location) {
+            const location = profile.cookProfile.location;
+            const lat = typeof location === 'object' && 'lat' in location ? location.lat : (location as any).latitude;
+            const lng = typeof location === 'object' && 'lng' in location ? location.lng : (location as any).longitude;
+            if (lat && lng) {
+              setCookLocation({ lat, lng });
+              // Utiliser le rayon de service comme distance max par défaut
+              if (profile.cookProfile.service_radius) {
+                setMaxDistance(profile.cookProfile.service_radius);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Erreur lors du chargement du profil cuisinier:", err);
+      }
+    };
+
+    if (!isAuthLoading && isAuthenticated && user) {
+      loadCookProfile();
+    }
+  }, [isAuthLoading, isAuthenticated, user]);
+
   // Charger les demandes publiques
   useEffect(() => {
     const loadPublicRequests = async () => {
@@ -77,7 +124,54 @@ export default function MarketplacePage() {
           city: cityFilter || undefined,
           limit: 100,
         });
-        setPublicRequests(response.bookings || []);
+        const loadedRequests = response.bookings || [];
+        setPublicRequests(loadedRequests);
+
+        // Calculer les distances si on a la localisation du cuisinier
+        if (cookLocation && cookLocation.lat && cookLocation.lng) {
+          const distancePromises = loadedRequests
+            .filter(req => req.address?.location)
+            .map(async (request) => {
+              try {
+                const requestLocation = request.address.location;
+                const requestLat = typeof requestLocation === 'object' && 'lat' in requestLocation 
+                  ? requestLocation.lat 
+                  : (requestLocation as any).latitude;
+                const requestLng = typeof requestLocation === 'object' && 'lng' in requestLocation 
+                  ? requestLocation.lng 
+                  : (requestLocation as any).longitude;
+
+                if (!requestLat || !requestLng) return null;
+
+                const distanceResult = await apiClient.calculateDistance(
+                  [cookLocation.lat, cookLocation.lng],
+                  [requestLat, requestLng],
+                  "driving"
+                );
+
+                return {
+                  requestId: request.id,
+                  distance: distanceResult.result,
+                };
+              } catch (error) {
+                console.error(`Erreur lors du calcul de la distance pour ${request.id}:`, error);
+                return null;
+              }
+            });
+
+          const distanceResults = await Promise.all(distancePromises);
+          const distancesMap: Record<string, { distance: number; distance_km: string; duration_minutes: number }> = {};
+          distanceResults.forEach((result) => {
+            if (result && result.distance) {
+              distancesMap[result.requestId] = {
+                distance: result.distance.distance,
+                distance_km: result.distance.distance_km,
+                duration_minutes: result.distance.duration_minutes,
+              };
+            }
+          });
+          setDistances(distancesMap);
+        }
       } catch (err: any) {
         console.error("Erreur lors du chargement des demandes publiques:", err);
         setError(err.response?.data?.message || "Impossible de charger les demandes publiques");
@@ -89,21 +183,72 @@ export default function MarketplacePage() {
     if (!isAuthLoading && isAuthenticated && user) {
       loadPublicRequests();
     }
-  }, [isAuthLoading, isAuthenticated, user, cityFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthLoading, isAuthenticated, user, cityFilter, cookLocation]);
 
-  // Filtrer les demandes par recherche
-  const filteredRequests = publicRequests.filter((request) => {
-    const searchLower = searchQuery.toLowerCase();
-    const clientName = `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.toLowerCase();
-    const specialRequests = (request.special_requests || "").toLowerCase();
-    const address = (request.address?.address || "").toLowerCase();
-    
-    return (
-      clientName.includes(searchLower) ||
-      specialRequests.includes(searchLower) ||
-      address.includes(searchLower)
-    );
-  });
+  // Filtrer et trier les demandes
+  const filteredAndSortedRequests = useMemo(() => {
+    let filtered = publicRequests.filter((request) => {
+      // Filtre par recherche textuelle
+      const searchLower = searchQuery.toLowerCase();
+      const clientName = `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.toLowerCase();
+      const specialRequests = (request.special_requests || "").toLowerCase();
+      const address = (request.address?.address || "").toLowerCase();
+      
+      const matchesSearch = !searchQuery || (
+        clientName.includes(searchLower) ||
+        specialRequests.includes(searchLower) ||
+        address.includes(searchLower)
+      );
+
+      // Filtre par distance
+      const distance = distances[request.id]?.distance || Infinity;
+      const matchesDistance = !maxDistance || distance <= maxDistance * 1000; // Convertir km en mètres
+
+      // Filtre par budget (si disponible dans la demande)
+      const requestBudget = request.budget || request.total_price || 0;
+      const matchesMinBudget = !minBudget || requestBudget >= minBudget;
+      const matchesMaxBudget = !maxBudget || requestBudget <= maxBudget;
+
+      // Vérifier si la demande est dans le rayon de service du cuisinier
+      const isInServiceRadius = cookProfile?.service_radius 
+        ? distance <= (cookProfile.service_radius * 1000) // Convertir km en mètres
+        : true;
+
+      return matchesSearch && matchesDistance && matchesMinBudget && matchesMaxBudget && isInServiceRadius;
+    });
+
+    // Trier les demandes
+    filtered.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case "distance":
+          const distA = distances[a.id]?.distance || Infinity;
+          const distB = distances[b.id]?.distance || Infinity;
+          comparison = distA - distB;
+          break;
+        case "guests":
+          const guestsA = a.number_of_guests || 0;
+          const guestsB = b.number_of_guests || 0;
+          comparison = guestsA - guestsB;
+          break;
+        case "budget":
+          const budgetA = a.budget || a.total_price || 0;
+          const budgetB = b.budget || b.total_price || 0;
+          comparison = budgetA - budgetB;
+          break;
+        case "date":
+        default:
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+      }
+      
+      return sortOrder === "asc" ? comparison : -comparison;
+    });
+
+    return filtered;
+  }, [publicRequests, searchQuery, distances, maxDistance, minBudget, maxBudget, sortBy, sortOrder, cookProfile]);
 
   const handlePropose = (request: any) => {
     setSelectedRequest(request);
@@ -154,8 +299,45 @@ export default function MarketplacePage() {
         </div>
       )}
 
+      {/* Suggestions intelligentes */}
+      {cookProfile && filteredAndSortedRequests.length > 0 && (
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            <h3 className="font-semibold text-foreground">Suggestions pour vous</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+              <span className="text-muted-foreground">
+                {filteredAndSortedRequests.filter(r => {
+                  const dist = distances[r.id]?.distance || Infinity;
+                  return dist <= (cookProfile.service_radius * 1000);
+                }).length} demande{filteredAndSortedRequests.length > 1 ? "s" : ""} dans votre rayon ({cookProfile.service_radius} km)
+              </span>
+            </div>
+            {cookProfile.hourly_rate && (
+              <div className="flex items-center gap-2">
+                <Euro className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-muted-foreground">
+                  Tarif horaire : {cookProfile.hourly_rate}€/h
+                </span>
+              </div>
+            )}
+            {cookProfile.max_guests && (
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-muted-foreground">
+                  Capacité max : {cookProfile.max_guests} personnes
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Barre de recherche et filtres */}
-      <div className="bg-card border border-border rounded-xl p-4 lg:p-6">
+      <div className="bg-card border border-border rounded-xl p-4 lg:p-6 space-y-4">
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Recherche */}
           <div className="flex-1 relative">
@@ -213,10 +395,78 @@ export default function MarketplacePage() {
             </Button>
           </div>
         </div>
+
+        {/* Filtres avancés */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-border">
+          {/* Filtre par distance */}
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Distance max (km)</Label>
+            <Input
+              type="number"
+              placeholder={cookProfile?.service_radius ? `Rayon: ${cookProfile.service_radius}km` : "Toutes"}
+              value={maxDistance || ""}
+              onChange={(e) => setMaxDistance(e.target.value ? parseFloat(e.target.value) : null)}
+              min="0"
+              max="100"
+              className="text-sm"
+            />
+          </div>
+
+          {/* Filtre par budget min */}
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Budget min (€)</Label>
+            <Input
+              type="number"
+              placeholder="Min"
+              value={minBudget || ""}
+              onChange={(e) => setMinBudget(e.target.value ? parseFloat(e.target.value) : null)}
+              min="0"
+              className="text-sm"
+            />
+          </div>
+
+          {/* Filtre par budget max */}
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Budget max (€)</Label>
+            <Input
+              type="number"
+              placeholder="Max"
+              value={maxBudget || ""}
+              onChange={(e) => setMaxBudget(e.target.value ? parseFloat(e.target.value) : null)}
+              min="0"
+              className="text-sm"
+            />
+          </div>
+
+          {/* Tri */}
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">Trier par</Label>
+            <div className="flex gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="flex-1 px-2 py-1.5 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              >
+                <option value="date">Date</option>
+                <option value="distance">Distance</option>
+                <option value="guests">Invités</option>
+                <option value="budget">Budget</option>
+              </select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                className="px-2"
+              >
+                <ArrowUpDown className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Liste des demandes ou Carte */}
-      {filteredRequests.length === 0 ? (
+      {filteredAndSortedRequests.length === 0 ? (
         <div className="text-center py-12 bg-card border border-border rounded-xl">
           <p className="text-muted-foreground">
             {publicRequests.length === 0
@@ -224,28 +474,49 @@ export default function MarketplacePage() {
               : "Aucune demande ne correspond à vos critères"}
           </p>
         </div>
-      ) : viewMode === "map" ? (
+      ) : viewMode === "map" && cookLocation ? (
         <div className="bg-card border border-border rounded-xl overflow-hidden" style={{ height: "600px" }}>
           <MapboxMap
-            center={
-              filteredRequests[0]?.address?.location
-                ? [filteredRequests[0].address.location.lat, filteredRequests[0].address.location.lng]
-                : [48.8566, 2.3522]
-            }
+            center={[cookLocation.lat, cookLocation.lng]}
             zoom={11}
-            markers={filteredRequests
-              .filter((req) => req.address?.location)
-              .map((request) => ({
-                id: request.id,
-                lat: request.address.location.lat,
-                lng: request.address.location.lng,
-                title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
-                description: request.special_requests || "",
-                color: "#3b82f6",
-              }))}
+            markers={[
+              {
+                id: "cook-location",
+                lat: cookLocation.lat,
+                lng: cookLocation.lng,
+                title: "Votre position",
+                description: "Votre localisation",
+                color: "#10b981",
+              },
+              ...filteredAndSortedRequests
+                .filter((req) => req.address?.location)
+                .map((request) => {
+                  const requestLocation = request.address.location;
+                  const requestLat = typeof requestLocation === 'object' && 'lat' in requestLocation 
+                    ? requestLocation.lat 
+                    : (requestLocation as any).latitude;
+                  const requestLng = typeof requestLocation === 'object' && 'lng' in requestLocation 
+                    ? requestLocation.lng 
+                    : (requestLocation as any).longitude;
+                  const distance = distances[request.id];
+                  const isInRadius = cookProfile?.service_radius 
+                    ? (distance?.distance || Infinity) <= (cookProfile.service_radius * 1000)
+                    : true;
+                  
+                  return {
+                    id: request.id,
+                    lat: requestLat,
+                    lng: requestLng,
+                    title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
+                    description: `${request.number_of_guests || 0} invité(s)${distance ? ` • ${distance.distance_km}` : ""}`,
+                    color: isInRadius ? "#3b82f6" : "#ef4444",
+                  };
+                }),
+            ]}
             height="100%"
             onMarkerClick={(marker) => {
-              const request = filteredRequests.find((r) => r.id === marker.id);
+              if (marker.id === "cook-location") return;
+              const request = filteredAndSortedRequests.find((r) => r.id === marker.id);
               if (request) {
                 handlePropose(request);
               }
@@ -254,12 +525,14 @@ export default function MarketplacePage() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {filteredRequests.map((request, index) => (
+          {filteredAndSortedRequests.map((request, index) => (
             <RequestCard
               key={request.id}
               request={request}
               index={index}
               onPropose={() => handlePropose(request)}
+              distance={distances[request.id]}
+              cookProfile={cookProfile}
             />
           ))}
         </div>
@@ -293,9 +566,11 @@ interface RequestCardProps {
   request: any;
   index: number;
   onPropose: () => void;
+  distance?: { distance: number; distance_km: string; duration_minutes: number };
+  cookProfile?: any;
 }
 
-function RequestCard({ request, index, onPropose }: RequestCardProps) {
+function RequestCard({ request, index, onPropose, distance, cookProfile }: RequestCardProps) {
   const clientName = `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client";
   const bookingDate = request.booking_date ? new Date(request.booking_date) : null;
   const address = request.address?.address || "Adresse non spécifiée";
@@ -362,6 +637,19 @@ function RequestCard({ request, index, onPropose }: RequestCardProps) {
               <MapPin className="w-4 h-4 text-muted-foreground" />
               <span className="text-foreground truncate">{address}</span>
             </div>
+            {distance && (
+              <div className="flex items-center gap-2 text-sm">
+                <Navigation className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span className="text-blue-600 dark:text-blue-400 font-medium">
+                  {distance.distance_km} ({distance.duration_minutes} min)
+                </span>
+                {cookProfile?.service_radius && distance.distance <= (cookProfile.service_radius * 1000) && (
+                  <span className="px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 text-xs font-medium">
+                    Dans votre rayon
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Demande spéciale */}

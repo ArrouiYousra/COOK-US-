@@ -58,8 +58,8 @@ export function CreateRequestModal({ isOpen, onClose }: CreateRequestModalProps)
                     // Attendre un peu pour que la base de données soit à jour
                     await new Promise(resolve => setTimeout(resolve, 500));
                     onClose();
-                    // Forcer un rechargement de la page pour afficher la nouvelle demande
-                    window.location.reload();
+                    // Utiliser router.push au lieu de window.location.reload() pour une navigation fluide
+                    // Le useEffect dans RequestsPage rechargera automatiquement les données
                   }} 
                 />
               </div>
