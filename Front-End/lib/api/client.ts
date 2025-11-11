@@ -559,6 +559,46 @@ class ApiClient {
   }
 
   /**
+   * Récupérer les propositions reçues par un cuisinier (Flux 2)
+   * @param params - Paramètres de filtrage (status, limit, offset)
+   */
+  async getReceivedProposals(params?: { status?: string; limit?: number; offset?: number }): Promise<{ bookings: any[]; count: number; stats: { pending: number; accepted: number; rejected: number } }> {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append("status", params.status);
+    if (params?.limit) queryParams.append("limit", params.limit.toString());
+    if (params?.offset) queryParams.append("offset", params.offset.toString());
+
+    const queryString = queryParams.toString();
+    const url = `/bookings/received-proposals${queryString ? `?${queryString}` : ""}`;
+    const response = await this.client.get<{ bookings: any[]; count: number; stats: { pending: number; accepted: number; rejected: number } }>(url);
+    return response.data;
+  }
+
+  /**
+   * Créer une proposition directe à un cuisinier (Flux 2)
+   * @param data - Données de la proposition
+   */
+  async createDirectProposal(data: {
+    cook_profile_id: string;
+    booking_date: string;
+    meal_type?: string;
+    start_time?: string;
+    end_time?: string;
+    number_of_guests?: number;
+    need_groceries?: boolean;
+    need_table_setting?: boolean;
+    need_dishes?: boolean;
+    dietary_restrictions?: string[];
+    allergies?: string[];
+    special_requests?: string;
+    ingredients_available?: string;
+    address_id?: string;
+  }): Promise<{ message: string; booking: any }> {
+    const response = await this.client.post<{ message: string; booking: any }>('/bookings', data);
+    return response.data;
+  }
+
+  /**
    * Créer une demande publique (pour les clients)
    * @param data - Données de la demande
    */

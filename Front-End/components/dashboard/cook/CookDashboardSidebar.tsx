@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Loader2,
   Store,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
@@ -57,6 +58,13 @@ const menuSections = [
         href: "/dashboard/cook/reservations",
         color: "text-indigo-600 dark:text-indigo-400",
         bgColor: "bg-indigo-500/10 dark:bg-indigo-500/20",
+      },
+      {
+        label: "Propositions reçues",
+        icon: Bell,
+        href: "/dashboard/cook/received-proposals",
+        color: "text-yellow-600 dark:text-yellow-400",
+        bgColor: "bg-yellow-500/10 dark:bg-yellow-500/20",
       },
       {
         label: "Demandes clients",

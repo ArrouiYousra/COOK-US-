@@ -1,16 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Calendar, Users, Euro, MapPin, Loader2, MessageSquare } from "lucide-react";
+import { X, Calendar, Users, Euro, MapPin, Loader2, MessageSquare, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { z } from "zod";
 import { useRouter } from "next/navigation";
+import { apiClient } from "@/lib/api/client";
+import { MapboxAutocomplete } from "@/components/mapbox/MapboxAutocomplete";
+import { MapboxMap } from "@/components/mapbox/MapboxMap";
+import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
 
 const makeProposalSchema = z.object({
   date: z.string().min(1, "La date est requise"),
@@ -25,7 +29,8 @@ const makeProposalSchema = z.object({
 type MakeProposalFormData = z.infer<typeof makeProposalSchema>;
 
 interface MakeProposalModalProps {
-  cookId: string;
+  cookId: string; // user_id du cuisinier
+  cookProfileId?: string; // cook_profile_id (optionnel, sera récupéré si non fourni)
   cookName: string;
   isOpen: boolean;
   onClose: () => void;
@@ -38,40 +43,108 @@ interface MakeProposalModalProps {
  */
 export function MakeProposalModal({
   cookId,
+  cookProfileId: initialCookProfileId,
   cookName,
   isOpen,
   onClose,
   onSuccess,
 }: MakeProposalModalProps) {
   const router = useRouter();
+  const { showSuccessToast, showErrorToast } = useNotificationToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cookProfileId, setCookProfileId] = useState<string | undefined>(initialCookProfileId);
+  const [selectedAddress, setSelectedAddress] = useState<string>("");
+  const [addressCoordinates, setAddressCoordinates] = useState<{ lat: number; lng: number } | undefined>();
+  const [addressDetails, setAddressDetails] = useState<{
+    city?: string;
+    postalCode?: string;
+    country?: string;
+  } | null>(null);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    watch,
+    setValue,
   } = useForm<MakeProposalFormData>({
     resolver: zodResolver(makeProposalSchema),
     mode: "onChange",
   });
 
+  // Récupérer le cook_profile_id si non fourni
+  useEffect(() => {
+    const fetchCookProfileId = async () => {
+      if (cookProfileId || !cookId) return;
+      
+      try {
+        // Récupérer le profil du cuisinier via l'API
+        const profiles = await apiClient.getCookProfiles({ limit: 1000 });
+        const cookProfile = profiles.profiles.find((p: any) => p.user?.id === cookId || p.user_id === cookId);
+        if (cookProfile?.id) {
+          setCookProfileId(cookProfile.id);
+        }
+      } catch (error) {
+        console.error("Erreur lors de la récupération du profil cuisinier:", error);
+      }
+    };
+
+    if (isOpen) {
+      fetchCookProfileId();
+    }
+  }, [cookId, cookProfileId, isOpen]);
+
   const onSubmit = async (data: MakeProposalFormData) => {
     try {
       setIsSubmitting(true);
+
+      if (!cookProfileId) {
+        showErrorToast("Impossible de récupérer le profil du cuisinier. Veuillez réessayer.");
+        return;
+      }
+
+      if (!addressCoordinates) {
+        showErrorToast("Veuillez sélectionner une adresse valide sur la carte.");
+        return;
+      }
+
+      // Parser le créneau horaire pour extraire start_time et end_time
+      let start_time: string | undefined;
+      let end_time: string | undefined;
+      let meal_type: string | undefined;
       
-      // TODO: Appel API pour créer la proposition
-      // await apiClient.createProposal({
-      //   cookId,
-      //   ...data,
-      // });
-      
-      // Simulation
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
-      console.log("Proposition envoyée:", { cookId, ...data });
+      if (data.timeSlot) {
+        if (data.timeSlot.includes("Midi")) {
+          start_time = "12:00:00";
+          end_time = "14:00:00";
+          meal_type = "LUNCH";
+        } else if (data.timeSlot.includes("Dîner")) {
+          start_time = "19:00:00";
+          end_time = "21:00:00";
+          meal_type = "DINNER";
+        }
+      }
+
+      // Créer la proposition directe via l'API
+      await apiClient.createDirectProposal({
+        cook_profile_id: cookProfileId,
+        booking_date: data.date,
+        meal_type,
+        start_time,
+        end_time,
+        number_of_guests: data.numberOfGuests,
+        special_requests: `${data.description}\n\n${data.specialRequests || ""}`,
+        // TODO: Créer l'adresse dans la table addresses et utiliser address_id
+        // Pour l'instant, on passe l'adresse dans special_requests
+      });
+
+      showSuccessToast(`Proposition envoyée à ${cookName} ! Il recevra une notification.`);
       
       reset();
+      setSelectedAddress("");
+      setAddressCoordinates(undefined);
+      setAddressDetails(null);
       onClose();
       
       if (onSuccess) {
@@ -80,8 +153,10 @@ export function MakeProposalModal({
         // Rediriger vers la page des propositions
         router.push("/dashboard/client/proposals");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur lors de l'envoi de la proposition:", error);
+      const errorMessage = error?.response?.data?.message || "Erreur lors de l'envoi de la proposition. Veuillez réessayer.";
+      showErrorToast(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -219,22 +294,67 @@ export function MakeProposalModal({
               </div>
             </div>
 
-            {/* Adresse */}
+            {/* Adresse avec autocomplete Mapbox */}
             <div>
-              <Label htmlFor="address" className="text-foreground">
+              <Label htmlFor="address" className="text-foreground flex items-center gap-2">
                 Adresse complète *
+                {addressCoordinates && (
+                  <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
+                )}
               </Label>
-              <div className="relative">
-                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                <Input
-                  id="address"
-                  placeholder="123 Rue de la Paix, 75001 Paris"
-                  {...register("address")}
-                  className={errors.address ? "border-destructive pl-10" : "pl-10"}
-                />
+              <MapboxAutocomplete
+                value={selectedAddress}
+                onChange={(address, coordinates) => {
+                  setSelectedAddress(address);
+                  setAddressCoordinates(coordinates);
+                  setValue("address", address, { shouldValidate: true });
+                }}
+                placeholder="Rechercher une adresse..."
+                country="FR"
+                onSelect={(suggestion) => {
+                  setAddressCoordinates({
+                    lat: suggestion.latitude,
+                    lng: suggestion.longitude,
+                  });
+                  setAddressDetails({
+                    city: suggestion.city,
+                    postalCode: suggestion.postalCode,
+                    country: suggestion.country,
+                  });
+                }}
+              />
+              <div className="flex items-center justify-between mt-1">
+                {errors.address ? (
+                  <p className="text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="w-4 h-4" />
+                    {errors.address.message}
+                  </p>
+                ) : addressDetails ? (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {addressDetails.city}
+                    {addressDetails.postalCode && `, ${addressDetails.postalCode}`}
+                  </p>
+                ) : null}
               </div>
-              {errors.address && (
-                <p className="mt-1 text-sm text-destructive">{errors.address.message}</p>
+              
+              {/* Carte Mapbox pour visualiser l'adresse */}
+              {addressCoordinates && (
+                <div className="mt-4 rounded-lg overflow-hidden border border-border">
+                  <MapboxMap
+                    center={[addressCoordinates.lat, addressCoordinates.lng]}
+                    zoom={15}
+                    markers={[{
+                      id: "selected-address",
+                      lat: addressCoordinates.lat,
+                      lng: addressCoordinates.lng,
+                      title: selectedAddress || "Adresse sélectionnée",
+                      description: addressDetails?.city || "",
+                      color: "#3b82f6",
+                    }]}
+                    height="200px"
+                  />
+                </div>
               )}
             </div>
 

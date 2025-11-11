@@ -317,16 +317,11 @@ export function RequestsList({ status }: RequestsListProps) {
     setRequests(filteredRequests);
   }, [filteredRequests]);
 
-  if (isLoading || isLoadingBookings || isLoadingProposals) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  // Calculer les coordonnées pour la carte
+  // Calculer les coordonnées pour la carte (AVANT le return conditionnel pour respecter les règles des Hooks)
   const mapMarkers = useMemo(() => {
+    if (isLoading || isLoadingBookings || isLoadingProposals) {
+      return [];
+    }
     return requests
       .filter((req) => {
         const address = req.address || (req as any).location?.address;
@@ -362,15 +357,24 @@ export function RequestsList({ status }: RequestsListProps) {
         };
       })
       .filter((marker): marker is NonNullable<typeof marker> => marker !== null);
-  }, [requests]);
+  }, [requests, isLoading, isLoadingBookings, isLoadingProposals]);
 
-  // Calculer le centre de la carte (moyenne des coordonnées)
+  // Calculer le centre de la carte (moyenne des coordonnées) (AVANT le return conditionnel)
   const mapCenter = useMemo(() => {
     if (mapMarkers.length === 0) return [48.8566, 2.3522] as [number, number]; // Paris par défaut
     const avgLat = mapMarkers.reduce((sum, m) => sum + m.lat, 0) / mapMarkers.length;
     const avgLng = mapMarkers.reduce((sum, m) => sum + m.lng, 0) / mapMarkers.length;
     return [avgLat, avgLng] as [number, number];
   }, [mapMarkers]);
+
+  // Return conditionnel APRÈS tous les Hooks
+  if (isLoading || isLoadingBookings || isLoadingProposals) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (requests.length === 0) {
     return (

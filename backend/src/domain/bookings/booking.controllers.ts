@@ -3,6 +3,7 @@ import { type AuthRequest } from "@core/middleware";
 import { BookingStore } from "@stores/booking.store";
 import { UserStore } from "@stores/user.store";
 import { ProfileStore } from "@stores/profile.store";
+import { NotificationService } from "@core/services/notification.service";
 import { supabaseAdmin } from "@config/supabaseClient";
 import type {
   BookingStatus,
@@ -97,6 +98,74 @@ export const createPublicRequest = async (
       error instanceof Error
         ? error.message
         : "Failed to create public request";
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: errorMessage,
+    });
+  }
+};
+
+/**
+ * Récupérer les propositions reçues par un cuisinier (Flux 2)
+ * GET /api/bookings/received-proposals
+ */
+export const getReceivedProposals = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: "Unauthorized",
+        message: "User not authenticated",
+      });
+      return;
+    }
+
+    // Seuls les cuisiniers peuvent voir leurs propositions reçues
+    const user = await UserStore.getUserById(req.user.id);
+    if (!user || user.role !== "COOK") {
+      res.status(403).json({
+        error: "Forbidden",
+        message: "Only cooks can view received proposals",
+      });
+      return;
+    }
+
+    const { status, limit, offset } = req.query;
+
+    // Récupérer les bookings avec cook_profile_id = profil du cuisinier et status PENDING (propositions directes)
+    const result = await BookingStore.getBookingsForUser(req.user.id, "COOK", {
+      status: status as BookingStatus | undefined,
+      limit: limit ? parseInt(limit as string) : undefined,
+      offset: offset ? parseInt(offset as string) : undefined,
+    });
+
+    // Filtrer uniquement les propositions directes (status PENDING)
+    const receivedProposals = result.bookings.filter(
+      (b) => b.status === "PENDING",
+    );
+
+    // Calculer les stats
+    const stats = {
+      pending: receivedProposals.length,
+      accepted: result.bookings.filter(
+        (b) => b.status === "ACCEPTED" || b.status === "CONFIRMED",
+      ).length,
+      rejected: result.bookings.filter((b) => b.status === "CANCELLED").length,
+    };
+
+    res.status(200).json({
+      bookings: receivedProposals,
+      count: receivedProposals.length,
+      stats,
+    });
+  } catch (error) {
+    console.error("Get received proposals error:", error);
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Failed to get received proposals";
     res.status(500).json({
       error: "Internal Server Error",
       message: errorMessage,
@@ -257,6 +326,51 @@ export const createBooking = async (
       ingredients_available,
       address_id,
     });
+
+    // FLUX 2 : Si c'est une proposition directe (cook_profile_id non-null), notifier le cuisinier
+    if (cook_profile_id) {
+      try {
+        // Récupérer le user_id du cuisinier
+        const { data: cookProfileData } = await supabaseAdmin
+          .from("cook_profiles")
+          .select("user_id")
+          .eq("id", cook_profile_id)
+          .single();
+
+        if (cookProfileData) {
+          const clientName = `${user.first_name} ${user.last_name}`.trim();
+          const bookingDate = booking_date
+            ? new Date(booking_date).toLocaleDateString("fr-FR")
+            : "date non spécifiée";
+          const timeSlot = start_time && end_time
+            ? `${start_time.slice(0, 5)} - ${end_time.slice(0, 5)}`
+            : meal_type === "LUNCH"
+            ? "Midi (12h-14h)"
+            : meal_type === "DINNER"
+            ? "Dîner (19h-21h)"
+            : "Non spécifié";
+
+          // Notifier le cuisinier qu'il a reçu une proposition directe
+          await NotificationService.sendNotification(cookProfileData.user_id, {
+            user_id: cookProfileData.user_id,
+            type: "BOOKING_REQUEST",
+            title: "Nouvelle proposition directe reçue",
+            message: `${clientName} vous a fait une proposition pour le ${bookingDate} à ${timeSlot}.`,
+            action_url: `/dashboard/cook/bookings/${booking.id}`,
+            metadata: {
+              booking_id: booking.id,
+              client_name: clientName,
+              date: bookingDate,
+            },
+          }).catch((err) =>
+            console.error("Failed to send booking request notification:", err),
+          );
+        }
+      } catch (notificationError) {
+        // Ne pas bloquer la création si la notification échoue
+        console.error("Failed to send notification:", notificationError);
+      }
+    }
 
     res.status(201).json({
       message: "Booking created successfully",
@@ -595,6 +709,75 @@ export const acceptBooking = async (
       req.user.id,
       user.role as "CLIENT" | "COOK",
     );
+
+    // FLUX 2 : Si le cuisinier accepte une proposition directe, créer la conversation et calculer les montants
+    if (user.role === "COOK" && booking.status === "ACCEPTED") {
+      try {
+        // Récupérer le client_profile_id pour obtenir le user_id du client
+        const { data: clientProfile } = await supabaseAdmin
+          .from("client_profiles")
+          .select("user_id")
+          .eq("id", booking.client_profile_id)
+          .single();
+
+        if (clientProfile) {
+          // Créer automatiquement une conversation entre le client et le cuisinier
+          try {
+            const { MessageStore } = await import("@stores/message.store");
+            await MessageStore.getOrCreateConversation(
+              clientProfile.user_id,
+              req.user.id,
+              booking.id,
+            );
+          } catch (conversationError) {
+            // Ne pas bloquer l'acceptation si la création de conversation échoue
+            console.error(
+              "Failed to create conversation after booking acceptance:",
+              conversationError,
+            );
+          }
+
+          // Calculer les montants pour le paiement en 2 temps (30% / 70%)
+          if (booking.total_price) {
+            const depositAmount = booking.total_price * 0.3; // 30%
+            const remainingAmount = booking.total_price * 0.7; // 70%
+
+            // Mettre à jour le booking avec les montants
+            await supabaseAdmin
+              .from("bookings")
+              .update({
+                deposit_amount: depositAmount,
+                remaining_amount: remainingAmount,
+              })
+              .eq("id", booking.id);
+          }
+
+          // Notifier le client que sa proposition a été acceptée
+          const cookName = `${user.first_name} ${user.last_name}`.trim();
+          const bookingDate = booking.booking_date
+            ? new Date(booking.booking_date).toLocaleDateString("fr-FR")
+            : "date non spécifiée";
+
+          await NotificationService.sendNotification(clientProfile.user_id, {
+            user_id: clientProfile.user_id,
+            type: "BOOKING_ACCEPTED",
+            title: "Proposition acceptée !",
+            message: `${cookName} a accepté votre proposition pour le ${bookingDate}. Vous pouvez maintenant discuter et finaliser les détails.`,
+            action_url: `/dashboard/client/bookings/${booking.id}`,
+            metadata: {
+              booking_id: booking.id,
+              cook_name: cookName,
+              date: bookingDate,
+            },
+          }).catch((err) =>
+            console.error("Failed to send booking accepted notification:", err),
+          );
+        }
+      } catch (flow2Error) {
+        // Ne pas bloquer l'acceptation si les étapes du flux 2 échouent
+        console.error("Failed to process flow 2 steps:", flow2Error);
+      }
+    }
 
     res.status(200).json({
       message: "Booking accepted successfully",

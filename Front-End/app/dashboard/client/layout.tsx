@@ -21,7 +21,14 @@ export default function ClientDashboardLayout({
   // Protection d'authentification au niveau du layout
   const { isAuthenticated, isLoading: isAuthLoading } = useAuthGuard();
 
+  // Initialiser les notifications en temps réel (AVANT le return conditionnel pour respecter les règles des Hooks)
+  useNotifications();
+  
+  // Initialiser les rappels automatiques (AVANT le return conditionnel)
+  useBookingReminders();
+
   // NE PAS AFFICHER LE LAYOUT SI L'UTILISATEUR N'EST PAS AUTHENTIFIÉ
+  // (return conditionnel APRÈS tous les Hooks)
   if (isAuthLoading || !isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -29,12 +36,6 @@ export default function ClientDashboardLayout({
       </div>
     );
   }
-
-  // Initialiser les notifications en temps réel
-  useNotifications();
-  
-  // Initialiser les rappels automatiques
-  useBookingReminders();
 
   return (
     <div className="min-h-screen bg-background flex">

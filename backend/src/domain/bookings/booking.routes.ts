@@ -9,6 +9,7 @@ import {
   cancelBooking,
   getMyProposals,
   getPublicRequests,
+  getReceivedProposals,
 } from "./booking.controllers";
 import { authGuard } from "@core/middleware";
 
@@ -143,6 +144,39 @@ router.post("/", authGuard, createBooking);
  *         description: Forbidden (only clients can view their proposals)
  */
 router.get("/my-proposals", authGuard, getMyProposals);
+
+/**
+ * @swagger
+ * /api/bookings/received-proposals:
+ *   get:
+ *     summary: Get proposals received by a cook (Flux 2: Direct proposals)
+ *     description: Returns bookings with status PENDING that were sent directly to the cook
+ *     tags: [Bookings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, ACCEPTED, CONFIRMED, CANCELLED]
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: List of received proposals with stats
+ *       403:
+ *         description: Forbidden (only cooks can view received proposals)
+ */
+router.get("/received-proposals", authGuard, getReceivedProposals);
 
 /**
  * @swagger
