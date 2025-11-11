@@ -148,20 +148,27 @@ export class BookingStore {
     }
 
     // Get filtered bookings
+    // IMPORTANT: Les propositions privées sont uniquement les bookings avec un cuisinier assigné
+    // Exclure les demandes publiques (cook_profile_id IS NULL)
     let query = supabaseAdmin
       .from('bookings')
       .select('*', { count: 'exact' })
       .eq('client_profile_id', clientProfile.id);
 
+    // Filtrer pour exclure les demandes publiques (cook_profile_id IS NOT NULL)
+    // En Supabase, on utilise .not() avec 'is' et null pour exclure les valeurs NULL
+    query = query.not('cook_profile_id', 'is', null);
+
     if (statusFilter && statusFilter.length > 0) {
       query = query.in('status', statusFilter);
     }
 
-    // Get stats (all statuses for this client)
+    // Get stats (all statuses for this client, mais uniquement les propositions privées)
     const { data: allBookings } = await supabaseAdmin
       .from('bookings')
       .select('status')
-      .eq('client_profile_id', clientProfile.id);
+      .eq('client_profile_id', clientProfile.id)
+      .not('cook_profile_id', 'is', null); // Exclure les demandes publiques
 
     const stats = {
       pending: allBookings?.filter((b) => b.status === 'PENDING').length || 0,
@@ -189,10 +196,102 @@ export class BookingStore {
       throw new Error(`Failed to get client proposals: ${error.message}`);
     }
 
+    const bookings = (data as Booking[]) || [];
+    
+    // Log pour déboguer
+    console.log(`[BookingStore.getClientProposals] Client ${userId}: ${bookings.length} propositions privées trouvées`);
+    bookings.forEach((b, index) => {
+      console.log(`[BookingStore] Proposition privée #${index + 1}:`, {
+        id: b.id?.slice(0, 8),
+        status: b.status,
+        cook_profile_id: b.cook_profile_id,
+        client_profile_id: b.client_profile_id,
+        booking_date: b.booking_date,
+      });
+    });
+
     return {
-      bookings: (data as Booking[]) || [],
+      bookings,
       count: count || 0,
       stats,
+    };
+  }
+
+  /**
+   * Get public requests (bookings without cook_profile_id, status PENDING)
+   * These are requests that clients have published and cooks can apply to
+   */
+  static async getPublicRequests(
+    filters?: {
+      city?: string;
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<{ bookings: Booking[]; count: number }> {
+    let query = supabaseAdmin
+      .from('bookings')
+      .select('*', { count: 'exact' })
+      .is('cook_profile_id', null)
+      .eq('status', 'PENDING');
+
+    // Apply city filter if provided (requires join with addresses and users)
+    if (filters?.city) {
+      // We'll need to join with addresses and users to filter by city
+      // For now, we'll get all and filter in the application layer
+      // TODO: Optimize with proper join query
+    }
+
+    // Apply pagination
+    if (filters?.limit) {
+      query = query.limit(filters.limit);
+    }
+
+    if (filters?.offset) {
+      query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
+    }
+
+    // Order by booking_date asc (soonest first), then created_at desc
+    query = query.order('booking_date', { ascending: true });
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw new Error(`Failed to get public requests: ${error.message}`);
+    }
+
+    let bookings = (data as Booking[]) || [];
+
+    // Filter by city if provided (requires fetching client profile and user)
+    if (filters?.city && bookings.length > 0) {
+      const filteredBookings: Booking[] = [];
+      for (const booking of bookings) {
+        // Get client profile
+        const { data: clientProfile } = await supabaseAdmin
+          .from('client_profiles')
+          .select('user_id')
+          .eq('id', booking.client_profile_id)
+          .single();
+
+        if (clientProfile) {
+          // Get user to check city
+          const { data: user } = await supabaseAdmin
+            .from('users')
+            .select('city')
+            .eq('id', clientProfile.user_id)
+            .single();
+
+          if (user && user.city?.toLowerCase() === filters.city?.toLowerCase()) {
+            filteredBookings.push(booking);
+          }
+        }
+      }
+      bookings = filteredBookings;
+    }
+
+    return {
+      bookings,
+      count: count || 0,
     };
   }
 
@@ -237,6 +336,8 @@ export class BookingStore {
 
     if (role === 'CLIENT') {
       query = query.eq('client_profile_id', profileId);
+      // IMPORTANT: Pour les clients, on veut TOUS les bookings (y compris ceux avec cook_profile_id = null)
+      // Ne pas filtrer par cook_profile_id pour inclure les demandes publiques
     } else {
       query = query.eq('cook_profile_id', profileId);
     }
@@ -263,8 +364,25 @@ export class BookingStore {
       throw new Error(`Failed to get bookings: ${error.message}`);
     }
 
+    const bookings = (data as Booking[]) || [];
+    
+    // Log pour déboguer
+    if (role === 'CLIENT') {
+      console.log(`[BookingStore.getBookingsForUser] Client ${userId}: ${bookings.length} bookings trouvés`);
+      bookings.forEach((b, index) => {
+        console.log(`[BookingStore] Booking #${index + 1}:`, {
+          id: b.id?.slice(0, 8),
+          status: b.status,
+          cook_profile_id: b.cook_profile_id,
+          cook_profile_id_is_null: b.cook_profile_id === null,
+          client_profile_id: b.client_profile_id,
+          booking_date: b.booking_date,
+        });
+      });
+    }
+
     return {
-      bookings: (data as Booking[]) || [],
+      bookings,
       count: count || 0,
     };
   }

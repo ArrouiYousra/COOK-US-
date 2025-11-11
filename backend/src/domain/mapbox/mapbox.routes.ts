@@ -5,7 +5,8 @@ import {
   searchAddresses,
   calculateDistance,
 } from './mapbox.controllers';
-import { authGuard } from '@core/middleware';
+import { authGuard, type AuthRequest } from '@core/middleware';
+import { type Response } from 'express';
 
 const router = Router();
 
@@ -235,6 +236,63 @@ router.get('/search', authGuard, searchAddresses);
  *         description: Route not found
  */
 router.get('/distance', authGuard, calculateDistance);
+
+/**
+ * @swagger
+ * /api/mapbox/token:
+ *   get:
+ *     summary: Get Mapbox access token for frontend (secured)
+ *     tags: [Mapbox]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Mapbox token retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Mapbox token not configured
+ */
+router.get('/token', authGuard, async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not authenticated',
+      });
+      return;
+    }
+
+    // Retourner le token Mapbox (public token, sécurisé côté backend)
+    const token = process.env.MAPBOX_ACCESS_TOKEN;
+    if (!token || token === 'votre_token_mapbox' || token.trim() === '') {
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Mapbox token not configured. Please set MAPBOX_ACCESS_TOKEN in your .env file with a valid Mapbox token (starts with pk.)',
+      });
+      return;
+    }
+
+    // Vérifier que le token a le bon format
+    if (!token.startsWith('pk.')) {
+      res.status(500).json({
+        error: 'Internal Server Error',
+        message: 'Invalid Mapbox token format. Token must start with "pk."',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      token,
+    });
+  } catch (error) {
+    console.error('Get Mapbox token error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get Mapbox token',
+    });
+  }
+});
 
 export default router;
 

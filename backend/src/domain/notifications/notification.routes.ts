@@ -66,6 +66,50 @@ router.get('/unread-count', authGuard, getUnreadCount);
 
 /**
  * @swagger
+ * /api/notifications/preferences:
+ *   get:
+ *     summary: Get detailed notification preferences
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Notification preferences retrieved successfully
+ */
+router.get('/preferences', authGuard, getNotificationPreferences);
+
+/**
+ * @swagger
+ * /api/notifications/preferences:
+ *   put:
+ *     summary: Update detailed notification preferences
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               booking_request:
+ *                 type: object
+ *                 properties:
+ *                   email:
+ *                     type: boolean
+ *                   sms:
+ *                     type: boolean
+ *                   push:
+ *                     type: boolean
+ *     responses:
+ *       200:
+ *         description: Notification preferences updated successfully
+ */
+router.put('/preferences', authGuard, updateNotificationPreferences);
+
+/**
+ * @swagger
  * /api/notifications/{notificationId}:
  *   get:
  *     summary: Get notification by ID
@@ -178,50 +222,6 @@ router.post('/fcm-token', authGuard, registerFcmToken);
  *         description: FCM token removed successfully
  */
 router.delete('/fcm-token', authGuard, removeFcmToken);
-
-/**
- * @swagger
- * /api/notifications/preferences:
- *   get:
- *     summary: Get detailed notification preferences
- *     tags: [Notifications]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Notification preferences retrieved successfully
- */
-router.get('/preferences', authGuard, getNotificationPreferences);
-
-/**
- * @swagger
- * /api/notifications/preferences:
- *   put:
- *     summary: Update detailed notification preferences
- *     tags: [Notifications]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               booking_request:
- *                 type: object
- *                 properties:
- *                   email:
- *                     type: boolean
- *                   sms:
- *                     type: boolean
- *                   push:
- *                     type: boolean
- *     responses:
- *       200:
- *         description: Notification preferences updated successfully
- */
-router.put('/preferences', authGuard, updateNotificationPreferences);
 
 export default router;
 

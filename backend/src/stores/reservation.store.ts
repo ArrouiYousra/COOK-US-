@@ -1,243 +1,527 @@
 import { supabaseAdmin } from '@config/supabaseClient';
-import type { Reservation } from '../types/database.types';
+import type { Reservation, CreateReservationDTO, ReservationStatus } from '../types/database.types';
 
+/**
+ * Store pour gérer les réservations (propositions des cuisiniers sur demandes publiques)
+ */
 export class ReservationStore {
   /**
-   * Create a reservation (cook applies to a booking)
+   * Créer une proposition (réservation) sur une demande publique
+   * @param cookProfileId - ID du profil cuisinier
+   * @param reservationData - Données de la proposition
+   * @returns La réservation créée
    */
   static async createReservation(
-    bookingId: string,
-    userId: string
+    cookProfileId: string,
+    reservationData: CreateReservationDTO
   ): Promise<Reservation> {
-    // Check if reservation already exists
-    const existing = await this.getReservationByBookingAndUser(bookingId, userId);
-    if (existing) {
-      throw new Error('You have already applied to this booking');
+    // Vérifier que le booking existe et est une demande publique (cook_profile_id IS NULL)
+    const { data: booking, error: bookingError } = await supabaseAdmin
+      .from('bookings')
+      .select('id, cook_profile_id, status, client_profile_id')
+      .eq('id', reservationData.booking_id)
+      .single();
+
+    if (bookingError || !booking) {
+      throw new Error('Demande publique introuvable');
     }
 
+    // Vérifier que c'est bien une demande publique
+    if (booking.cook_profile_id !== null) {
+      throw new Error('Cette demande a déjà un cuisinier assigné');
+    }
+
+    // Vérifier que le statut est PENDING
+    if (booking.status !== 'PENDING') {
+      throw new Error('Cette demande n\'est plus disponible pour des propositions');
+    }
+
+    // Vérifier que le cuisinier n'a pas déjà proposé
+    const { data: existingReservation } = await supabaseAdmin
+      .from('reservations')
+      .select('id')
+      .eq('booking_id', reservationData.booking_id)
+      .eq('cook_profile_id', cookProfileId)
+      .single();
+
+    if (existingReservation) {
+      throw new Error('Vous avez déjà fait une proposition sur cette demande');
+    }
+
+    // Calculer l'expiration (72h par défaut)
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 72);
+
+    // Créer la réservation
     const { data, error } = await supabaseAdmin
       .from('reservations')
       .insert({
-        booking_id: bookingId,
-        user_id: userId,
+        booking_id: reservationData.booking_id,
+        cook_profile_id: cookProfileId,
+        proposed_price: reservationData.proposed_price,
+        proposed_hours: reservationData.proposed_hours || null,
+        proposed_hourly_rate: reservationData.proposed_hourly_rate || null,
+        message: reservationData.message || null,
+        can_do_groceries: reservationData.can_do_groceries || false,
+        can_set_table: reservationData.can_set_table || false,
+        can_do_dishes: reservationData.can_do_dishes || false,
         status: 'PENDING',
+        expires_at: expiresAt.toISOString(),
       })
       .select()
       .single();
 
     if (error) {
-      throw new Error(`Failed to create reservation: ${error.message}`);
+      console.error('Create reservation error:', error);
+      throw new Error(`Erreur lors de la création de la proposition: ${error.message}`);
     }
 
-    return data as Reservation;
+    // Récupérer la réservation créée avec les données enrichies
+    const createdReservation = await this.getReservationById(data.id);
+    if (!createdReservation) {
+      throw new Error('Erreur lors de la récupération de la proposition créée');
+    }
+
+    return createdReservation;
   }
 
   /**
-   * Get reservation by booking and user
+   * Récupérer toutes les propositions pour une demande publique
+   * @param bookingId - ID de la demande publique
+   * @param includeExpired - Inclure les propositions expirées
+   * @returns Liste des propositions enrichies avec les données du cuisinier
    */
-  static async getReservationByBookingAndUser(
+  static async getReservationsByBookingId(
     bookingId: string,
-    userId: string
-  ): Promise<Reservation | null> {
+    includeExpired: boolean = false
+  ): Promise<Reservation[]> {
+    // Récupérer les réservations avec jointure vers cook_profiles et users
+    let query = supabaseAdmin
+      .from('reservations')
+      .select(`
+        *,
+        cook_profiles!inner(
+          id,
+          headline,
+          bio,
+          hourly_rate,
+          average_rating,
+          user_id,
+          users!inner(
+            id,
+            first_name,
+            last_name,
+            avatar_url,
+            email
+          )
+        )
+      `)
+      .eq('booking_id', bookingId)
+      .order('created_at', { ascending: false });
+
+    // Exclure les expirées par défaut
+    if (!includeExpired) {
+      query = query.or('status.neq.EXPIRED,expires_at.is.null,expires_at.gt.now()');
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Get reservations by booking error:', error);
+      throw new Error(`Erreur lors de la récupération des propositions: ${error.message}`);
+    }
+
+    // Transformer les données pour avoir une structure plus simple
+    const reservations = ((data as any[]) || []).map((reservation: any) => {
+      const cookProfile = reservation.cook_profiles;
+      const user = cookProfile?.users;
+
+      return {
+        ...reservation,
+        cook: cookProfile ? {
+          id: cookProfile.id,
+          headline: cookProfile.headline,
+          bio: cookProfile.bio,
+          hourly_rate: cookProfile.hourly_rate,
+          average_rating: cookProfile.average_rating,
+          user: user ? {
+            id: user.id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            avatar_url: user.avatar_url,
+            email: user.email,
+          } : null,
+        } : null,
+      };
+    });
+
+    return reservations as Reservation[];
+  }
+
+  /**
+   * Récupérer une proposition par son ID
+   * @param reservationId - ID de la proposition
+   * @returns La proposition enrichie avec les données du cuisinier ou null
+   */
+  static async getReservationById(reservationId: string): Promise<Reservation | null> {
     const { data, error } = await supabaseAdmin
       .from('reservations')
-      .select('*')
-      .eq('booking_id', bookingId)
-      .eq('user_id', userId)
+      .select(`
+        *,
+        cook_profiles!inner(
+          id,
+          headline,
+          bio,
+          hourly_rate,
+          average_rating,
+          user_id,
+          users!inner(
+            id,
+            first_name,
+            last_name,
+            avatar_url,
+            email
+          )
+        )
+      `)
+      .eq('id', reservationId)
       .single();
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return null;
+        return null; // Not found
       }
-      throw new Error(`Failed to get reservation: ${error.message}`);
+      console.error('Get reservation by id error:', error);
+      throw new Error(`Erreur lors de la récupération de la proposition: ${error.message}`);
     }
 
-    return data as Reservation;
-  }
-
-  /**
-   * Get all reservations for a booking
-   */
-  static async getReservationsByBooking(
-    bookingId: string
-  ): Promise<Reservation[]> {
-    const { data, error } = await supabaseAdmin
-      .from('reservations')
-      .select('*')
-      .eq('booking_id', bookingId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw new Error(`Failed to get reservations: ${error.message}`);
-    }
-
-    return (data as Reservation[]) || [];
-  }
-
-  /**
-   * Get all reservations for a user (cook)
-   */
-  static async getReservationsByUser(
-    userId: string
-  ): Promise<Reservation[]> {
-    const { data, error } = await supabaseAdmin
-      .from('reservations')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      throw new Error(`Failed to get reservations: ${error.message}`);
-    }
-
-    return (data as Reservation[]) || [];
-  }
-
-  /**
-   * Confirm a reservation (client chooses a cook)
-   */
-  static async confirmReservation(
-    reservationId: string,
-    bookingId: string
-  ): Promise<{ reservation: Reservation; booking: any }> {
-    // Get reservation
-    const { data: reservation, error: getError } = await supabaseAdmin
-      .from('reservations')
-      .select('*')
-      .eq('id', reservationId)
-      .single();
-
-    if (getError || !reservation) {
-      throw new Error('Reservation not found');
-    }
-
-    if (reservation.status !== 'PENDING') {
-      throw new Error('Reservation is not pending');
-    }
-
-    // Update reservation status
-    const { data: updatedReservation, error: updateError } = await supabaseAdmin
-      .from('reservations')
-      .update({ status: 'CONFIRMED' })
-      .eq('id', reservationId)
-      .select()
-      .single();
-
-    if (updateError) {
-      throw new Error(`Failed to confirm reservation: ${updateError.message}`);
-    }
-
-    // Cancel all other reservations for this booking
-    await supabaseAdmin
-      .from('reservations')
-      .update({ status: 'CANCELLED' })
-      .eq('booking_id', bookingId)
-      .neq('id', reservationId);
-
-    // Get cook profile from user_id
-    const { data: cookProfile, error: cookError } = await supabaseAdmin
-      .from('cook_profiles')
-      .select('id')
-      .eq('user_id', (reservation as Reservation).user_id)
-      .single();
-
-    if (cookError || !cookProfile) {
-      throw new Error('Cook profile not found for this user');
-    }
-
-    // Update booking with cook_profile_id
-    const { data: booking, error: bookingError } = await supabaseAdmin
-      .from('bookings')
-      .update({
-        cook_profile_id: cookProfile.id,
-        status: 'ACCEPTED',
-      })
-      .eq('id', bookingId)
-      .select()
-      .single();
-
-    if (bookingError) {
-      throw new Error(`Failed to update booking: ${bookingError.message}`);
-    }
+    // Transformer les données pour avoir une structure plus simple
+    const reservation = data as any;
+    const cookProfile = reservation.cook_profiles;
+    const user = cookProfile?.users;
 
     return {
-      reservation: updatedReservation as Reservation,
-      booking,
-    };
+      ...reservation,
+      cook: cookProfile ? {
+        id: cookProfile.id,
+        headline: cookProfile.headline,
+        bio: cookProfile.bio,
+        hourly_rate: cookProfile.hourly_rate,
+        average_rating: cookProfile.average_rating,
+        user: user ? {
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          avatar_url: user.avatar_url,
+          email: user.email,
+        } : null,
+      } : null,
+    } as Reservation;
   }
 
   /**
-   * Cancel a reservation
+   * Récupérer les propositions d'un cuisinier
+   * @param cookProfileId - ID du profil cuisinier
+   * @param status - Filtrer par statut (optionnel)
+   * @returns Liste des propositions du cuisinier enrichies avec les données du cuisinier
    */
-  static async cancelReservation(reservationId: string): Promise<Reservation> {
-    const { data, error } = await supabaseAdmin
-      .from('reservations')
-      .update({ status: 'CANCELLED' })
-      .eq('id', reservationId)
-      .select()
-      .single();
-
-    if (error) {
-      throw new Error(`Failed to cancel reservation: ${error.message}`);
-    }
-
-    return data as Reservation;
-  }
-
-  /**
-   * Get available bookings (public bookings without cook assigned)
-   */
-  static async getAvailableBookings(
-    filters?: {
-      city?: string;
-      meal_type?: string;
-      booking_date?: string;
-      limit?: number;
-      offset?: number;
-    }
-  ): Promise<{ bookings: any[]; count: number }> {
+  static async getCookReservations(
+    cookProfileId: string,
+    status?: ReservationStatus
+  ): Promise<Reservation[]> {
     let query = supabaseAdmin
-      .from('bookings')
-      .select('*, client_profiles!inner(user_id)', { count: 'exact' })
-      .is('cook_profile_id', null)
-      .eq('status', 'PENDING');
+      .from('reservations')
+      .select(`
+        *,
+        cook_profiles!inner(
+          id,
+          headline,
+          bio,
+          hourly_rate,
+          average_rating,
+          user_id,
+          users!inner(
+            id,
+            first_name,
+            last_name,
+            avatar_url,
+            email
+          )
+        )
+      `)
+      .eq('cook_profile_id', cookProfileId)
+      .order('created_at', { ascending: false });
 
-    if (filters?.booking_date) {
-      query = query.eq('booking_date', filters.booking_date);
+    if (status) {
+      query = query.eq('status', status);
     }
 
-    if (filters?.meal_type) {
-      query = query.eq('meal_type', filters.meal_type);
-    }
-
-    if (filters?.limit) {
-      query = query.limit(filters.limit);
-    }
-
-    if (filters?.offset) {
-      query = query.range(filters.offset, filters.offset + (filters.limit || 10) - 1);
-    }
-
-    query = query.order('booking_date', { ascending: true });
-    query = query.order('created_at', { ascending: false });
-
-    const { data, error, count } = await query;
+    const { data, error } = await query;
 
     if (error) {
-      throw new Error(`Failed to get available bookings: ${error.message}`);
+      console.error('Get cook reservations error:', error);
+      throw new Error(`Erreur lors de la récupération des propositions: ${error.message}`);
     }
 
-    // Extract booking data (remove client_profiles join data)
-    const bookings = (data || []).map((item: any) => {
-      const { client_profiles, ...booking } = item;
-      return booking;
+    // Transformer les données pour avoir une structure plus simple
+    const reservations = ((data as any[]) || []).map((reservation: any) => {
+      const cookProfile = reservation.cook_profiles;
+      const user = cookProfile?.users;
+
+      return {
+        ...reservation,
+        cook: cookProfile ? {
+          id: cookProfile.id,
+          headline: cookProfile.headline,
+          bio: cookProfile.bio,
+          hourly_rate: cookProfile.hourly_rate,
+          average_rating: cookProfile.average_rating,
+          user: user ? {
+            id: user.id,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            avatar_url: user.avatar_url,
+            email: user.email,
+          } : null,
+        } : null,
+      };
     });
 
+    return reservations as Reservation[];
+  }
+
+  /**
+   * Accepter une proposition (par le client)
+   * @param reservationId - ID de la proposition
+   * @param clientUserId - ID de l'utilisateur client (pour vérification)
+   * @returns La proposition mise à jour
+   */
+  static async acceptReservation(
+    reservationId: string,
+    clientUserId: string
+  ): Promise<Reservation> {
+    // Récupérer la proposition
+    const reservation = await this.getReservationById(reservationId);
+    if (!reservation) {
+      throw new Error('Proposition introuvable');
+    }
+
+    // Vérifier que la proposition est en PENDING
+    if (reservation.status !== 'PENDING') {
+      throw new Error('Cette proposition ne peut plus être acceptée');
+    }
+
+    // Vérifier que le client est bien le propriétaire de la demande
+    const { data: booking } = await supabaseAdmin
+      .from('bookings')
+      .select('client_profile_id')
+      .eq('id', reservation.booking_id)
+      .single();
+
+    if (!booking) {
+      throw new Error('Demande introuvable');
+    }
+
+    // Récupérer le client_profile pour vérifier le user_id
+    const { data: clientProfile } = await supabaseAdmin
+      .from('client_profiles')
+      .select('user_id')
+      .eq('id', booking.client_profile_id)
+      .single();
+
+    if (!clientProfile || clientProfile.user_id !== clientUserId) {
+      throw new Error('Vous n\'êtes pas autorisé à accepter cette proposition');
+    }
+
+    // Mettre à jour le statut (le trigger SQL s'occupera du reste)
+    const { error: updateError } = await supabaseAdmin
+      .from('reservations')
+      .update({
+        status: 'ACCEPTED',
+        accepted_at: new Date().toISOString(),
+      })
+      .eq('id', reservationId);
+
+    if (updateError) {
+      console.error('Accept reservation error:', updateError);
+      throw new Error(`Erreur lors de l'acceptation de la proposition: ${updateError.message}`);
+    }
+
+    // Le trigger SQL a déjà mis à jour le booking et rejeté les autres propositions
+    // Récupérer la proposition mise à jour avec les données enrichies
+    return await this.getReservationById(reservationId) as Reservation;
+  }
+
+  /**
+   * Refuser une proposition (par le client)
+   * @param reservationId - ID de la proposition
+   * @param clientUserId - ID de l'utilisateur client (pour vérification)
+   * @param rejectionReason - Raison du refus (optionnel)
+   * @returns La proposition mise à jour
+   */
+  static async rejectReservation(
+    reservationId: string,
+    clientUserId: string,
+    rejectionReason?: string
+  ): Promise<Reservation> {
+    // Récupérer la proposition
+    const reservation = await this.getReservationById(reservationId);
+    if (!reservation) {
+      throw new Error('Proposition introuvable');
+    }
+
+    // Vérifier que la proposition est en PENDING
+    if (reservation.status !== 'PENDING') {
+      throw new Error('Cette proposition ne peut plus être refusée');
+    }
+
+    // Vérifier que le client est bien le propriétaire de la demande
+    const { data: booking } = await supabaseAdmin
+      .from('bookings')
+      .select('client_profile_id')
+      .eq('id', reservation.booking_id)
+      .single();
+
+    if (!booking) {
+      throw new Error('Demande introuvable');
+    }
+
+    // Récupérer le client_profile pour vérifier le user_id
+    const { data: clientProfile } = await supabaseAdmin
+      .from('client_profiles')
+      .select('user_id')
+      .eq('id', booking.client_profile_id)
+      .single();
+
+    if (!clientProfile || clientProfile.user_id !== clientUserId) {
+      throw new Error('Vous n\'êtes pas autorisé à refuser cette proposition');
+    }
+
+    // Mettre à jour le statut
+    const { error: updateError } = await supabaseAdmin
+      .from('reservations')
+      .update({
+        status: 'REJECTED',
+        rejected_at: new Date().toISOString(),
+        rejection_reason: rejectionReason || null,
+      })
+      .eq('id', reservationId);
+
+    if (updateError) {
+      console.error('Reject reservation error:', updateError);
+      throw new Error(`Erreur lors du refus de la proposition: ${updateError.message}`);
+    }
+
+    // Récupérer la proposition mise à jour avec les données enrichies
+    return await this.getReservationById(reservationId) as Reservation;
+  }
+
+  /**
+   * Annuler une proposition (par le cuisinier)
+   * @param reservationId - ID de la proposition
+   * @param cookProfileId - ID du profil cuisinier (pour vérification)
+   * @param cancellationReason - Raison de l'annulation (optionnel)
+   * @returns La proposition mise à jour
+   */
+  static async cancelReservation(
+    reservationId: string,
+    cookProfileId: string,
+    cancellationReason?: string
+  ): Promise<Reservation> {
+    // Récupérer la proposition
+    const reservation = await this.getReservationById(reservationId);
+    if (!reservation) {
+      throw new Error('Proposition introuvable');
+    }
+
+    // Vérifier que le cuisinier est bien le propriétaire de la proposition
+    if (reservation.cook_profile_id !== cookProfileId) {
+      throw new Error('Vous n\'êtes pas autorisé à annuler cette proposition');
+    }
+
+    // Vérifier que la proposition peut être annulée
+    if (reservation.status === 'ACCEPTED') {
+      throw new Error('Une proposition acceptée ne peut pas être annulée');
+    }
+
+    if (reservation.status === 'CANCELLED' || reservation.status === 'REJECTED') {
+      throw new Error('Cette proposition est déjà annulée ou refusée');
+    }
+
+    // Mettre à jour le statut
+    const { error: updateError } = await supabaseAdmin
+      .from('reservations')
+      .update({
+        status: 'CANCELLED',
+        cancelled_at: new Date().toISOString(),
+        cancellation_reason: cancellationReason || null,
+      })
+      .eq('id', reservationId);
+
+    if (updateError) {
+      console.error('Cancel reservation error:', updateError);
+      throw new Error(`Erreur lors de l'annulation de la proposition: ${updateError.message}`);
+    }
+
+    // Récupérer la proposition mise à jour avec les données enrichies
+    return await this.getReservationById(reservationId) as Reservation;
+  }
+
+  /**
+   * Récupérer les statistiques des propositions pour une demande publique
+   * @param bookingId - ID de la demande publique
+   * @returns Statistiques des propositions
+   */
+  static async getReservationStats(bookingId: string): Promise<{
+    total: number;
+    pending: number;
+    accepted: number;
+    rejected: number;
+    cancelled: number;
+    expired: number;
+  }> {
+    const { data, error } = await supabaseAdmin
+      .from('reservations')
+      .select('status')
+      .eq('booking_id', bookingId);
+
+    if (error) {
+      console.error('Get reservation stats error:', error);
+      throw new Error(`Erreur lors de la récupération des statistiques: ${error.message}`);
+    }
+
+    const reservations = (data || []) as { status: ReservationStatus }[];
+
     return {
-      bookings,
-      count: count || 0,
+      total: reservations.length,
+      pending: reservations.filter((r) => r.status === 'PENDING').length,
+      accepted: reservations.filter((r) => r.status === 'ACCEPTED').length,
+      rejected: reservations.filter((r) => r.status === 'REJECTED').length,
+      cancelled: reservations.filter((r) => r.status === 'CANCELLED').length,
+      expired: reservations.filter((r) => r.status === 'EXPIRED').length,
     };
   }
-}
 
+  /**
+   * Expirer automatiquement les propositions expirées
+   * (À appeler via un cron job)
+   */
+  static async expireOldReservations(): Promise<number> {
+    // Utiliser la fonction SQL créée
+    const { error } = await supabaseAdmin.rpc('expire_old_reservations');
+
+    if (error) {
+      console.error('Expire old reservations error:', error);
+      throw new Error(`Erreur lors de l'expiration des propositions: ${error.message}`);
+    }
+
+    // La fonction SQL retourne void, donc on ne peut pas compter
+    // On peut faire une requête pour compter les expirées
+    const { count } = await supabaseAdmin
+      .from('reservations')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'EXPIRED');
+
+    return count || 0;
+  }
+}

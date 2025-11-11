@@ -1,6 +1,9 @@
 import { type Response } from 'express';
 import { type AuthRequest } from '@core/middleware';
 import { MapboxService } from '@core/services/mapbox.service';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // ============ MAPBOX ============
 
@@ -142,7 +145,7 @@ export const searchAddresses = async (req: AuthRequest, res: Response): Promise<
     );
 
     res.status(200).json({
-      results,
+      suggestions: results,
       count: results.length,
     });
   } catch (error) {

@@ -1,0 +1,20 @@
+# Configuration Render pour déploiement automatique
+# Ce fichier est optionnel mais facilite la configuration
+
+services:
+  - type: web
+    name: cook-us-backend
+    runtime: node
+    region: frankfurt  # Choisissez: oregon, frankfurt, singapore, mumbai, sydney
+    plan: free  # free ou starter ($7/mois)
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Les autres variables d'environnement doivent être ajoutées manuellement
+      # dans le dashboard Render pour des raisons de sécurité
+    healthCheckPath: /health
+

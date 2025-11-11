@@ -182,7 +182,7 @@ export class MapboxService {
         return [];
       }
 
-      return response.body.features.map((feature) => {
+      return response.body.features.map((feature: any) => {
         const [longitude, latitude] = feature.center;
         const context = feature.context || [];
         const city = context.find((c: any) => c.id?.startsWith('place'))?.text;

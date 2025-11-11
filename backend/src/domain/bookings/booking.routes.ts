@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import {
   createBooking,
+  createPublicRequest,
   getBookings,
   getBookingById,
   acceptBooking,
   rejectBooking,
   cancelBooking,
   getMyProposals,
+  getPublicRequests,
 } from './booking.controllers';
 import { authGuard } from '@core/middleware';
 
@@ -141,6 +143,104 @@ router.post('/', authGuard, createBooking);
  *         description: Forbidden (only clients can view their proposals)
  */
 router.get('/my-proposals', authGuard, getMyProposals);
+
+/**
+ * @swagger
+ * /api/bookings/public:
+ *   get:
+ *     summary: Get public requests (bookings without assigned cook)
+ *     description: Returns public requests that cooks can apply to. Only accessible by cooks.
+ *     tags: [Bookings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: city
+ *         schema:
+ *           type: string
+ *         description: Filter by client city
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: List of public requests
+ *       403:
+ *         description: Forbidden (only cooks can view public requests)
+ */
+router.get('/public', authGuard, getPublicRequests);
+
+/**
+ * @swagger
+ * /api/bookings/public:
+ *   post:
+ *     summary: Create a public request (without assigned cook)
+ *     description: Creates a public request that cooks can apply to. cook_profile_id is not required.
+ *     tags: [Bookings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - booking_date
+ *             properties:
+ *               booking_date:
+ *                 type: string
+ *                 format: date
+ *                 example: "2025-01-15"
+ *               meal_type:
+ *                 type: string
+ *                 enum: [BREAKFAST, LUNCH, DINNER, BRUNCH]
+ *               start_time:
+ *                 type: string
+ *                 format: time
+ *                 example: "18:00:00"
+ *               end_time:
+ *                 type: string
+ *                 format: time
+ *                 example: "20:00:00"
+ *               number_of_guests:
+ *                 type: integer
+ *               need_groceries:
+ *                 type: boolean
+ *               need_table_setting:
+ *                 type: boolean
+ *               need_dishes:
+ *                 type: boolean
+ *               dietary_restrictions:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               allergies:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               special_requests:
+ *                 type: string
+ *               ingredients_available:
+ *                 type: string
+ *               address_id:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Public request created successfully
+ *       400:
+ *         description: Bad request
+ *       403:
+ *         description: Forbidden (only clients can create public requests)
+ */
+router.post('/public', authGuard, createPublicRequest);
 
 /**
  * @swagger

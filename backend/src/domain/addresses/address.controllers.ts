@@ -70,7 +70,7 @@ export const getClientAddresses = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    const clientProfile = await ProfileStore.getClientProfileById(clientId);
+    const clientProfile = await ProfileStore.getClientProfileByUserId(clientId);
     if (!clientProfile) {
       res.status(404).json({
         error: 'Not Found',

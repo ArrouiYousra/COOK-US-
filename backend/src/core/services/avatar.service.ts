@@ -7,7 +7,7 @@ const AVATAR_BUCKET = process.env.SUPABASE_STORAGE_AVATAR_BUCKET ?? 'avatars';
 
 const extractBase64Payload = (base64: string): { buffer: Buffer; contentType: string } => {
   const matches = base64.match(/^data:(.*?);base64,(.+)$/);
-  if (!matches || matches.length !== 3) {
+  if (!matches || matches.length !== 3 || !matches[1] || !matches[2]) {
     throw new Error('Format de fichier invalide (base64 attendu)');
   }
 
@@ -26,9 +26,52 @@ const extractBase64Payload = (base64: string): { buffer: Buffer; contentType: st
   return { buffer, contentType };
 };
 
-const ensureBucketConfigured = (): void => {
+/**
+ * Vérifier et créer le bucket s'il n'existe pas
+ */
+const ensureBucketConfigured = async (): Promise<void> => {
   if (!AVATAR_BUCKET) {
     throw new Error('La variable SUPABASE_STORAGE_AVATAR_BUCKET doit être configurée pour l\'upload d\'avatar');
+  }
+
+  try {
+    // Vérifier si le bucket existe
+    const { data: buckets, error: listError } = await supabaseAdmin.storage.listBuckets();
+    
+    if (listError) {
+      console.error('Erreur lors de la vérification des buckets:', listError);
+      throw new Error(`Impossible de vérifier les buckets: ${listError.message}`);
+    }
+
+    const bucketExists = buckets?.some(bucket => bucket.name === AVATAR_BUCKET);
+    
+    if (!bucketExists) {
+      console.log(`Le bucket "${AVATAR_BUCKET}" n'existe pas, tentative de création...`);
+      
+      // Créer le bucket
+      const { error: createError } = await supabaseAdmin.storage.createBucket(AVATAR_BUCKET, {
+        public: true, // Rendre le bucket public pour que les avatars soient accessibles
+        fileSizeLimit: 5242880, // 5 MB
+        allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      });
+
+      if (createError) {
+        console.error('Erreur lors de la création du bucket:', createError);
+        throw new Error(`Impossible de créer le bucket "${AVATAR_BUCKET}": ${createError.message}. Veuillez créer le bucket manuellement dans Supabase Dashboard.`);
+      }
+
+      console.log(`Bucket "${AVATAR_BUCKET}" créé avec succès`);
+    } else {
+      console.log(`Bucket "${AVATAR_BUCKET}" existe déjà`);
+    }
+  } catch (error) {
+    // Si c'est une erreur que nous avons déjà formatée, la relancer
+    if (error instanceof Error && error.message.includes('Impossible')) {
+      throw error;
+    }
+    // Sinon, formater l'erreur
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Erreur lors de la configuration du bucket "${AVATAR_BUCKET}": ${errorMessage}`);
   }
 };
 
@@ -55,7 +98,7 @@ export class AvatarService {
     userId: string,
     avatarBase64: string
   ): Promise<string> {
-    ensureBucketConfigured();
+    await ensureBucketConfigured();
 
     const { buffer, contentType } = extractBase64Payload(avatarBase64);
     const storagePath = buildFilePath(userId, contentType);
@@ -96,16 +139,16 @@ export class AvatarService {
    * @param avatarUrl URL publique de l'avatar
    */
   static async deleteAvatar(avatarUrl: string): Promise<void> {
-    ensureBucketConfigured();
+    await ensureBucketConfigured();
 
     // Extraire le chemin depuis l'URL
     const urlParts = avatarUrl.split('/storage/v1/object/public/');
-    if (urlParts.length !== 2) {
+    if (urlParts.length !== 2 || !urlParts[1]) {
       throw new Error('URL d\'avatar invalide');
     }
 
     const pathParts = urlParts[1].split('/');
-    if (pathParts[0] !== AVATAR_BUCKET) {
+    if (!pathParts[0] || pathParts[0] !== AVATAR_BUCKET) {
       throw new Error(`L'URL ne correspond pas au bucket ${AVATAR_BUCKET}`);
     }
 

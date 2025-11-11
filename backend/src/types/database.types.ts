@@ -19,6 +19,13 @@ export type NotificationType =
   | 'DISPUTE_OPENED'
   | 'PROFILE_APPROVED'
   | 'PROFILE_REJECTED'
+  | 'RESERVATION_CREATED'      // Nouvelle proposition créée (cuisinier)
+  | 'RESERVATION_ACCEPTED'     // Proposition acceptée (cuisinier)
+  | 'RESERVATION_REJECTED'     // Proposition refusée (cuisinier)
+  | 'RESERVATION_CANCELLED'    // Proposition annulée (cuisinier)
+  | 'PROPOSAL_RECEIVED'        // Nouvelle proposition reçue (client)
+  | 'PROPOSAL_ACCEPTED'         // Proposition acceptée (client)
+  | 'PROPOSAL_REJECTED'         // Proposition refusée (client)
   | 'SYSTEM';
 export type AddressType = 'HOME' | 'VACATION_RENTAL' | 'WORK' | 'OTHER';
 export type DietaryRestriction = 'VEGETARIAN' | 'VEGAN' | 'GLUTEN_FREE' | 'LACTOSE_FREE' | 'HALAL' | 'KOSHER' | 'LOW_CARB' | 'KETO' | 'PALEO' | 'DIABETIC';
@@ -184,7 +191,7 @@ export interface CreateClientProfileDTO {
 export interface Booking {
   id: string;
   client_profile_id: string;
-  cook_profile_id: string;
+  cook_profile_id: string | null; // NULL for public requests, non-NULL when cook assigned
   booking_date: string; // DATE
   meal_type: MealType | null;
   start_time: string | null; // TIME
@@ -208,6 +215,13 @@ export interface Booking {
   payment_intent_id: string | null;
   payment_status: string | null;
   paid_at: string | null;
+  // Paiement en 2 temps (ajouté via migration)
+  deposit_amount: number | null; // Montant de l'acompte (30%)
+  remaining_amount: number | null; // Montant restant (70%)
+  deposit_paid_at: string | null; // Date de paiement de l'acompte
+  remaining_paid_at: string | null; // Date de paiement du solde
+  deposit_payment_intent_id: string | null; // Stripe payment intent pour l'acompte
+  remaining_payment_intent_id: string | null; // Stripe payment intent pour le solde
   address_id: string | null; // Reference to addresses table
   cancelled_at: string | null;
   cancelled_by: string | null; // UUID
@@ -221,16 +235,50 @@ export interface Booking {
   updated_at: string;
 }
 
-// Reservation Status ENUM
-export type ReservationStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
+// Reservation Status ENUM (mise à jour pour correspondre à la table SQL)
+export type ReservationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
 
 // Reservations table (for cooks to apply to public bookings)
+// Mise à jour pour correspondre à la structure SQL complète
 export interface Reservation {
   id: string;
-  booking_id: string;
-  user_id: string; // Cook user_id
+  booking_id: string; // Référence à la demande publique (booking avec cook_profile_id = NULL)
+  cook_profile_id: string; // Le cuisinier qui fait la proposition (pas user_id)
   status: ReservationStatus;
+  // Détails de la proposition
+  proposed_price: number; // Prix total proposé
+  proposed_hours: number | null; // Nombre d'heures proposées
+  proposed_hourly_rate: number | null; // Tarif horaire proposé
+  message: string | null; // Message personnalisé du cuisinier
+  // Services additionnels proposés
+  can_do_groceries: boolean;
+  can_set_table: boolean;
+  can_do_dishes: boolean;
+  // Dates importantes
+  expires_at: string | null; // Date d'expiration de la proposition (72h par défaut)
+  accepted_at: string | null; // Date d'acceptation par le client
+  rejected_at: string | null; // Date de refus par le client
+  cancelled_at: string | null; // Date d'annulation par le cuisinier
+  // Raison du refus/annulation
+  rejection_reason: string | null;
+  cancellation_reason: string | null;
   created_at: string;
+  updated_at: string;
+  // Données enrichies (optionnel, ajouté par le store)
+  cook?: {
+    id: string;
+    headline: string;
+    bio?: string;
+    hourly_rate: number;
+    average_rating?: number;
+    user?: {
+      id: string;
+      first_name: string;
+      last_name: string;
+      avatar_url?: string;
+      email: string;
+    };
+  };
 }
 
 // DTOs for creating bookings
@@ -249,6 +297,25 @@ export interface CreateBookingDTO {
   special_requests?: string;
   ingredients_available?: string;
   address_id?: string; // Reference to addresses table
+}
+
+// DTOs for creating reservations (propositions des cuisiniers)
+export interface CreateReservationDTO {
+  booking_id: string; // ID de la demande publique
+  proposed_price: number; // Prix total proposé
+  proposed_hours?: number; // Nombre d'heures proposées
+  proposed_hourly_rate?: number; // Tarif horaire proposé
+  message?: string; // Message personnalisé du cuisinier
+  can_do_groceries?: boolean; // Le cuisinier peut faire les courses
+  can_set_table?: boolean; // Le cuisinier peut mettre la table
+  can_do_dishes?: boolean; // Le cuisinier peut faire la vaisselle
+}
+
+// DTOs for updating reservation status
+export interface UpdateReservationStatusDTO {
+  status: 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+  rejection_reason?: string; // Raison du refus (si status = 'REJECTED')
+  cancellation_reason?: string; // Raison de l'annulation (si status = 'CANCELLED')
 }
 
 // Message/Conversation tables (according to SQL schema)
@@ -587,51 +654,6 @@ export interface CreatePaymentMethodDTO {
 export interface CreateTransactionDTO {
   type: TransactionType;
   booking_id?: string;
-  from_user_id?: string;
-  to_user_id?: string;
-  amount: number;
-  currency?: string;
-  stripe_payment_id?: string;
-  stripe_transfer_id?: string;
-  stripe_refund_id?: string;
-  description?: string;
-  metadata?: Record<string, any>;
-}
-
-// Client dietary preferences (M:N tables)
-export type CuisineType = 
-  | 'FRENCH'
-  | 'ITALIAN'
-  | 'ASIAN'
-  | 'MEDITERRANEAN'
-  | 'VEGETARIAN'
-  | 'VEGAN'
-  | 'HEALTHY'
-  | 'TRADITIONAL'
-  | 'GASTRONOMIC'
-  | 'COMFORT_FOOD'
-  | 'INTERNATIONAL'
-  | 'FUSION'
-  | 'SEAFOOD'
-  | 'GRILLED'
-  | 'PASTRY';
-
-export interface ClientDietaryRestriction {
-  client_profile_id: string;
-  restriction: DietaryRestriction;
-}
-
-export interface ClientAllergy {
-  client_profile_id: string;
-  allergy: Allergy;
-}
-
-export interface ClientFavoriteCuisine {
-  client_profile_id: string;
-  cuisine: CuisineType;
-}
-
-
   from_user_id?: string;
   to_user_id?: string;
   amount: number;

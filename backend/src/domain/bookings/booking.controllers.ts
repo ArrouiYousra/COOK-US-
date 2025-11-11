@@ -3,7 +3,98 @@ import { type AuthRequest } from '@core/middleware';
 import { BookingStore } from '@stores/booking.store';
 import { UserStore } from '@stores/user.store';
 import { ProfileStore } from '@stores/profile.store';
+import { supabaseAdmin } from '@config/supabaseClient';
 import type { BookingStatus, CancellationReason } from '../../types/database.types';
+
+export const createPublicRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not authenticated',
+      });
+      return;
+    }
+
+    // Only clients can create public requests
+    const user = await UserStore.getUserById(req.user.id);
+    if (!user || user.role !== 'CLIENT') {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only clients can create public requests',
+      });
+      return;
+    }
+
+    // Get client profile ID
+    const clientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+    if (!clientProfile) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'Client profile not found',
+      });
+      return;
+    }
+
+    const {
+      booking_date,
+      meal_type,
+      start_time,
+      end_time,
+      number_of_guests,
+      need_groceries,
+      need_table_setting,
+      need_dishes,
+      dietary_restrictions,
+      allergies,
+      special_requests,
+      ingredients_available,
+      address_id,
+    } = req.body;
+
+    // Validation - booking_date is required, cook_profile_id is NOT required for public requests
+    if (!booking_date) {
+      res.status(400).json({
+        error: 'Bad Request',
+        message: 'booking_date is required',
+      });
+      return;
+    }
+
+    // Create booking without cook_profile_id (public request)
+    const booking = await BookingStore.createBooking(
+      clientProfile.id,
+      {
+        cook_profile_id: null, // Public request, no cook assigned yet
+        booking_date,
+        meal_type,
+        start_time,
+        end_time,
+        number_of_guests,
+        need_groceries: need_groceries || false,
+        need_table_setting: need_table_setting || false,
+        need_dishes: need_dishes || false,
+        dietary_restrictions,
+        allergies,
+        special_requests,
+        ingredients_available,
+        address_id,
+      }
+    );
+
+    res.status(201).json({
+      message: 'Public request created successfully',
+      booking,
+    });
+  } catch (error) {
+    console.error('Create public request error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create public request';
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: errorMessage,
+    });
+  }
+};
 
 export const getMyProposals = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -226,6 +317,131 @@ export const getBookings = async (req: AuthRequest, res: Response): Promise<void
     res.status(500).json({
       error: 'Internal Server Error',
       message: 'Failed to get bookings',
+    });
+  }
+};
+
+export const getPublicRequests = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not authenticated',
+      });
+      return;
+    }
+
+    const user = await UserStore.getUserById(req.user.id);
+    if (!user) {
+      res.status(404).json({
+        error: 'Not Found',
+        message: 'User not found',
+      });
+      return;
+    }
+
+    // Only cooks can view public requests
+    if (user.role !== 'COOK') {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Only cooks can view public requests',
+      });
+      return;
+    }
+
+    const { city, limit, offset } = req.query;
+
+    const filters: {
+      city?: string;
+      limit?: number;
+      offset?: number;
+    } = {};
+
+    if (city) {
+      filters.city = city as string;
+    }
+
+    if (limit) {
+      filters.limit = parseInt(limit as string, 10);
+    }
+
+    if (offset) {
+      filters.offset = parseInt(offset as string, 10);
+    }
+
+    const result = await BookingStore.getPublicRequests(filters);
+
+    // Enrich bookings with client information
+    const enrichedBookings = await Promise.allSettled(
+      result.bookings.map(async (booking) => {
+        try {
+          // Get client profile
+          const { data: clientProfile } = await supabaseAdmin
+            .from('client_profiles')
+            .select('user_id')
+            .eq('id', booking.client_profile_id)
+            .single();
+
+          if (!clientProfile) {
+            return null;
+          }
+
+          // Get user info
+          const { data: user } = await supabaseAdmin
+            .from('users')
+            .select('id, first_name, last_name, avatar_url, city')
+            .eq('id', clientProfile.user_id)
+            .single();
+
+          if (!user) {
+            return null;
+          }
+
+          // Get address if available
+          let address = null;
+          if (booking.address_id) {
+            const { data: addressData } = await supabaseAdmin
+              .from('addresses')
+              .select('*')
+              .eq('id', booking.address_id)
+              .single();
+            address = addressData;
+          }
+
+          return {
+            ...booking,
+            client: {
+              id: user.id,
+              firstName: user.first_name,
+              lastName: user.last_name,
+              avatarUrl: user.avatar_url,
+              city: user.city,
+            },
+            address,
+          };
+        } catch (error) {
+          console.error(`Error enriching booking ${booking.id}:`, error);
+          return null;
+        }
+      })
+    );
+
+    const validBookings = enrichedBookings
+      .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+      .map((result) => result.value)
+      .filter((booking) => booking !== null);
+
+    res.status(200).json({
+      bookings: validBookings,
+      count: result.count,
+      limit: filters.limit || 10,
+      offset: filters.offset || 0,
+    });
+  } catch (error) {
+    console.error('Get public requests error:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to get public requests',
     });
   }
 };

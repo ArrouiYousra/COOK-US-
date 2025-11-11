@@ -60,6 +60,42 @@ const notificationPreferencesSchema = z.object({
     sms: z.boolean().default(false),
     push: z.boolean().default(true),
   }).optional(),
+  // Préférences pour les réservations (propositions)
+  reservation_created: z.object({
+    email: z.boolean().default(true),
+    sms: z.boolean().default(false),
+    push: z.boolean().default(true),
+  }).optional(),
+  reservation_accepted: z.object({
+    email: z.boolean().default(true),
+    sms: z.boolean().default(true),
+    push: z.boolean().default(true),
+  }).optional(),
+  reservation_rejected: z.object({
+    email: z.boolean().default(true),
+    sms: z.boolean().default(false),
+    push: z.boolean().default(true),
+  }).optional(),
+  reservation_cancelled: z.object({
+    email: z.boolean().default(true),
+    sms: z.boolean().default(false),
+    push: z.boolean().default(true),
+  }).optional(),
+  proposal_received: z.object({
+    email: z.boolean().default(true),
+    sms: z.boolean().default(false),
+    push: z.boolean().default(true),
+  }).optional(),
+  proposal_accepted: z.object({
+    email: z.boolean().default(true),
+    sms: z.boolean().default(true),
+    push: z.boolean().default(true),
+  }).optional(),
+  proposal_rejected: z.object({
+    email: z.boolean().default(true),
+    sms: z.boolean().default(false),
+    push: z.boolean().default(true),
+  }).optional(),
 });
 
 type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
@@ -76,6 +112,14 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
   dispute_opened: { email: true, sms: false, push: true },
   profile_approved: { email: true, sms: false, push: true },
   profile_rejected: { email: true, sms: false, push: true },
+  // Préférences pour les réservations (propositions)
+  reservation_created: { email: true, sms: false, push: true },
+  reservation_accepted: { email: true, sms: true, push: true },
+  reservation_rejected: { email: true, sms: false, push: true },
+  reservation_cancelled: { email: true, sms: false, push: true },
+  proposal_received: { email: true, sms: false, push: true },
+  proposal_accepted: { email: true, sms: true, push: true },
+  proposal_rejected: { email: true, sms: false, push: true },
 };
 
 /**
@@ -102,27 +146,52 @@ export const getNotificationPreferences = async (req: AuthRequest, res: Response
 
     // Récupérer les préférences depuis la colonne notification_preferences (JSONB)
     // Si elle n'existe pas, retourner les valeurs par défaut
-    const { data, error } = await supabaseAdmin
-      .from('users')
-      .select('notification_preferences')
-      .eq('id', req.user.id)
-      .single();
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('notification_preferences')
+        .eq('id', req.user.id)
+        .single();
 
-    if (error && error.code !== 'PGRST116') {
-      throw error;
+      // PGRST116 = "No rows returned" - ce n'est pas une erreur, on utilise les valeurs par défaut
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erreur Supabase lors de la récupération des préférences:', error);
+        // Si la colonne n'existe pas, retourner les valeurs par défaut
+        if (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist')) {
+          console.warn('La colonne notification_preferences n\'existe pas, utilisation des valeurs par défaut');
+          res.status(200).json({
+            preferences: DEFAULT_PREFERENCES,
+          });
+          return;
+        }
+        // Pour toute autre erreur, utiliser les valeurs par défaut plutôt que de throw
+        console.warn('Erreur Supabase, utilisation des valeurs par défaut:', error.message);
+        res.status(200).json({
+          preferences: DEFAULT_PREFERENCES,
+        });
+        return;
+      }
+
+      const preferences = (data?.notification_preferences as NotificationPreferences) || DEFAULT_PREFERENCES;
+
+      res.status(200).json({
+        preferences,
+      });
+      return;
+    } catch (dbError: any) {
+      // Si erreur de base de données, retourner les valeurs par défaut
+      console.error('Erreur lors de la récupération des préférences depuis la DB:', dbError);
+      res.status(200).json({
+        preferences: DEFAULT_PREFERENCES,
+      });
+      return;
     }
-
-    const preferences = (data?.notification_preferences as NotificationPreferences) || DEFAULT_PREFERENCES;
-
+  } catch (error: any) {
+    // Dernière ligne de défense - toujours retourner les valeurs par défaut plutôt qu'une erreur 500
+    console.error('Get notification preferences error (catch final):', error);
+    // Même en cas d'erreur inattendue, retourner les valeurs par défaut pour éviter de casser l'UI
     res.status(200).json({
-      preferences,
-    });
-  } catch (error) {
-    console.error('Get notification preferences error:', error);
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Failed to get notification preferences',
-      details: error instanceof Error ? error.message : String(error),
+      preferences: DEFAULT_PREFERENCES,
     });
   }
 };

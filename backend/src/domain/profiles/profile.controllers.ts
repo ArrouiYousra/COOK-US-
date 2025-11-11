@@ -141,7 +141,9 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     let finalAvatarUrl = avatar_url;
     if (avatar_url && typeof avatar_url === 'string' && avatar_url.startsWith('data:')) {
       try {
+        console.log('Upload d\'un nouvel avatar base64...');
         finalAvatarUrl = await AvatarService.uploadAvatarFromBase64(req.user.id, avatar_url);
+        console.log('Avatar uploadé avec succès, URL:', finalAvatarUrl);
       } catch (error) {
         console.error('Erreur lors de l\'upload de l\'avatar:', error);
         res.status(400).json({
@@ -150,6 +152,10 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
         });
         return;
       }
+    } else if (avatar_url && typeof avatar_url === 'string' && avatar_url.trim() !== '') {
+      // Si c'est une URL existante (pas base64), l'utiliser directement
+      console.log('Conservation de l\'URL avatar existante:', avatar_url);
+      finalAvatarUrl = avatar_url;
     }
 
     // Update user fields
@@ -162,7 +168,12 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
     if (city !== undefined) userUpdates.city = city;
     if (postal_code !== undefined) userUpdates.postal_code = postal_code;
     if (country !== undefined) userUpdates.country = country;
-    if (finalAvatarUrl !== undefined) userUpdates.avatar_url = finalAvatarUrl;
+    // IMPORTANT: Toujours mettre à jour l'avatar si finalAvatarUrl est défini (même si c'est la même URL)
+    // Cela garantit que l'avatar est bien sauvegardé dans la base de données
+    if (finalAvatarUrl !== undefined && finalAvatarUrl !== null && finalAvatarUrl !== '') {
+      userUpdates.avatar_url = finalAvatarUrl;
+      console.log('Mise à jour de l\'avatar:', finalAvatarUrl);
+    }
     if (language !== undefined) userUpdates.language = language;
     if (currency !== undefined) userUpdates.currency = currency;
     if (notifications_enabled !== undefined) userUpdates.notifications_enabled = notifications_enabled;
@@ -171,7 +182,12 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
 
     let updatedUser = user;
     if (Object.keys(userUpdates).length > 0) {
+      console.log('Mise à jour de l\'utilisateur avec:', Object.keys(userUpdates));
+      console.log('Avatar dans userUpdates:', userUpdates.avatar_url);
       updatedUser = await UserStore.updateUser(req.user.id, userUpdates);
+      console.log('Utilisateur mis à jour, avatar_url:', updatedUser.avatar_url);
+    } else {
+      console.log('Aucune mise à jour utilisateur nécessaire');
     }
 
     // Update profile based on role
@@ -336,6 +352,9 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
 
     // Remove sensitive data
     const { password, two_factor_secret, ...safeUser } = updatedUser;
+
+    console.log('Réponse envoyée - avatar_url dans safeUser:', safeUser.avatar_url);
+    console.log('Réponse complète - user:', JSON.stringify(safeUser, null, 2));
 
     res.status(200).json({
       message: 'Profile updated successfully',
