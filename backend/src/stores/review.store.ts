@@ -25,7 +25,9 @@ export class ReviewStore {
       throw new Error("Booking not found");
     }
 
-    if (booking.status !== "COMPLETED") {
+    // Accept multiple status variants for completed bookings
+    const completedStatuses = ["COMPLETED", "completed", "done"];
+    if (!completedStatuses.includes(booking.status)) {
       throw new Error("Can only review completed bookings");
     }
 

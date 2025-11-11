@@ -49,6 +49,7 @@ export default function BookingDetailsPage() {
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
+  const [hasReview, setHasReview] = useState(false);
   const { showErrorToast, showSuccessToast } = useNotificationToast();
 
   // Charger la réservation
@@ -68,6 +69,19 @@ export default function BookingDetailsPage() {
         }
 
         setBooking(foundBooking);
+
+        // Vérifier si un avis existe déjà pour cette réservation
+        try {
+          const reviewData = await apiClient.getReviewByBooking(bookingId);
+          if (reviewData.review) {
+            setHasReview(true);
+          }
+        } catch (err: any) {
+          // Si l'erreur est 404, c'est normal (pas d'avis encore)
+          if (err.response?.status !== 404) {
+            console.warn("Impossible de vérifier l'existence d'un avis:", err);
+          }
+        }
 
         // Charger les infos du cuisinier
         const cookId = foundBooking.cookId;
@@ -473,8 +487,8 @@ export default function BookingDetailsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Bouton Laisser un avis (si terminée) */}
-      {mappedStatus === "done" && (
+      {/* Bouton Laisser un avis (si terminée et pas encore d'avis) */}
+      {mappedStatus === "done" && !hasReview && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -494,6 +508,20 @@ export default function BookingDetailsPage() {
               Laisser un avis
             </Link>
           </Button>
+        </motion.div>
+      )}
+      
+      {/* Message si avis déjà laissé */}
+      {mappedStatus === "done" && hasReview && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-card border border-border rounded-xl p-6 text-center"
+        >
+          <p className="text-muted-foreground">
+            Vous avez déjà laissé un avis pour cette réservation
+          </p>
         </motion.div>
       )}
     </div>

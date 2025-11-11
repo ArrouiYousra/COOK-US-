@@ -34,24 +34,53 @@ export default function ReviewPage() {
   const [booking, setBooking] = useState<any>(null);
   const [cook, setCook] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [existingReview, setExistingReview] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Charger la réservation
+  // Charger la réservation et vérifier si un avis existe déjà
   useEffect(() => {
     const loadBooking = async () => {
       setIsLoading(true);
+      setError(null);
       try {
         const bookingsData = await apiClient.getBookings({ limit: 1000 });
         const foundBooking = bookingsData.bookings.find((b: any) => b.id === bookingId);
 
         if (!foundBooking) {
+          setError("Réservation introuvable");
+          setIsLoading(false);
+          return;
+        }
+
+        // Vérifier que la réservation est terminée
+        const isCompleted = 
+          foundBooking.status === "COMPLETED" || 
+          foundBooking.status === "completed" || 
+          foundBooking.status === "done";
+        
+        if (!isCompleted) {
+          setError("Vous ne pouvez laisser un avis que pour une réservation terminée");
           setIsLoading(false);
           return;
         }
 
         setBooking(foundBooking);
 
+        // Vérifier si un avis existe déjà
+        try {
+          const reviewData = await apiClient.getReviewByBooking(bookingId);
+          if (reviewData.review) {
+            setExistingReview(reviewData.review);
+          }
+        } catch (err: any) {
+          // Si l'erreur est 404, c'est normal (pas d'avis encore)
+          if (err.response?.status !== 404) {
+            console.warn("Impossible de vérifier l'existence d'un avis:", err);
+          }
+        }
+
         // Charger les infos du cuisinier
-        const cookId = foundBooking.cookId;
+        const cookId = foundBooking.cookId || foundBooking.cook_profile_id;
         if (cookId) {
           try {
             const cookProfiles = await apiClient.getCookProfiles({ limit: 1000 });
@@ -70,8 +99,9 @@ export default function ReviewPage() {
             console.warn("Impossible de charger le profil du cuisinier:", err);
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Erreur lors du chargement de la réservation:", err);
+        setError(err.response?.data?.message || "Impossible de charger la réservation");
       } finally {
         setIsLoading(false);
       }
@@ -90,13 +120,31 @@ export default function ReviewPage() {
     );
   }
 
-  if (!booking) {
+  if (error || !booking) {
     return (
       <div className="text-center py-12">
-        <p className="text-muted-foreground mb-4">Réservation introuvable</p>
+        <p className="text-destructive mb-4">{error || "Réservation introuvable"}</p>
         <Button asChild variant="outline">
           <Link href="/dashboard/client/bookings">Retour aux réservations</Link>
         </Button>
+      </div>
+    );
+  }
+
+  if (existingReview) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-muted-foreground mb-4">Vous avez déjà laissé un avis pour cette réservation</p>
+        <div className="flex gap-4 justify-center">
+          <Button asChild variant="outline">
+            <Link href={`/dashboard/client/bookings/${bookingId}`}>
+              Voir la réservation
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/client/bookings">Retour aux réservations</Link>
+          </Button>
+        </div>
       </div>
     );
   }
@@ -132,24 +180,31 @@ export default function ReviewPage() {
       return;
     }
 
+    if (existingReview) {
+      alert("Un avis existe déjà pour cette réservation");
+      return;
+    }
+
     setIsSubmitting(true);
+    setError(null);
 
-    // TODO: Appel API pour créer l'avis
-    // await createReview({
-    //   bookingId,
-    //   cookId: booking.cookId,
-    //   rating,
-    //   detailedRatings,
-    //   comment,
-    //   photos,
-    //   isRecommended: isRecommending,
-    // });
+    try {
+      await apiClient.createReview({
+        booking_id: bookingId,
+        rating,
+        comment: comment.trim() || undefined,
+      });
 
-    // Simuler un délai
-    setTimeout(() => {
-      setIsSubmitting(false);
+      // Rediriger vers la page de détails de la réservation
       router.push(`/dashboard/client/bookings/${bookingId}`);
-    }, 1000);
+    } catch (err: any) {
+      console.error("Erreur lors de la création de l'avis:", err);
+      const errorMessage = err.response?.data?.message || "Impossible de créer l'avis";
+      setError(errorMessage);
+      alert(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
