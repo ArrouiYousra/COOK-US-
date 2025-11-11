@@ -32,15 +32,19 @@ const nextConfig: NextConfig = {
       // Ajouter d'autres domaines d'images si nécessaire (Freepik, etc.)
     ],
   },
-  // Headers pour Mapbox
+  // Headers pour Mapbox et backend
   async headers() {
+    // Récupérer l'URL du backend depuis les variables d'environnement
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const backendHost = backendUrl.replace(/^https?:\/\//, "").split("/")[0];
+    
     return [
       {
         source: "/:path*",
         headers: [
           {
             key: "Content-Security-Policy",
-            value: "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://api.mapbox.com; style-src 'self' 'unsafe-inline' https://api.mapbox.com; img-src 'self' data: https: blob:; font-src 'self' data:; worker-src blob: 'self'; connect-src 'self' http://localhost:5000 https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com wss://*.supabase.co;",
+            value: `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://api.mapbox.com; style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; worker-src blob: 'self'; connect-src 'self' http://localhost:5000 https://${backendHost} https://*.onrender.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com wss://*.supabase.co https://*.supabase.co;`,
           },
         ],
       },
