@@ -21,6 +21,7 @@ import { z } from "zod";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
 import Image from "next/image";
+import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
 
 const changePasswordSchema = z
   .object({
@@ -52,6 +53,7 @@ type Verify2FAFormData = z.infer<typeof verify2FASchema>;
  */
 export function SecurityTab() {
   const { user } = useAuthStore();
+  const { showSuccessToast, showErrorToast } = useNotificationToast();
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [isSettingUp2FA, setIsSettingUp2FA] = useState(false);
@@ -64,6 +66,7 @@ export function SecurityTab() {
   const [passwordDisable2FA, setPasswordDisable2FA] = useState("");
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDisabling2FA, setIsDisabling2FA] = useState(false);
 
   const {
     register,
@@ -105,11 +108,14 @@ export function SecurityTab() {
       });
 
       setSuccessMessage("Mot de passe changé avec succès !");
+      showSuccessToast("Mot de passe changé avec succès !");
       reset();
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error: any) {
       console.error("Erreur lors du changement de mot de passe:", error);
-      setErrorMessage(error.response?.data?.message || "Impossible de changer le mot de passe");
+      const message = error.response?.data?.message || "Impossible de changer le mot de passe";
+      setErrorMessage(message);
+      showErrorToast(message);
     } finally {
       setIsChangingPassword(false);
     }
@@ -132,7 +138,9 @@ export function SecurityTab() {
       setShow2FASetup(true);
     } catch (error: any) {
       console.error("Erreur lors de l'activation de la 2FA:", error);
-      setErrorMessage(error.response?.data?.message || "Impossible d'activer la 2FA");
+      const message = error.response?.data?.message || "Impossible d'activer la 2FA";
+      setErrorMessage(message);
+      showErrorToast(message);
     } finally {
       setIsSettingUp2FA(false);
     }
@@ -148,29 +156,40 @@ export function SecurityTab() {
       setPassword2FA("");
       reset2FA();
       setSuccessMessage("2FA activée avec succès !");
+      showSuccessToast("2FA activée avec succès !");
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error: any) {
       console.error("Erreur lors de la vérification 2FA:", error);
-      setErrorMessage(error.response?.data?.message || "Code invalide");
+      const message = error.response?.data?.message || "Code invalide";
+      setErrorMessage(message);
+      showErrorToast(message);
     }
   };
 
   const handleDisable2FA = async () => {
     if (!passwordDisable2FA) {
-      setErrorMessage("Veuillez entrer votre mot de passe");
+      const message = "Veuillez entrer votre mot de passe";
+      setErrorMessage(message);
+      showErrorToast(message);
       return;
     }
 
+    setIsDisabling2FA(true);
     try {
       await apiClient.disable2FA(passwordDisable2FA);
       setTwoFactorEnabled(false);
       setShow2FADisable(false);
       setPasswordDisable2FA("");
       setSuccessMessage("2FA désactivée avec succès !");
-      setTimeout(() => setSuccessMessage(null), 3000);
+      showSuccessToast("2FA désactivée avec succès !");
     } catch (error: any) {
       console.error("Erreur lors de la désactivation de la 2FA:", error);
-      setErrorMessage(error.response?.data?.message || "Impossible de désactiver la 2FA");
+      const message = error.response?.data?.message || "Impossible de désactiver la 2FA";
+      setErrorMessage(message);
+      showErrorToast(message);
+    } finally {
+      setTimeout(() => setSuccessMessage(null), 3000);
+      setIsDisabling2FA(false);
     }
   };
 
@@ -300,7 +319,7 @@ export function SecurityTab() {
           <Switch
             checked={twoFactorEnabled}
             onCheckedChange={handleToggle2FA}
-            disabled={isSettingUp2FA}
+            disabled={isSettingUp2FA || isDisabling2FA}
           />
         </div>
 
@@ -469,10 +488,17 @@ export function SecurityTab() {
               <Button
                 variant="destructive"
                 onClick={handleDisable2FA}
-                disabled={!passwordDisable2FA}
+                disabled={!passwordDisable2FA || isDisabling2FA}
                 className="flex-1"
               >
-                Désactiver la 2FA
+                {isDisabling2FA ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Désactivation...
+                  </>
+                ) : (
+                  "Désactiver"
+                )}
               </Button>
             </div>
           </div>

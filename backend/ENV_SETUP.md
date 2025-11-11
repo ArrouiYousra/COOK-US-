@@ -6,6 +6,12 @@
 - `SUPABASE_URL` : ✅ Configuré
 - `SUPABASE_ANON_KEY` : ✅ Configuré
 - `SUPABASE_SERVICE_ROLE_KEY` : ✅ Configuré
+- `GOOGLE_CLIENT_ID` : ✅ Configuré (voir `OAUTH_GOOGLE_SETUP.md`)
+- `GOOGLE_CLIENT_SECRET` : ✅ Configuré (voir `OAUTH_GOOGLE_SETUP.md`)
+- `APPLE_CLIENT_ID` : ❌ À configurer
+- `APPLE_TEAM_ID` : ❌ À configurer
+- `APPLE_KEY_ID` : ❌ À configurer
+- `APPLE_PRIVATE_KEY` : ❌ À configurer
 
 ### Serveur
 - `PORT` : 3000

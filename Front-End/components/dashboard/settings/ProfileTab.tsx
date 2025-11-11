@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/authStore";
 import { Checkbox } from "@/components/ui/checkbox";
 import { apiClient } from "@/lib/api/client";
-// Toast notifications - utiliser alert pour l'instant
+import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
 
 // Mapping des options françaises vers les valeurs API
 const dietaryMapping: Record<string, string> = {
@@ -58,6 +58,7 @@ const reverseAllergyMapping: Record<string, string> = Object.fromEntries(
 export function ProfileTab() {
   const router = useRouter();
   const { user, setUser, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
+  const { showSuccessToast, showErrorToast } = useNotificationToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -171,7 +172,7 @@ export function ProfileTab() {
           return;
         }
         
-        alert("Erreur: Impossible de charger le profil");
+        showErrorToast("Impossible de charger le profil.");
       } finally {
         setIsLoading(false);
       }
@@ -184,15 +185,32 @@ export function ProfileTab() {
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-        // TODO: Upload de l'image vers Supabase Storage
-        // Pour l'instant, on garde juste la preview
-      };
-      reader.readAsDataURL(file);
+    if (!file) {
+      return;
     }
+
+    if (!file.type.startsWith("image/")) {
+      showErrorToast("Format de fichier invalide. Veuillez choisir une image.");
+      e.target.value = "";
+      return;
+    }
+
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      showErrorToast("Image trop volumineuse (max 5 Mo).");
+      e.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setAvatarPreview(reader.result as string);
+    };
+    reader.onerror = () => {
+      showErrorToast("Impossible de lire ce fichier image.");
+      e.target.value = "";
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleToggleOption = async (
@@ -228,7 +246,9 @@ export function ProfileTab() {
       }
     } catch (error: any) {
       console.error(`Erreur lors de la ${isSelected ? "suppression" : "ajout"} de ${option}:`, error);
-      alert(`Erreur: Impossible de ${isSelected ? "supprimer" : "ajouter"} ${option}`);
+      showErrorToast(
+        `Impossible de ${isSelected ? "supprimer" : "ajouter"} ${option}.`,
+      );
     }
   };
 
@@ -265,12 +285,23 @@ export function ProfileTab() {
       }
 
       setSuccessMessage("Profil mis à jour avec succès !");
+      showSuccessToast("Profil mis à jour avec succès !");
+      if (response.user?.avatar_url || response.user?.avatarUrl) {
+        setAvatarPreview(
+          response.user.avatar_url ||
+            response.user.avatarUrl ||
+            avatarPreview,
+        );
+      }
 
       // Effacer le message de succès après 3 secondes
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (error: any) {
       console.error("Erreur lors de la mise à jour du profil:", error);
-      alert(`Erreur: ${error.response?.data?.message || "Impossible de mettre à jour le profil"}`);
+      showErrorToast(
+        error.response?.data?.message ||
+          "Impossible de mettre à jour le profil.",
+      );
     } finally {
       setIsSaving(false);
     }

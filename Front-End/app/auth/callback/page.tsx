@@ -8,6 +8,7 @@ import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import type { UserRole } from "@/types";
 
 const parseOAuthParams = (hash: string, search: URLSearchParams | ReadonlyURLSearchParams) => {
   const fragmentParams = new URLSearchParams(hash.startsWith("#") ? hash.substring(1) : hash);
@@ -40,7 +41,12 @@ function OAuthCallbackContent() {
 
     const handleOAuth = async () => {
       try {
-        const response = await apiClient.refreshSession(params.refreshToken ?? undefined);
+        const response = await apiClient.refreshSession(
+          params.refreshToken ?? undefined,
+          {
+            role: (params.role as UserRole | null) ?? undefined,
+          },
+        );
         applyAuthResponse(response);
 
         const destination =

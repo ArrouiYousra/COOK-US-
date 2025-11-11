@@ -23,6 +23,7 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
+import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
 
 interface PaymentMethod {
   id: string;
@@ -156,10 +157,12 @@ export function PaymentTab() {
   const router = useRouter();
   const { user, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
   const { theme } = useThemeStore();
+  const { showSuccessToast, showErrorToast } = useNotificationToast();
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingCard, setIsAddingCard] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [setupIntentData, setSetupIntentData] = useState<{
     clientSecret: string;
     setupIntentId: string;
@@ -231,7 +234,7 @@ export function PaymentTab() {
 
   const handleAddCard = async () => {
     if (!stripePromise) {
-      alert("Stripe n'est pas configuré. Veuillez contacter le support.");
+      showErrorToast("Stripe n'est pas configuré. Veuillez contacter le support.");
       return;
     }
 
@@ -242,11 +245,14 @@ export function PaymentTab() {
         clientSecret: response.clientSecret,
         setupIntentId: response.setupIntentId,
       });
-      // Ouvrir le dialog seulement après avoir reçu le clientSecret
       setIsDialogOpen(true);
     } catch (error: any) {
       console.error("Erreur lors de la création du Setup Intent:", error);
-      alert(`Erreur: ${error.response?.data?.message || error.message || "Impossible de créer le Setup Intent"}`);
+      showErrorToast(
+        error.response?.data?.message ||
+          error.message ||
+          "Impossible de créer le Setup Intent",
+      );
     } finally {
       setIsAddingCard(false);
     }
@@ -256,7 +262,7 @@ export function PaymentTab() {
     setIsDialogOpen(false);
     setSetupIntentData(null);
     setSuccessMessage("Carte ajoutée avec succès !");
-    setTimeout(() => setSuccessMessage(null), 3000);
+    showSuccessToast("Carte ajoutée avec succès !");
     // Reload payment methods
     const loadPaymentMethods = async () => {
       try {
@@ -280,19 +286,18 @@ export function PaymentTab() {
   };
 
   const handleDeleteCard = async (cardId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer cette carte ?")) {
-      return;
-    }
-
     setIsDeleting(cardId);
     try {
       await apiClient.deletePaymentMethod(cardId);
       setPaymentMethods((prev) => prev.filter((card) => card.id !== cardId));
       setSuccessMessage("Carte supprimée avec succès !");
-      setTimeout(() => setSuccessMessage(null), 3000);
+      showSuccessToast("Carte supprimée avec succès !");
     } catch (error: any) {
       console.error("Erreur lors de la suppression de la carte:", error);
-      alert(`Erreur: ${error.response?.data?.message || "Impossible de supprimer la carte"}`);
+      showErrorToast(
+        error.response?.data?.message ||
+          "Impossible de supprimer la carte",
+      );
     } finally {
       setIsDeleting(null);
     }
@@ -305,13 +310,16 @@ export function PaymentTab() {
         prev.map((card) => ({
           ...card,
           isDefault: card.id === cardId,
-        }))
+        })),
       );
       setSuccessMessage("Carte par défaut mise à jour !");
-      setTimeout(() => setSuccessMessage(null), 3000);
+      showSuccessToast("Carte par défaut mise à jour !");
     } catch (error: any) {
       console.error("Erreur lors de la mise à jour de la carte par défaut:", error);
-      alert(`Erreur: ${error.response?.data?.message || "Impossible de mettre à jour la carte par défaut"}`);
+      showErrorToast(
+        error.response?.data?.message ||
+          "Impossible de mettre à jour la carte par défaut",
+      );
     }
   };
 
@@ -486,7 +494,7 @@ export function PaymentTab() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDeleteCard(card.id)}
+                    onClick={() => setConfirmDeleteId(card.id)}
                     disabled={isDeleting === card.id}
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   >
@@ -517,6 +525,41 @@ export function PaymentTab() {
           </div>
         </div>
       </div>
+      <Dialog open={confirmDeleteId !== null} onOpenChange={(open) => !open && setConfirmDeleteId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Supprimer la carte</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir supprimer cette carte ? Cette action est irréversible.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 pt-4">
+            <Button variant="outline" className="flex-1" onClick={() => setConfirmDeleteId(null)}>
+              Annuler
+            </Button>
+            <Button
+              className="flex-1"
+              variant="destructive"
+              onClick={() => {
+                if (confirmDeleteId) {
+                  handleDeleteCard(confirmDeleteId);
+                }
+                setConfirmDeleteId(null);
+              }}
+              disabled={!!isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Suppression...
+                </>
+              ) : (
+                "Supprimer"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }

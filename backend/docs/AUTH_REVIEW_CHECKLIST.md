@@ -131,6 +131,9 @@
 - [x] ✅ `credentials: true` dans backend
 - [x] ✅ `withCredentials: true` dans apiClient frontend
 - [x] ✅ Origin configuré via `FRONTEND_URL`
+- [ ] 🔁 `GOOGLE_CLIENT_ID` renseigné
+- [ ] 🔁 `GOOGLE_CLIENT_SECRET` renseigné
+- [ ] 🔁 Identifiants Apple (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`)
 
 ---
 

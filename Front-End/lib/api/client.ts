@@ -474,9 +474,24 @@ class ApiClient {
   /**
    * Rafraîchir la session via les cookies HttpOnly
    */
-  async refreshSession(refreshToken?: string): Promise<AuthResponse> {
-    const payload = refreshToken ? { refreshToken } : undefined;
-    const response = await this.client.post<AuthResponse>("/auth/refresh", payload);
+  async refreshSession(
+    refreshToken?: string,
+    options?: { role?: "CLIENT" | "COOK" },
+  ): Promise<AuthResponse> {
+    const payload: Record<string, unknown> = {};
+
+    if (refreshToken) {
+      payload.refreshToken = refreshToken;
+    }
+
+    if (options?.role) {
+      payload.role = options.role;
+    }
+
+    const response = await this.client.post<AuthResponse>(
+      "/auth/refresh",
+      Object.keys(payload).length > 0 ? payload : undefined,
+    );
     return response.data;
   }
 
@@ -1778,6 +1793,65 @@ class ApiClient {
     is_default?: boolean;
   }): Promise<{ message: string; address: any }> {
     const response = await this.client.post<{ message: string; address: any }>("/addresses", data);
+    return response.data;
+  }
+
+  /**
+   * Mettre à jour une adresse
+   * @param addressId - ID de l'adresse
+   * @param data - Données de l'adresse à mettre à jour
+   */
+  async updateAddress(
+    addressId: string,
+    data: {
+      type?: "HOME" | "VACATION_RENTAL" | "WORK" | "OTHER";
+      label?: string;
+      street?: string;
+      street_number?: string;
+      complement?: string;
+      city?: string;
+      postal_code?: string;
+      country?: string;
+      latitude?: number;
+      longitude?: number;
+      access_code?: string;
+      access_notes?: string;
+      parking_info?: string;
+      has_oven?: boolean;
+      has_dishwasher?: boolean;
+      kitchen_notes?: string;
+      is_default?: boolean;
+    },
+  ): Promise<{ message: string; address: any }> {
+    const response = await this.client.put<{ message: string; address: any }>(
+      `/addresses/${addressId}`,
+      data,
+    );
+    return response.data;
+  }
+
+  /**
+   * Supprimer une adresse
+   * @param addressId - ID de l'adresse
+   */
+  async deleteAddress(addressId: string): Promise<{ message: string }> {
+    const response = await this.client.delete<{ message: string }>(
+      `/addresses/${addressId}`,
+    );
+    return response.data;
+  }
+
+  /**
+   * Définir une adresse comme adresse par défaut
+   * @param addressId - ID de l'adresse
+   */
+  async setDefaultAddress(addressId: string): Promise<{
+    message: string;
+    address: any;
+  }> {
+    const response = await this.client.put<{ message: string; address: any }>(
+      `/addresses/${addressId}/default`,
+    );
     return response.data;
   }
 

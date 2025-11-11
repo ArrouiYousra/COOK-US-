@@ -17,7 +17,7 @@ import {
 import { useAuthStore } from "@/stores/authStore";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api/client";
-// Toast notifications - utiliser alert pour l'instant
+import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
 
 /**
  * Section "Supprimer mon compte"
@@ -26,6 +26,7 @@ import { apiClient } from "@/lib/api/client";
 export function DeleteAccountSection() {
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const { showSuccessToast, showErrorToast } = useNotificationToast();
   const [isOpen, setIsOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [password, setPassword] = useState("");
@@ -44,11 +45,20 @@ export function DeleteAccountSection() {
 
       // Déconnexion et redirection
       await logout();
+      setIsDeleting(false);
+      showSuccessToast("Compte supprimé avec succès.");
+      setIsOpen(false);
+      setConfirmText("");
+      setPassword("");
       router.push("/");
     } catch (error: any) {
       console.error("Erreur lors de la suppression du compte:", error);
-      alert(`Erreur: ${error.response?.data?.message || "Impossible de supprimer le compte"}`);
+      showErrorToast(
+        error.response?.data?.message ||
+          "Impossible de supprimer le compte",
+      );
       setIsDeleting(false);
+      return;
     }
   };
 

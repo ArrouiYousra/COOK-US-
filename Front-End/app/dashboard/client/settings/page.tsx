@@ -8,6 +8,7 @@ import { ProfileTab } from "@/components/dashboard/settings/ProfileTab";
 import { SecurityTab } from "@/components/dashboard/settings/SecurityTab";
 import { NotificationsTab } from "@/components/dashboard/settings/NotificationsTab";
 import { PaymentTab } from "@/components/dashboard/settings/PaymentTab";
+import { AddressTab } from "@/components/dashboard/settings/AddressTab";
 import { DeleteAccountSection } from "@/components/dashboard/settings/DeleteAccountSection";
 
 /**
@@ -39,6 +40,7 @@ export default function SettingsPage() {
           <TabsTrigger value="security">Sécurité</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="payment">Moyens de paiement</TabsTrigger>
+          <TabsTrigger value="addresses">Adresses</TabsTrigger>
         </TabsList>
 
         {/* Contenu des onglets */}
@@ -56,6 +58,10 @@ export default function SettingsPage() {
 
         <TabsContent value="payment">
           <PaymentTab />
+        </TabsContent>
+
+        <TabsContent value="addresses">
+          <AddressTab />
         </TabsContent>
       </Tabs>
 

@@ -15,7 +15,7 @@ import {
   type SiretValidationResult,
 } from "@domain/insee/insee.service";
 import { buildAuthResponse, mapUserToAuthUser } from "./auth.utils";
-import type { UserRole } from "../../types/database.types";
+import type { User, UserRole } from "../../types/database.types";
 
 const isProduction = process.env.NODE_ENV === "production";
 const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
@@ -211,7 +211,226 @@ const loginSchema = z.object({
 
 const refreshSchema = z.object({
   refreshToken: z.string(),
+  role: z.enum(["CLIENT", "COOK"]).optional(),
 });
+
+const pickString = (...values: Array<unknown>): string | undefined =>
+  values
+    .map((value) =>
+      typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined,
+    )
+    .find((value): value is string => typeof value === "string" && value.length > 0);
+
+const extractNamesFromMetadata = (metadata?: Record<string, any>) => {
+  const fullName = pickString(metadata?.full_name, metadata?.name);
+
+  const firstName =
+    pickString(
+      metadata?.first_name,
+      metadata?.given_name,
+      metadata?.given_names,
+      fullName?.split(" ")[0],
+    ) ?? "Invité";
+
+  const lastName =
+    pickString(
+      metadata?.last_name,
+      metadata?.family_name,
+      metadata?.surname,
+      fullName ? fullName.split(" ").slice(1).join(" ") : undefined,
+    ) ?? (firstName === "Invité" ? "CookUS" : "Cook");
+
+  return { firstName, lastName };
+};
+
+const resolveRoleFromOAuth = (
+  roleHint: unknown,
+  metadata?: Record<string, any>,
+): UserRole => {
+  const normalize = (value: unknown): UserRole | undefined => {
+    if (typeof value !== "string") return undefined;
+    const upper = value.toUpperCase();
+    if (upper === "CLIENT" || upper === "COOK") return upper;
+    return undefined;
+  };
+
+  return (
+    normalize(roleHint) ??
+    normalize(metadata?.role) ??
+    normalize(metadata?.user_role) ??
+    "CLIENT"
+  );
+};
+
+const ensureClientProfileExists = async (userId: string): Promise<void> => {
+  const { data, error } = await supabaseAdmin
+    .from("client_profiles")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to verify client profile: ${error.message}`);
+  }
+
+  if (!data) {
+    await UserStore.createClientProfile({ user_id: userId });
+  }
+};
+
+const ensureCookProfileExists = async (
+  userId: string,
+  firstName: string,
+): Promise<void> => {
+  const { data, error } = await supabaseAdmin
+    .from("cook_profiles")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Failed to verify cook profile: ${error.message}`);
+  }
+
+  if (!data) {
+    await UserStore.createCookProfile({
+      user_id: userId,
+      headline: `Chef ${firstName}`.trim(),
+      hourly_rate: 45,
+      employment_status: "AUTO_ENTREPRENEUR",
+      bio: null,
+      service_radius: 25,
+      minimum_booking_hours: 2,
+    });
+  }
+};
+
+const ensureUserExistsForOAuth = async (
+  supabaseUser: Session["user"] | null,
+  roleHint?: UserRole,
+): Promise<void> => {
+  if (!supabaseUser?.id) {
+    throw new Error("Invalid OAuth user data returned by Supabase");
+  }
+
+  const existingUser = await UserStore.getUserById(supabaseUser.id);
+  const metadata = (supabaseUser.user_metadata ?? {}) as Record<string, any>;
+  const { firstName, lastName } = extractNamesFromMetadata(metadata);
+  const resolvedRole = resolveRoleFromOAuth(roleHint, metadata);
+
+  if (existingUser) {
+    const updates: Partial<User> = {};
+
+    if (resolvedRole && existingUser.role !== resolvedRole) {
+      updates.role = resolvedRole;
+    }
+
+    if (
+      (!existingUser.avatar_url || existingUser.avatar_url.length === 0) &&
+      typeof metadata.avatar_url === "string"
+    ) {
+      updates.avatar_url = metadata.avatar_url;
+    }
+
+    if (
+      (!existingUser.email_verified || existingUser.email_verified.length === 0) &&
+      (supabaseUser.email_confirmed_at || supabaseUser.confirmed_at)
+    ) {
+      updates.email_verified =
+        supabaseUser.email_confirmed_at ?? supabaseUser.confirmed_at ?? null;
+    }
+
+    if (
+      (!existingUser.first_name || existingUser.first_name === "Invité") &&
+      firstName
+    ) {
+      updates.first_name = firstName;
+    }
+
+    if (
+      (!existingUser.last_name || existingUser.last_name === "Cook") &&
+      lastName
+    ) {
+      updates.last_name = lastName;
+    }
+
+    if (
+      (!existingUser.phone || existingUser.phone.length === 0) &&
+      typeof supabaseUser.phone === "string" &&
+      supabaseUser.phone.trim().length > 0
+    ) {
+      updates.phone = supabaseUser.phone;
+    }
+
+    if (existingUser.status === "PENDING_VERIFICATION") {
+      updates.status = "ACTIVE";
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await UserStore.updateUser(supabaseUser.id, updates);
+    }
+
+    if (resolvedRole === "COOK") {
+      await ensureCookProfileExists(supabaseUser.id, firstName);
+    } else {
+      await ensureClientProfileExists(supabaseUser.id);
+    }
+
+    return;
+  }
+
+  if (!supabaseUser.email) {
+    throw new Error(
+      "Le fournisseur OAuth n'a pas retourné d'email. Impossible de créer le compte.",
+    );
+  }
+
+  const passwordHash = await bcrypt.hash(
+    `oauth-${supabaseUser.id}-${Date.now()}`,
+    saltRounds,
+  );
+
+  const metadataPhone =
+    typeof metadata.phone === "string" && metadata.phone.trim().length > 0
+      ? metadata.phone.trim()
+      : undefined;
+  const supabasePhone =
+    typeof supabaseUser.phone === "string" && supabaseUser.phone.trim().length > 0
+      ? supabaseUser.phone.trim()
+      : undefined;
+
+  const createdUser = await UserStore.createUser(supabaseUser.id, {
+    email: supabaseUser.email,
+    passwordHash,
+    first_name: firstName,
+    last_name: lastName,
+    role: resolvedRole,
+    phone: supabasePhone ?? metadataPhone,
+  });
+
+  const updates: Partial<User> = {
+    status: "ACTIVE",
+  };
+
+  if (metadata.avatar_url) {
+    updates.avatar_url = metadata.avatar_url;
+  }
+
+  if (supabaseUser.email_confirmed_at || supabaseUser.confirmed_at) {
+    updates.email_verified =
+      supabaseUser.email_confirmed_at ?? supabaseUser.confirmed_at ?? null;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await UserStore.updateUser(createdUser.id, updates);
+  }
+
+  if (resolvedRole === "COOK") {
+    await ensureCookProfileExists(createdUser.id, firstName);
+  } else {
+    await ensureClientProfileExists(createdUser.id);
+  }
+};
 
 const forgotPasswordSchema = z.object({
   email: z
@@ -733,6 +952,7 @@ export const refreshToken = async (
 
     const payload = refreshSchema.parse({
       refreshToken: refreshTokenCandidate,
+      role: req.body?.role,
     });
 
     const authClient = createSupabaseAuthClient();
@@ -748,6 +968,8 @@ export const refreshToken = async (
       });
       return;
     }
+
+    await ensureUserExistsForOAuth(data.user, payload.role);
 
     setSessionCookies(res, data.session);
     const authResponse = await buildAuthResponse(data.user.id, data.session);
