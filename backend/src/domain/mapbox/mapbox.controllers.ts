@@ -235,6 +235,7 @@ export const calculateDistance = async (
         distance_km: (result.distance / 1000).toFixed(2), // kilometers
         duration: result.duration, // seconds
         duration_minutes: Math.round(result.duration / 60), // minutes
+        geometry: result.geometry, // GeoJSON geometry for route display
       },
     });
   } catch (error) {

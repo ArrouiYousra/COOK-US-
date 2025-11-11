@@ -175,6 +175,59 @@ export const getReservationsByBookingId = async (
       return;
     }
 
+    // Vérifier que le booking existe et que l'utilisateur est le propriétaire
+    const booking = await BookingStore.getBookingById(bookingId);
+    if (!booking) {
+      res.status(404).json({
+        error: "Not Found",
+        message: "Booking not found",
+      });
+      return;
+    }
+
+    // Vérifier les permissions : seul le client propriétaire peut voir les propositions
+    if (user.role === "CLIENT") {
+      const clientProfile = await ProfileStore.getClientProfileByUserId(req.user.id);
+      if (!clientProfile || clientProfile.id !== booking.client_profile_id) {
+        res.status(403).json({
+          error: "Forbidden",
+          message: "You do not have permission to view these proposals",
+        });
+        return;
+      }
+    } else if (user.role === "COOK") {
+      // Un cuisinier peut voir les propositions seulement s'il a proposé
+      const cookProfile = await ProfileStore.getCookProfileByUserId(req.user.id);
+      if (!cookProfile) {
+        res.status(403).json({
+          error: "Forbidden",
+          message: "Cook profile not found",
+        });
+        return;
+      }
+      // Vérifier que le cuisinier a bien fait une proposition sur ce booking
+      const { data: userReservation } = await supabaseAdmin
+        .from("reservations")
+        .select("id")
+        .eq("booking_id", bookingId)
+        .eq("cook_profile_id", cookProfile.id)
+        .single();
+      
+      if (!userReservation) {
+        res.status(403).json({
+          error: "Forbidden",
+          message: "You can only view proposals for bookings you have applied to",
+        });
+        return;
+      }
+    } else {
+      res.status(403).json({
+        error: "Forbidden",
+        message: "You do not have permission to view these proposals",
+      });
+      return;
+    }
+
     // Récupérer les propositions
     const reservations = await ReservationStore.getReservationsByBookingId(
       bookingId,

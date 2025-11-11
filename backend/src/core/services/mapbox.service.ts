@@ -72,6 +72,10 @@ export interface AddressSearchResult {
 export interface DistanceResult {
   distance: number; // in meters
   duration: number; // in seconds
+  geometry?: {
+    type: "LineString";
+    coordinates: [number, number][]; // [longitude, latitude]
+  };
 }
 
 export class MapboxService {
@@ -251,6 +255,7 @@ export class MapboxService {
       return {
         distance: route.distance, // in meters
         duration: route.duration, // in seconds
+        geometry: route.geometry || undefined, // GeoJSON geometry
       };
     } catch (error) {
       console.error("Mapbox distance calculation error:", error);

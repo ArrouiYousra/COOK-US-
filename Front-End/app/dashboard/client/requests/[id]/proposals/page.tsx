@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ReservationsList } from "@/components/dashboard/reservations/ReservationsList";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
+import { useAuthGuard } from "@/lib/hooks/useAuthGuard";
 import type { Reservation } from "@/types";
 import {
   Dialog,
@@ -23,11 +24,13 @@ import { MapboxMap } from "@/components/mapbox/MapboxMap";
 /**
  * Page pour afficher et gérer les propositions reçues pour une demande publique
  * Côté client
+ * PROTÉGÉE : Nécessite une authentification
  */
 export default function RequestProposalsPage() {
   const params = useParams();
   const router = useRouter();
-  const { user, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
+  const { user } = useAuthStore();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuthGuard();
   const bookingId = params.id as string;
 
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -45,22 +48,15 @@ export default function RequestProposalsPage() {
   const [distances, setDistances] = useState<Record<string, { distance: number; distance_km: string; duration_minutes: number }>>({});
   const [bookingAddress, setBookingAddress] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Vérifier l'authentification
-  useEffect(() => {
-    const verifyAuth = async () => {
-      if (!isAuthenticated && !isAuthLoading) {
-        try {
-          await checkAuth();
-        } catch (error) {
-          router.push("/auth/login");
-        }
-      }
-    };
-
-    if (!isAuthLoading) {
-      verifyAuth();
-    }
-  }, [isAuthenticated, checkAuth, router, isAuthLoading]);
+  // NE PAS AFFICHER LE CONTENU SI L'UTILISATEUR N'EST PAS AUTHENTIFIÉ
+  // Le useAuthGuard redirige automatiquement vers /auth/login si non authentifié
+  if (isAuthLoading || !isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   // Charger les propositions
   useEffect(() => {

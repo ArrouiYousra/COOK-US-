@@ -21,6 +21,7 @@ export function useAuthGuard() {
     }
 
     const verifyAuth = async () => {
+      // Si déjà authentifié, on peut continuer
       if (isAuthenticated) {
         hasCheckedRef.current = true;
         return;
@@ -28,14 +29,23 @@ export function useAuthGuard() {
 
       try {
         hasCheckedRef.current = true;
+        // Vérifier l'authentification
         await checkAuth();
+        
+        // Vérifier à nouveau après checkAuth pour être sûr
+        const currentState = useAuthStore.getState();
+        if (!currentState.isAuthenticated) {
+          throw new Error("Authentification échouée");
+        }
       } catch (error) {
-        // Si l'authentification échoue, rediriger vers la page de connexion
+        // Si l'authentification échoue, rediriger immédiatement vers la page de connexion
         if (!isRedirectingRef.current) {
           isRedirectingRef.current = true;
           console.warn("Authentification échouée, redirection vers la page de connexion");
           // Utiliser replace pour éviter d'ajouter une entrée dans l'historique
-          router.replace("/auth/login");
+          // Ajouter le paramètre returnUrl pour rediriger après connexion
+          const currentPath = typeof window !== "undefined" ? window.location.pathname : "/";
+          router.replace(`/auth/login?returnUrl=${encodeURIComponent(currentPath)}`);
         }
       }
     };

@@ -13,6 +13,8 @@ interface Marker {
   title?: string;
   description?: string;
   color?: string;
+  distance?: string; // Distance formatée (ex: "15.5 km")
+  duration?: number; // Durée en minutes
 }
 
 interface Route {
@@ -89,13 +91,24 @@ export function MapboxMap({
 
         mapboxgl.accessToken = token;
 
-        // Créer la carte
+        // Créer la carte avec restrictions pour la France
+        // Bounds de la France (approximatif) : [lng, lat]
+        const franceBounds = [
+          [-5.0, 41.0], // Sud-Ouest
+          [9.5, 51.0],  // Nord-Est
+        ] as [[number, number], [number, number]];
+
         map.current = new mapboxgl.Map({
           container: mapContainer.current!,
           style: "mapbox://styles/mapbox/streets-v12",
           center: [center[1], center[0]], // Mapbox utilise [lng, lat]
           zoom: zoom,
           interactive: interactive,
+          // Restreindre la carte à la France
+          maxBounds: franceBounds,
+          // Limiter le zoom pour éviter de sortir de la France
+          minZoom: 5,
+          maxZoom: 18,
         });
 
         // Attendre que la carte soit chargée
@@ -203,12 +216,23 @@ export function MapboxMap({
         .setLngLat([markerData.lng, markerData.lat])
         .addTo(map.current!);
 
-      // Popup avec informations
-      if (markerData.title || markerData.description) {
+      // Popup avec informations enrichies (distance, durée)
+      if (markerData.title || markerData.description || markerData.distance) {
+        const distanceInfo = markerData.distance && markerData.duration
+          ? `<div class="mt-2 pt-2 border-t border-gray-200">
+              <div class="flex items-center gap-2 text-xs">
+                <span class="font-medium text-blue-600">📍 ${markerData.distance}</span>
+                <span class="text-gray-500">•</span>
+                <span class="text-gray-600">⏱️ ${markerData.duration} min</span>
+              </div>
+            </div>`
+          : "";
+
         const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
-          <div class="p-2">
-            ${markerData.title ? `<h3 class="font-semibold text-sm mb-1">${markerData.title}</h3>` : ""}
-            ${markerData.description ? `<p class="text-xs text-muted-foreground">${markerData.description}</p>` : ""}
+          <div class="p-3 min-w-[200px]">
+            ${markerData.title ? `<h3 class="font-semibold text-sm mb-1 text-gray-900">${markerData.title}</h3>` : ""}
+            ${markerData.description ? `<p class="text-xs text-gray-600 mb-1">${markerData.description}</p>` : ""}
+            ${distanceInfo}
           </div>
         `);
         marker.setPopup(popup);
@@ -241,15 +265,19 @@ export function MapboxMap({
           }
         }
 
-        // Calculer l'itinéraire via l'API backend
+        // Calculer l'itinéraire via l'API backend (retourne la géométrie réelle)
         const distanceResult = await apiClient.calculateDistance(
           [route.origin[0], route.origin[1]],
           [route.destination[0], route.destination[1]],
           "driving"
         );
 
-        // Pour l'instant, on trace une ligne droite
-        // TODO: Utiliser l'API Directions de Mapbox pour obtenir le tracé réel
+        // Utiliser la géométrie réelle de la route si disponible, sinon ligne droite
+        const routeCoordinates = distanceResult.result.geometry?.coordinates || [
+          [route.origin[1], route.origin[0]], // [lng, lat]
+          [route.destination[1], route.destination[0]], // [lng, lat]
+        ];
+
         const routeId = `route-${Date.now()}`;
         map.current!.addSource(routeId, {
           type: "geojson",
@@ -257,10 +285,7 @@ export function MapboxMap({
             type: "Feature",
             geometry: {
               type: "LineString",
-              coordinates: [
-                [route.origin[1], route.origin[0]], // [lng, lat]
-                [route.destination[1], route.destination[0]], // [lng, lat]
-              ],
+              coordinates: routeCoordinates,
             },
             properties: {
               distance: distanceResult.result.distance_km,
@@ -286,15 +311,45 @@ export function MapboxMap({
 
         routeLayerRef.current = routeId;
 
-        // Ajuster la vue pour inclure les deux points
-        const bounds = new mapboxgl.LngLatBounds()
-          .extend([route.origin[1], route.origin[0]])
-          .extend([route.destination[1], route.destination[0]]);
+        // Ajuster la vue pour inclure toute la route
+        const bounds = new mapboxgl.LngLatBounds();
+        routeCoordinates.forEach((coord: [number, number]) => {
+          bounds.extend(coord);
+        });
 
         map.current!.fitBounds(bounds, {
-          padding: 50,
+          padding: { top: 50, bottom: 50, left: 50, right: 50 },
           maxZoom: 15,
+          duration: 1000, // Animation fluide
         });
+
+        // Ajouter un label avec distance et durée au centre de la route
+        if (routeCoordinates.length > 0) {
+          const midIndex = Math.floor(routeCoordinates.length / 2);
+          const midPoint = routeCoordinates[midIndex];
+          
+          // Créer un élément pour le label de route
+          const routeLabelEl = document.createElement("div");
+          routeLabelEl.className = "route-label";
+          routeLabelEl.innerHTML = `
+            <div style="
+              background: ${route.color || "#3b82f6"};
+              color: white;
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 11px;
+              font-weight: 600;
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+              white-space: nowrap;
+            ">
+              ${distanceResult.result.distance_km} km • ${distanceResult.result.duration_minutes} min
+            </div>
+          `;
+          
+          new mapboxgl.Marker(routeLabelEl)
+            .setLngLat(midPoint)
+            .addTo(map.current!);
+        }
       } catch (error) {
         console.error("Erreur lors du tracé de l'itinéraire:", error);
       }

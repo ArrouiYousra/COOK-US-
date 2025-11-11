@@ -1637,6 +1637,10 @@ class ApiClient {
       distance_km: string; // en kilomètres formaté
       duration: number; // en secondes
       duration_minutes: number; // en minutes
+      geometry?: {
+        type: "LineString";
+        coordinates: [number, number][]; // [longitude, latitude]
+      };
     };
   }> {
     const queryParams = new URLSearchParams();

@@ -616,7 +616,7 @@ export default function MarketplacePage() {
                     
                     const distance = distances[request.id];
                     const isInRadius = cookProfile?.service_radius && distance !== undefined
-                      ? distance <= (cookProfile.service_radius * 1000)
+                      ? distance.distance <= (cookProfile.service_radius * 1000)
                       : true;
                     
                     return {
