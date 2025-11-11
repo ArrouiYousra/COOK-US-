@@ -15,6 +15,7 @@
     "test:insee": "tsx scripts/test-insee-api.ts"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
     "@types/bcryptjs": "^3.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
