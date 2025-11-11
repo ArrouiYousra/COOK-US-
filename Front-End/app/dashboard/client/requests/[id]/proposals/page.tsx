@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, XCircle, Map, List, Navigation, Filter, ArrowUpDown, TrendingUp, Star } from "lucide-react";
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, XCircle, Map, List, Navigation, Filter, ArrowUpDown, TrendingUp, Star, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReservationsList } from "@/components/dashboard/reservations/ReservationsList";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthGuard } from "@/lib/hooks/useAuthGuard";
+import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
 import type { Reservation } from "@/types";
 import {
   Dialog,
@@ -20,6 +21,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { MapboxMap } from "@/components/mapbox/MapboxMap";
+import Link from "next/link";
 
 /**
  * Page pour afficher et gérer les propositions reçues pour une demande publique
@@ -41,7 +43,10 @@ export default function RequestProposalsPage() {
   const [selectedReservationId, setSelectedReservationId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
+  const [isAcceptDialogOpen, setIsAcceptDialogOpen] = useState(false);
+  const [reservationToAccept, setReservationToAccept] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const { showSuccessToast, showErrorToast, showInfoToast } = useNotificationToast();
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [sortBy, setSortBy] = useState<"price" | "distance" | "rating" | "date">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
@@ -158,23 +163,34 @@ export default function RequestProposalsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthLoading, isAuthenticated, user, bookingId]);
 
-  const handleAccept = async (reservationId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir accepter cette proposition ? Les autres propositions seront automatiquement refusées.")) {
-      return;
-    }
+  const handleAcceptClick = (reservationId: string) => {
+    setReservationToAccept(reservationId);
+    setIsAcceptDialogOpen(true);
+  };
+
+  const handleConfirmAccept = async () => {
+    if (!reservationToAccept) return;
 
     setIsProcessing(true);
+    setIsAcceptDialogOpen(false);
+    
     try {
-      const response = await apiClient.acceptReservation(reservationId);
-      alert(`Proposition acceptée ! Acompte à payer : ${response.depositAmount.toFixed(2)}€ (30%)`);
+      const response = await apiClient.acceptReservation(reservationToAccept);
+      
+      showSuccessToast(
+        "Proposition acceptée !",
+        `Acompte à payer : ${response.depositAmount.toFixed(2)}€ (30%). Vous allez être redirigé vers la page de paiement.`
+      );
       
       // Recharger les données
       const reservationsResponse = await apiClient.getReservationsByBookingId(bookingId);
       setReservations(reservationsResponse.reservations || []);
       setStats(reservationsResponse.stats || null);
       
-      // Rediriger vers la page de paiement ou de détails du booking
-      router.push(`/dashboard/client/bookings/${bookingId}`);
+      // Rediriger vers la page de paiement ou de détails du booking après un court délai
+      setTimeout(() => {
+        router.push(`/dashboard/client/bookings/${bookingId}`);
+      }, 1500);
     } catch (err: unknown) {
       console.error("Erreur lors de l'acceptation:", err);
       const errorMessage = err && typeof err === 'object' && 'response' in err && 
@@ -182,9 +198,10 @@ export default function RequestProposalsPage() {
         (err as { response?: { data?: { message?: string } } }).response?.data?.message
         ? (err as { response: { data: { message: string } } }).response.data.message
         : "Erreur lors de l'acceptation de la proposition";
-      alert(errorMessage);
+      showErrorToast("Erreur", errorMessage);
     } finally {
       setIsProcessing(false);
+      setReservationToAccept(null);
     }
   };
 
@@ -204,6 +221,8 @@ export default function RequestProposalsPage() {
       setSelectedReservationId(null);
       setRejectionReason("");
       
+      showSuccessToast("Proposition refusée", "La proposition a été refusée avec succès.");
+      
       // Recharger les données
       const response = await apiClient.getReservationsByBookingId(bookingId);
       setReservations(response.reservations || []);
@@ -215,7 +234,7 @@ export default function RequestProposalsPage() {
         (err as { response?: { data?: { message?: string } } }).response?.data?.message
         ? (err as { response: { data: { message: string } } }).response.data.message
         : "Erreur lors du refus de la proposition";
-      alert(errorMessage);
+      showErrorToast("Erreur", errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -489,13 +508,47 @@ export default function RequestProposalsPage() {
           <ReservationsList
             reservations={sortedReservations}
             isLoading={isLoading}
-            onAccept={handleAccept}
+            onAccept={handleAcceptClick}
             onReject={handleReject}
             showActions={true}
             distances={distances}
+            bookingId={bookingId}
           />
         </div>
       )}
+
+      {/* Dialog de confirmation d'acceptation */}
+      <Dialog open={isAcceptDialogOpen} onOpenChange={setIsAcceptDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-green-600" />
+              Confirmer l'acceptation
+            </DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir accepter cette proposition ? Les autres propositions seront automatiquement refusées.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setIsAcceptDialogOpen(false)} disabled={isProcessing}>
+              Annuler
+            </Button>
+            <Button onClick={handleConfirmAccept} disabled={isProcessing} className="bg-green-600 hover:bg-green-700">
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Traitement...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Confirmer
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de refus */}
       <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>

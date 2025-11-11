@@ -143,9 +143,11 @@ export interface Reservation {
     hourly_rate: number;
     average_rating?: number;
     user?: {
+      id: string;
       first_name: string;
       last_name: string;
       avatar_url?: string;
+      email?: string;
     };
   };
 }

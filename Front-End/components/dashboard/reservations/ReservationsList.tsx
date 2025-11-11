@@ -23,6 +23,7 @@ import { formatDate, formatDateTime } from "@/lib/utils";
 import type { Reservation, ReservationStatus } from "@/types";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import Link from "next/link";
 
 interface ReservationsListProps {
   reservations: Reservation[];
@@ -31,6 +32,7 @@ interface ReservationsListProps {
   onReject?: (reservationId: string) => void;
   showActions?: boolean; // Pour afficher les boutons accepter/refuser (côté client)
   distances?: Record<string, { distance: number; distance_km: string; duration_minutes: number }>; // Distances calculées
+  bookingId?: string; // ID du booking pour le bouton "Discuter"
 }
 
 /**
@@ -44,6 +46,7 @@ export function ReservationsList({
   onReject,
   showActions = true,
   distances = {},
+  bookingId,
 }: ReservationsListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -254,6 +257,18 @@ export function ReservationsList({
               {/* Actions */}
               {showActions && (
                 <div className="flex flex-col gap-2">
+                  {reservation.status === "ACCEPTED" && reservation.cook?.user?.id && (
+                    <Button
+                      size="sm"
+                      asChild
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      <Link href={`/dashboard/client/messages?cook=${reservation.cook.user.id}&booking=${bookingId || ''}`}>
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        Discuter
+                      </Link>
+                    </Button>
+                  )}
                   {canAccept && (
                     <Button
                       size="sm"

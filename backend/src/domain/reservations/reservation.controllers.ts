@@ -417,6 +417,22 @@ export const acceptReservation = async (
             err,
           ),
         );
+
+        // Créer automatiquement une conversation entre le client et le cuisinier
+        try {
+          const { MessageStore } = await import("@stores/message.store");
+          await MessageStore.getOrCreateConversation(
+            req.user.id,
+            cookProfileData.user_id,
+            reservation.booking_id,
+          );
+        } catch (conversationError) {
+          // Ne pas bloquer l'acceptation si la création de conversation échoue
+          console.error(
+            "Failed to create conversation after reservation acceptance:",
+            conversationError,
+          );
+        }
       }
     }
 
