@@ -14,7 +14,6 @@ import {
   deleteAccount,
   resendVerification,
   oauthGoogle,
-  oauthApple,
 } from "./auth.controllers";
 import twoFactorRoutes from "./two-factor.routes";
 import { authGuard } from "@core/middleware";
@@ -479,7 +478,6 @@ router.post("/oauth/google", oauthGoogle);
  *       500:
  *         description: OAuth initiation failed
  */
-router.post("/oauth/apple", oauthApple);
 
 // 2FA routes
 router.use("/2fa", twoFactorRoutes);

@@ -298,7 +298,7 @@ const ensureCookProfileExists = async (
       headline: `Chef ${firstName}`.trim(),
       hourly_rate: 45,
       employment_status: "AUTO_ENTREPRENEUR",
-      bio: null,
+      bio: "",
       service_radius: 25,
       minimum_booking_hours: 2,
     });
@@ -1466,42 +1466,3 @@ export const oauthGoogle = async (
   }
 };
 
-export const oauthApple = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
-  try {
-    const { role } = req.body;
-    const redirectUrl = `${frontendUrl}/auth/callback`;
-
-    const authClient = createSupabaseAuthClient();
-    const { data, error } = await authClient.auth.signInWithOAuth({
-      provider: "apple",
-      options: {
-        redirectTo: redirectUrl,
-        queryParams: {
-          role: (role as string) || "CLIENT",
-        },
-      },
-    });
-
-    if (error || !data.url) {
-      console.error("Apple OAuth error:", error);
-      res.status(500).json({
-        error: "OAuth Failed",
-        message: "Échec lors de la redirection Apple OAuth",
-      });
-      return;
-    }
-
-    res.status(200).json({
-      redirectUrl: data.url,
-    });
-  } catch (error) {
-    console.error("Apple OAuth error:", error);
-    res.status(500).json({
-      error: "Internal Server Error",
-      message: "Impossible de lancer Apple OAuth",
-    });
-  }
-};

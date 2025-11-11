@@ -24,12 +24,135 @@ import { useBookingStore } from "@/stores/bookingStore";
  * Graphiques de dépenses, tendances, historique
  * PROTÉGÉE : Nécessite une authentification (protégée par layout + vérification locale)
  */
+const bookingDateFields = [
+  "date",
+  "bookingDate",
+  "booking_date",
+  "event_date",
+  "createdAt",
+  "created_at",
+];
+
+const getBookingDate = (booking: any): Date => {
+  for (const field of bookingDateFields) {
+    if (booking[field]) {
+      return new Date(booking[field]);
+    }
+  }
+  return new Date();
+};
+
+const getBookingTotal = (booking: any): number => {
+  return (
+    booking.totalPrice ??
+    booking.total_price ??
+    booking.payment_total ??
+    booking.price ??
+    0
+  );
+};
+
+type TimeRange = "week" | "month" | "year" | "all";
+
+const generateTrendData = (bookings: any[], timeRange: TimeRange) => {
+  const now = new Date();
+  const config = {
+    week: { buckets: 7, type: "day" as const },
+    month: { buckets: 6, type: "week" as const },
+    year: { buckets: 12, type: "month" as const },
+    all: { buckets: 12, type: "month" as const },
+  } as const;
+
+  const { buckets, type } = config[timeRange];
+  const labels: string[] = [];
+  const spendingValues: number[] = [];
+  const bookingValues: number[] = [];
+
+  for (let i = 0; i < buckets; i++) {
+    let bucketStart: Date;
+    let bucketEnd: Date;
+    let label = "";
+
+    switch (type) {
+      case "day": {
+        bucketStart = new Date(now);
+        bucketStart.setHours(0, 0, 0, 0);
+        bucketStart.setDate(bucketStart.getDate() - (buckets - 1 - i));
+
+        bucketEnd = new Date(bucketStart);
+        bucketEnd.setHours(23, 59, 59, 999);
+
+        label = bucketStart.toLocaleDateString("fr-FR", {
+          weekday: "short",
+        });
+        break;
+      }
+      case "week": {
+        bucketEnd = new Date(now);
+        bucketEnd.setHours(23, 59, 59, 999);
+        bucketEnd.setDate(bucketEnd.getDate() - 7 * (buckets - 1 - i));
+
+        bucketStart = new Date(bucketEnd);
+        bucketStart.setDate(bucketEnd.getDate() - 6);
+        bucketStart.setHours(0, 0, 0, 0);
+
+        label = `Sem. du ${bucketStart.toLocaleDateString("fr-FR", {
+          day: "2-digit",
+          month: "short",
+        })}`;
+        break;
+      }
+      case "month":
+      default: {
+        const monthDate = new Date(
+          now.getFullYear(),
+          now.getMonth() - (buckets - 1 - i),
+          1,
+        );
+        bucketStart = new Date(monthDate);
+        bucketStart.setHours(0, 0, 0, 0);
+
+        bucketEnd = new Date(
+          monthDate.getFullYear(),
+          monthDate.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+
+        label = bucketStart.toLocaleDateString("fr-FR", {
+          month: "short",
+        });
+        break;
+      }
+    }
+
+    const bucketBookings = bookings.filter((booking) => {
+      const bookingDate = getBookingDate(booking);
+      return bookingDate >= bucketStart && bookingDate <= bucketEnd;
+    });
+
+    const bucketSpent = bucketBookings.reduce(
+      (sum, booking) => sum + getBookingTotal(booking),
+      0,
+    );
+
+    labels.push(label);
+    spendingValues.push(bucketSpent);
+    bookingValues.push(bucketBookings.length);
+  }
+
+  return { labels, spendingValues, bookingValues };
+};
+
 export default function StatsPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuthGuard();
   const { bookings, fetchBookings, isLoadingBookings } = useBookingStore();
-  const [timeRange, setTimeRange] = useState<"week" | "month" | "year" | "all">("month");
+  const [timeRange, setTimeRange] = useState<TimeRange>("month");
   const [reviews, setReviews] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,52 +252,41 @@ export default function StatsPage() {
     const favoriteCuisine = "Cuisine variée"; // TODO: Calculer depuis les spécialités des cuisiniers réservés
 
     // Dépenses mensuelles (6 derniers mois)
-    const monthlySpending: number[] = [];
-    const bookingsByMonth: number[] = [];
-    const monthNames: string[] = [];
-    
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-      
-      const monthBookings = filteredBookings.filter((b) => {
-        const bookingDate = new Date(b.date || b.createdAt);
-        return bookingDate >= monthStart && bookingDate <= monthEnd;
-      });
-      
-      const monthSpent = monthBookings.reduce((sum, b) => {
-        return sum + (b.totalPrice || 0);
-      }, 0);
-      
-      monthlySpending.push(monthSpent);
-      bookingsByMonth.push(monthBookings.length);
-      monthNames.push(date.toLocaleDateString('fr-FR', { month: 'short' }));
+    const trendData = generateTrendData(filteredBookings, timeRange);
+
+    // Calculer la tendance (comparaison avec la période précédente)
+    const currentPeriodSpent =
+      trendData.spendingValues[trendData.spendingValues.length - 1] || 0;
+    const previousPeriodSpent =
+      trendData.spendingValues[trendData.spendingValues.length - 2] || 0;
+
+    let spendingTrend = 0;
+    if (trendData.spendingValues.length >= 2) {
+      if (previousPeriodSpent > 0) {
+        spendingTrend =
+          ((currentPeriodSpent - previousPeriodSpent) / previousPeriodSpent) *
+          100;
+      } else {
+        spendingTrend = currentPeriodSpent > 0 ? 100 : 0;
+      }
     }
 
-    // Calculer la tendance (comparaison avec le mois précédent)
-    const currentMonthSpent = monthlySpending[monthlySpending.length - 1] || 0;
-    const previousMonthSpent = monthlySpending[monthlySpending.length - 2] || 0;
-    const spendingTrend = previousMonthSpent > 0
-      ? ((currentMonthSpent - previousMonthSpent) / previousMonthSpent) * 100
-      : 0;
-
-    // Réservations ce mois
-    const currentMonthBookings = bookingsByMonth[bookingsByMonth.length - 1] || 0;
+    // Réservations sur la période actuelle
+    const currentPeriodBookings =
+      trendData.bookingValues[trendData.bookingValues.length - 1] || 0;
 
     return {
       totalSpent,
       totalBookings,
       averageRating,
       favoriteCuisine,
-      monthlySpending,
-      bookingsByMonth,
-      monthNames,
+      trendLabels: trendData.labels,
+      spendingValues: trendData.spendingValues,
+      bookingValues: trendData.bookingValues,
       spendingTrend,
-      currentMonthBookings,
+      currentPeriodBookings,
     };
-  }, [filteredBookings, reviews]);
+  }, [filteredBookings, reviews, timeRange]);
 
   if (isAuthLoading || isLoading || isLoadingBookings) {
     return (
@@ -256,7 +368,7 @@ export default function StatsPage() {
           <p className="text-sm text-muted-foreground mb-1">Réservations</p>
           <p className="text-2xl font-bold text-foreground">{stats.totalBookings}</p>
           <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-            {stats.currentMonthBookings} ce mois
+            {stats.currentPeriodBookings} sur la période
           </p>
         </motion.div>
 
@@ -312,19 +424,24 @@ export default function StatsPage() {
           <div className="flex items-center gap-2 mb-6">
             <BarChart3 className="w-5 h-5 text-muted-foreground" />
             <h2 className="font-cera text-xl font-bold text-foreground">
-              Dépenses mensuelles
+              {timeRange === "week" && "Dépenses quotidiennes (7 jours)"}
+              {timeRange === "month" && "Dépenses hebdomadaires (6 semaines)"}
+              {timeRange === "year" && "Dépenses mensuelles (12 mois)"}
+              {timeRange === "all" && "Dépenses mensuelles (12 mois)"}
             </h2>
           </div>
           <div className="space-y-4">
-            {stats.monthlySpending.length > 0 ? (
-              stats.monthlySpending.map((amount, index) => {
-                const maxAmount = Math.max(...stats.monthlySpending, 1); // Éviter division par 0
+            {stats.spendingValues.length > 0 ? (
+              stats.spendingValues.map((amount, index) => {
+                const maxAmount = Math.max(...stats.spendingValues, 1); // Éviter division par 0
                 const percentage = (amount / maxAmount) * 100;
                 
                 return (
                   <div key={index} className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{stats.monthNames[index] || `M${index + 1}`}</span>
+                      <span className="text-muted-foreground">
+                        {stats.trendLabels[index] || `P${index + 1}`}
+                      </span>
                       <span className="font-semibold text-foreground">{amount.toFixed(2)} €</span>
                     </div>
                   <div className="w-full h-3 bg-accent rounded-full overflow-hidden">
@@ -354,19 +471,24 @@ export default function StatsPage() {
           <div className="flex items-center gap-2 mb-6">
             <PieChart className="w-5 h-5 text-muted-foreground" />
             <h2 className="font-cera text-xl font-bold text-foreground">
-              Réservations par mois
+              {timeRange === "week" && "Réservations quotidiennes"}
+              {timeRange === "month" && "Réservations hebdomadaires"}
+              {timeRange === "year" && "Réservations mensuelles"}
+              {timeRange === "all" && "Réservations mensuelles"}
             </h2>
           </div>
           <div className="space-y-4">
-            {stats.bookingsByMonth.length > 0 ? (
-              stats.bookingsByMonth.map((count, index) => {
-                const maxCount = Math.max(...stats.bookingsByMonth, 1); // Éviter division par 0
+            {stats.bookingValues.length > 0 ? (
+              stats.bookingValues.map((count, index) => {
+                const maxCount = Math.max(...stats.bookingValues, 1); // Éviter division par 0
                 const percentage = (count / maxCount) * 100;
                 
                 return (
                   <div key={index} className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">{stats.monthNames[index] || `M${index + 1}`}</span>
+                      <span className="text-muted-foreground">
+                        {stats.trendLabels[index] || `P${index + 1}`}
+                      </span>
                       <span className="font-semibold text-foreground">{count} réservation{count > 1 ? "s" : ""}</span>
                     </div>
                   <div className="w-full h-3 bg-accent rounded-full overflow-hidden">

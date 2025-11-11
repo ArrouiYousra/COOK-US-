@@ -11,6 +11,7 @@ import type {
   ProposalsResponse,
   GetBookingsParams,
   GetMyProposalsParams,
+  UserRole,
 } from "@/types";
 
 /**
@@ -476,7 +477,7 @@ class ApiClient {
    */
   async refreshSession(
     refreshToken?: string,
-    options?: { role?: "CLIENT" | "COOK" },
+    options?: { role?: UserRole },
   ): Promise<AuthResponse> {
     const payload: Record<string, unknown> = {};
 
@@ -500,14 +501,6 @@ class ApiClient {
    */
   async loginWithGoogle(role: "CLIENT" | "COOK"): Promise<{ redirectUrl: string }> {
     const response = await this.client.post<{ redirectUrl: string }>("/auth/oauth/google", { role });
-    return response.data;
-  }
-
-  /**
-   * OAuth - Apple
-   */
-  async loginWithApple(role: "CLIENT" | "COOK"): Promise<{ redirectUrl: string }> {
-    const response = await this.client.post<{ redirectUrl: string }>("/auth/oauth/apple", { role });
     return response.data;
   }
 
