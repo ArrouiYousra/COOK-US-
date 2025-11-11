@@ -360,7 +360,7 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
     if (statusLower === "pending" || statusLower === "proposition_pending" || statusLower === "payment_pending") {
       return {
         label: "En attente de propositions",
-        color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
+      color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
         icon: Clock,
         step: 1,
         totalSteps: 5,
@@ -368,8 +368,8 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
     }
     if (statusLower === "confirmed" || statusLower === "proposition_accepted") {
       return {
-        label: "Confirmée",
-        color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+      label: "Confirmée",
+      color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
         icon: CheckCircle2,
         step: 3,
         totalSteps: 5,
@@ -377,8 +377,8 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
     }
     if (statusLower === "completed" || statusLower === "done") {
       return {
-        label: "Terminée",
-        color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+      label: "Terminée",
+      color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
         icon: CheckCircle2,
         step: 5,
         totalSteps: 5,
@@ -391,7 +391,7 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
         icon: XCircle,
         step: 0,
         totalSteps: 5,
-      };
+  };
     }
     
     return {
@@ -528,13 +528,13 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
           <div className="flex items-center gap-2 flex-wrap">
             {request.status === "pending" && (
               <>
-                <Button
+              <Button
                   variant="default"
-                  size="sm"
-                  asChild
+                size="sm"
+                asChild
                   className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  <Link href={`/dashboard/client/requests/${request.id}/proposals`}>
+              >
+                <Link href={`/dashboard/client/requests/${request.id}/proposals`}>
                     {request.proposalCount > 0 ? (
                       <>
                         <Bell className="w-4 h-4 mr-2 animate-pulse" />
@@ -542,12 +542,12 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
                       </>
                     ) : (
                       <>
-                        <MessageSquare className="w-4 h-4 mr-2" />
+                  <MessageSquare className="w-4 h-4 mr-2" />
                         Voir les propositions
                       </>
                     )}
-                  </Link>
-                </Button>
+                </Link>
+              </Button>
                 {request.proposalCount > 0 && (
                   <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 px-2 py-1 rounded-full">
                     <Sparkles className="w-3 h-3" />
@@ -562,12 +562,12 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
                   <ChefHat className="w-4 h-4 text-green-600 dark:text-green-400" />
                   <div>
                     <span className="text-muted-foreground text-xs">Chef assigné : </span>
-                    <span className="font-medium text-foreground">{request.cookName}</span>
-                    {request.cookRating && (
-                      <span className="ml-2 text-yellow-600 dark:text-yellow-400">
-                        ⭐ {request.cookRating}
-                      </span>
-                    )}
+                <span className="font-medium text-foreground">{request.cookName}</span>
+                {request.cookRating && (
+                  <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                    ⭐ {request.cookRating}
+                  </span>
+                )}
                   </div>
                 </div>
                 <Button
@@ -613,29 +613,29 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
                   <Edit className="w-4 h-4" />
                   Modifier
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={async () => {
-                    setIsDuplicating(true);
-                    const queryParams = new URLSearchParams({
-                      duplicate: request.id,
-                      title: request.title,
-                      description: request.description,
-                      date: request.date,
-                      timeSlot: request.timeSlot,
-                      guestCount: request.guestCount.toString(),
-                      budget: request.budget.toString(),
-                      address: request.address,
-                    });
-                    window.location.href = `/dashboard/client/requests/new?${queryParams.toString()}`;
-                    setTimeout(() => setIsDuplicating(false), 500);
-                  }}
-                  disabled={isDuplicating}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                setIsDuplicating(true);
+                const queryParams = new URLSearchParams({
+                  duplicate: request.id,
+                  title: request.title,
+                  description: request.description,
+                  date: request.date,
+                  timeSlot: request.timeSlot,
+                  guestCount: request.guestCount.toString(),
+                  budget: request.budget.toString(),
+                  address: request.address,
+                });
+                window.location.href = `/dashboard/client/requests/new?${queryParams.toString()}`;
+                setTimeout(() => setIsDuplicating(false), 500);
+              }}
+              disabled={isDuplicating}
                   className="flex items-center gap-2"
-                >
+            >
                   <Copy className="w-4 h-4" />
-                  Dupliquer
+              Dupliquer
                 </Button>
                 <Button
                   variant="ghost"

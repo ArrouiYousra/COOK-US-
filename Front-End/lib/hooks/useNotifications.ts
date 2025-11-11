@@ -5,6 +5,7 @@ import { useNotificationStore } from "@/stores/notificationStore";
 import { useAuthStore } from "@/stores/authStore";
 import { apiClient } from "@/lib/api/client";
 import type { Notification } from "@/types/notifications";
+import { useNotificationToast } from "./useNotificationToast";
 
 /**
  * Hook pour initialiser et gérer les notifications en temps réel
@@ -14,9 +15,11 @@ import type { Notification } from "@/types/notifications";
 export function useNotifications() {
   const { user, isAuthenticated } = useAuthStore();
   const { setNotifications, setLoading, setError } = useNotificationStore();
+  const { showNotificationToast } = useNotificationToast();
   const isLoadingRef = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasAuthErrorRef = useRef(false);
+  const previousNotificationIdsRef = useRef<Set<string>>(new Set());
 
   // Utiliser useCallback pour stabiliser la fonction et éviter les re-renders
   const loadNotifications = useCallback(async () => {
@@ -31,38 +34,58 @@ export function useNotifications() {
       }
       return;
     }
-    
-    try {
-      isLoadingRef.current = true;
-      setLoading(true);
-      setError(null);
+      
+      try {
+        isLoadingRef.current = true;
+        setLoading(true);
+        setError(null);
       hasAuthErrorRef.current = false;
 
-      const response = await apiClient.getNotifications({
-        limit: 50, // Charger les 50 dernières notifications
-        offset: 0,
-      });
+        const response = await apiClient.getNotifications({
+          limit: 50, // Charger les 50 dernières notifications
+          offset: 0,
+        });
 
-      // Mapper les données de l'API au format Notification
-      const mappedNotifications: Notification[] = (response.notifications || []).map(
-        (notif: any) => ({
-          id: notif.id,
-          userId: notif.user_id,
-          type: notif.type as Notification["type"],
-          title: notif.title || "Notification",
-          message: notif.message || "",
-          actionUrl: notif.action_url || undefined,
-          metadata: notif.metadata || {},
-          isRead: notif.is_read || false,
-          readAt: notif.read_at || undefined,
-          createdAt: notif.created_at || new Date().toISOString(),
-        })
-      );
+        // Mapper les données de l'API au format Notification
+        const mappedNotifications: Notification[] = (response.notifications || []).map(
+          (notif: any) => ({
+            id: notif.id,
+            userId: notif.user_id,
+            type: notif.type as Notification["type"],
+            title: notif.title || "Notification",
+            message: notif.message || "",
+            actionUrl: notif.action_url || undefined,
+            metadata: notif.metadata || {},
+            isRead: notif.is_read || false,
+            readAt: notif.read_at || undefined,
+            createdAt: notif.created_at || new Date().toISOString(),
+          })
+        );
 
-      setNotifications(mappedNotifications);
-    } catch (error: any) {
+        // Détecter les nouvelles notifications
+        const currentIds = new Set(mappedNotifications.map((n) => n.id));
+        const previousIds = previousNotificationIdsRef.current;
+        
+        const newNotifications = mappedNotifications.filter(
+          (notif) => !previousIds.has(notif.id) && !notif.isRead
+        );
+
+        // Afficher des toasts pour les nouvelles notifications
+        newNotifications.forEach((notification) => {
+          showNotificationToast(notification);
+        });
+
+        // Mettre à jour la référence des IDs
+        previousNotificationIdsRef.current = currentIds;
+
+        setNotifications(mappedNotifications);
+    } catch (error: unknown) {
       // Si erreur 401 (Unauthorized), arrêter le polling
-      if (error?.response?.status === 401 || error?.message?.includes('Jeton d\'authentification manquant')) {
+      const errorObj = error && typeof error === 'object' && 'response' in error 
+        ? (error as { response?: { status?: number }; message?: string })
+        : null;
+      
+      if (errorObj?.response?.status === 401 || errorObj?.message?.includes('Jeton d\'authentification manquant')) {
         console.warn("Erreur d'authentification lors du chargement des notifications, arrêt du polling");
         hasAuthErrorRef.current = true;
         setError("Session expirée. Veuillez vous reconnecter.");
@@ -76,14 +99,14 @@ export function useNotifications() {
         return;
       }
       
-      console.error("Erreur lors du chargement des notifications:", error);
-      setError("Impossible de charger les notifications");
-      // En cas d'erreur, on garde un tableau vide plutôt que de planter
-      setNotifications([]);
-    } finally {
-      setLoading(false);
-      isLoadingRef.current = false;
-    }
+        console.error("Erreur lors du chargement des notifications:", error);
+        setError("Impossible de charger les notifications");
+        // En cas d'erreur, on garde un tableau vide plutôt que de planter
+        setNotifications([]);
+      } finally {
+        setLoading(false);
+        isLoadingRef.current = false;
+      }
   }, [user, isAuthenticated, setNotifications, setLoading, setError]);
 
   useEffect(() => {

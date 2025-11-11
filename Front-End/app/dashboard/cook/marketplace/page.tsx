@@ -212,16 +212,16 @@ export default function MarketplacePage() {
   const filteredAndSortedRequests = useMemo(() => {
     let filtered = publicRequests.filter((request) => {
       // Filtre par recherche textuelle
-      const searchLower = searchQuery.toLowerCase();
-      const clientName = `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.toLowerCase();
-      const specialRequests = (request.special_requests || "").toLowerCase();
-      const address = (request.address?.address || "").toLowerCase();
-      
+    const searchLower = searchQuery.toLowerCase();
+    const clientName = `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.toLowerCase();
+    const specialRequests = (request.special_requests || "").toLowerCase();
+    const address = (request.address?.address || "").toLowerCase();
+    
       const matchesSearch = !searchQuery || (
-        clientName.includes(searchLower) ||
-        specialRequests.includes(searchLower) ||
-        address.includes(searchLower)
-      );
+      clientName.includes(searchLower) ||
+      specialRequests.includes(searchLower) ||
+      address.includes(searchLower)
+    );
 
       // Filtre par distance
       const distance = distances[request.id]?.distance || Infinity;
@@ -518,7 +518,7 @@ export default function MarketplacePage() {
                 color: "#10b981",
               },
               ...filteredAndSortedRequests
-                .filter((req) => req.address?.location)
+              .filter((req) => req.address?.location)
                 .map((request) => {
                   const requestLocation = request.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
                   if (!requestLocation) return null;
@@ -533,10 +533,10 @@ export default function MarketplacePage() {
                     : true;
                   
                   return {
-                    id: request.id,
+                id: request.id,
                     lat: requestLat,
                     lng: requestLng,
-                    title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
+                title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
                     description: `${request.number_of_guests || 0} invité(s)${distance ? ` • ${distance.distance_km}` : ""}`,
                     color: isInRadius ? "#3b82f6" : "#ef4444",
                   };
@@ -722,9 +722,9 @@ function RequestCard({ request, index, onPropose, distance, cookProfile }: Reque
             Faire une proposition
           </Button>
           {request.created_at && (
-            <p className="text-xs text-muted-foreground text-center">
-              Publié le {format(new Date(request.created_at), "d MMM yyyy", { locale: fr })}
-            </p>
+          <p className="text-xs text-muted-foreground text-center">
+            Publié le {format(new Date(request.created_at), "d MMM yyyy", { locale: fr })}
+          </p>
           )}
         </div>
       </div>

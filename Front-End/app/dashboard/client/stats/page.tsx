@@ -47,7 +47,7 @@ export default function StatsPage() {
       }
     };
 
-    verifyAuth();
+      verifyAuth();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Exécuter une seule fois au montage
 

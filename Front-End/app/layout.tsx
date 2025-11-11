@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { Providers } from "@/components/providers/Providers";
 
 export const metadata: Metadata = {
   title: "COOK US - Cuisine à domicile entre particuliers",
@@ -33,7 +33,9 @@ export default function RootLayout({
         />
       </head>
       <body className="antialiased" suppressHydrationWarning>
-        <ThemeProvider>{children}</ThemeProvider>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

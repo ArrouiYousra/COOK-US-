@@ -111,7 +111,7 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
       // Afficher un message de succès
       setSuccessMessage("✅ Demande publiée avec succès ! Votre demande est maintenant visible par les cuisiniers.");
       setTimeout(() => setSuccessMessage(null), 5000);
-
+      
       // Recharger les bookings pour afficher la nouvelle demande
       await new Promise(resolve => setTimeout(resolve, 1000));
       await fetchBookings({ limit: 1000, status: undefined });
@@ -283,8 +283,8 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
           {errors.description ? (
             <p className="text-sm text-destructive flex items-center gap-1">
               <AlertCircle className="w-4 h-4" />
-              {errors.description.message}
-            </p>
+            {errors.description.message}
+          </p>
           ) : watch("description") ? (
             <p className="text-xs text-muted-foreground">
               {watch("description").length}/1000 caractères
@@ -524,7 +524,7 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
                 <Navigation className="w-4 h-4" />
                 <span>Adresse confirmée : {selectedAddress}</span>
               </div>
-            </div>
+          </div>
           </motion.div>
         )}
       </div>
