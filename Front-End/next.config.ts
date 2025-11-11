@@ -45,7 +45,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Security-Policy",
-            value: `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://api.mapbox.com; style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; worker-src blob: 'self'; connect-src 'self' http://localhost:5000 https://${backendHost} https://*.onrender.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com wss://*.supabase.co https://*.supabase.co;`,
+            value: `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://api.mapbox.com https://js.stripe.com https://*.stripe.com; style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https: blob:; worker-src blob: 'self'; frame-src 'self' https://js.stripe.com https://*.stripe.com; connect-src 'self' http://localhost:5000 https://${backendHost} https://*.onrender.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://api.stripe.com https://*.stripe.com wss://*.supabase.co https://*.supabase.co;`,
           },
         ],
       },

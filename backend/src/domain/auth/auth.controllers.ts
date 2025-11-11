@@ -27,10 +27,17 @@ const refreshTokenMaxAgeSeconds = Number(
   process.env.REFRESH_TOKEN_TTL ?? 60 * 60 * 24 * 14,
 ); // 14j
 
+// Détecter si on est en cross-origin (frontend et backend sur des domaines différents)
+const isCrossOrigin = isProduction && (
+  frontendUrl.includes("vercel.app") || 
+  frontendUrl.includes("onrender.com") ||
+  process.env.BACKEND_URL?.includes("onrender.com")
+);
+
 const cookieBaseOptions = {
   httpOnly: true,
-  secure: isProduction,
-  sameSite: "lax" as const,
+  secure: isProduction, // Obligatoire pour sameSite: "none"
+  sameSite: (isCrossOrigin ? "none" : "lax") as "none" | "lax",
   path: "/",
 };
 
