@@ -591,3 +591,5 @@ La logique est **bien pensée** mais pas encore **"béton"**. Elle nécessite :
 
 **Recommandation** : Commencer par corriger l'architecture, puis implémenter progressivement les fonctionnalités.
 
+
+

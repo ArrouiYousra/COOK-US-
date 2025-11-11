@@ -149,7 +149,7 @@ router.get("/my-proposals", authGuard, getMyProposals);
  * @swagger
  * /api/bookings/received-proposals:
  *   get:
- *     summary: Get proposals received by a cook (Flux 2: Direct proposals)
+ *     summary: "Get proposals received by a cook (Flux 2: Direct proposals)"
  *     description: Returns bookings with status PENDING that were sent directly to the cook
  *     tags: [Bookings]
  *     security:
