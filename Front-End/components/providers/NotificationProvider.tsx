@@ -13,6 +13,7 @@ import { Bell, ChefHat, MessageSquare, Calendar, CreditCard, CheckCircle2, XCirc
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { notifications, unreadCount } = useNotificationStore();
   const previousNotificationsRef = useRef<Set<string>>(new Set());
+  const isFirstRenderRef = useRef(true);
   const previousUnreadCountRef = useRef(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -90,6 +91,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // Détecter les nouvelles notifications et afficher des toasts
   useEffect(() => {
     const currentNotificationIds = new Set(notifications.map((n) => n.id));
+    if (isFirstRenderRef.current) {
+      previousNotificationsRef.current = currentNotificationIds;
+      isFirstRenderRef.current = false;
+      return;
+    }
     const previousIds = previousNotificationsRef.current;
 
     // Trouver les nouvelles notifications

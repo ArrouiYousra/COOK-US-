@@ -291,26 +291,7 @@ export class ReservationStore {
   ): Promise<Reservation[]> {
     let query = supabaseAdmin
       .from("reservations")
-      .select(
-        `
-        *,
-        cook_profiles!inner(
-          id,
-          headline,
-          bio,
-          hourly_rate,
-          average_rating,
-          user_id,
-          users!inner(
-            id,
-            first_name,
-            last_name,
-            avatar_url,
-            email
-          )
-        )
-      `,
-      )
+      .select("*")
       .eq("cook_profile_id", cookProfileId)
       .order("created_at", { ascending: false });
 
@@ -318,7 +299,7 @@ export class ReservationStore {
       query = query.eq("status", status);
     }
 
-    const { data, error } = await query;
+    const { data: reservationsData, error } = await query;
 
     if (error) {
       console.error("Get cook reservations error:", error);
@@ -327,33 +308,55 @@ export class ReservationStore {
       );
     }
 
-    // Transformer les données pour avoir une structure plus simple
-    const reservations = ((data as any[]) || []).map((reservation: any) => {
-      const cookProfile = reservation.cook_profiles;
-      const user = cookProfile?.users;
+    if (!reservationsData || reservationsData.length === 0) {
+      return [];
+    }
 
-      return {
-        ...reservation,
-        cook: cookProfile
-          ? {
-              id: cookProfile.id,
-              headline: cookProfile.headline,
-              bio: cookProfile.bio,
-              hourly_rate: cookProfile.hourly_rate,
-              average_rating: cookProfile.average_rating,
-              user: user
-                ? {
-                    id: user.id,
-                    first_name: user.first_name,
-                    last_name: user.last_name,
-                    avatar_url: user.avatar_url,
-                    email: user.email,
-                  }
-                : null,
-            }
-          : null,
-      };
-    });
+    // Récupérer le profil cuisinier (un seul ID)
+    const { data: cookProfile, error: cookProfileError } = await supabaseAdmin
+      .from("cook_profiles")
+      .select("id, headline, bio, hourly_rate, average_rating, user_id")
+      .eq("id", cookProfileId)
+      .single();
+
+    if (cookProfileError) {
+      console.warn("Get cook profile error:", cookProfileError);
+    }
+
+    let cookUser: any = null;
+    if (cookProfile?.user_id) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id, first_name, last_name, avatar_url, email")
+        .eq("id", cookProfile.user_id)
+        .single();
+
+      if (!userError && userData) {
+        cookUser = userData;
+      }
+    }
+
+    const reservations = (reservationsData as any[]).map((reservation: any) => ({
+      ...reservation,
+      cook: cookProfile
+        ? {
+            id: cookProfile.id,
+            headline: cookProfile.headline,
+            bio: cookProfile.bio,
+            hourly_rate: cookProfile.hourly_rate,
+            average_rating: cookProfile.average_rating,
+            user: cookUser
+              ? {
+                  id: cookUser.id,
+                  first_name: cookUser.first_name,
+                  last_name: cookUser.last_name,
+                  avatar_url: cookUser.avatar_url,
+                  email: cookUser.email,
+                }
+              : null,
+          }
+        : null,
+    }));
 
     return reservations as Reservation[];
   }

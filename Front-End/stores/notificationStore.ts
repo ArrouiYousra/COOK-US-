@@ -29,10 +29,17 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   error: null,
 
   addNotification: (notification) => {
-    set((state) => ({
-      notifications: [notification, ...state.notifications],
-      unreadCount: notification.isRead ? state.unreadCount : state.unreadCount + 1,
-    }));
+    set((state) => {
+      const alreadyExists = state.notifications.some((n) => n.id === notification.id);
+      if (alreadyExists) {
+        return state;
+      }
+
+      return {
+        notifications: [notification, ...state.notifications],
+        unreadCount: notification.isRead ? state.unreadCount : state.unreadCount + 1,
+      };
+    });
   },
 
   markAsRead: async (notificationId) => {
