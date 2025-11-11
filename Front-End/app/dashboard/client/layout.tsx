@@ -5,16 +5,31 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 import { useNotifications } from "@/lib/hooks/useNotifications";
 import { useBookingReminders } from "@/lib/hooks/useBookingReminders";
+import { useAuthGuard } from "@/lib/hooks/useAuthGuard";
+import { Loader2 } from "lucide-react";
 
 /**
  * Layout principal du dashboard client
  * Contient la sidebar et le header persistants
+ * PROTÉGÉ : Nécessite une authentification
  */
 export default function ClientDashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Protection d'authentification au niveau du layout
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuthGuard();
+
+  // NE PAS AFFICHER LE LAYOUT SI L'UTILISATEUR N'EST PAS AUTHENTIFIÉ
+  if (isAuthLoading || !isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
   // Initialiser les notifications en temps réel
   useNotifications();
   

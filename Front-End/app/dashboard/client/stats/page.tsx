@@ -16,46 +16,37 @@ import {
 } from "lucide-react";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
+import { useAuthGuard } from "@/lib/hooks/useAuthGuard";
 import { useBookingStore } from "@/stores/bookingStore";
 
 /**
  * Page Statistiques et Insights
  * Graphiques de dépenses, tendances, historique
+ * PROTÉGÉE : Nécessite une authentification (protégée par layout + vérification locale)
  */
 export default function StatsPage() {
   const router = useRouter();
-  const { user, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
+  const { user } = useAuthStore();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuthGuard();
   const { bookings, fetchBookings, isLoadingBookings } = useBookingStore();
   const [timeRange, setTimeRange] = useState<"week" | "month" | "year" | "all">("month");
   const [reviews, setReviews] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Vérifier l'authentification au montage (une seule fois)
-  useEffect(() => {
-    if (isAuthLoading) return;
-    
-    const verifyAuth = async () => {
-      if (!isAuthenticated) {
-        try {
-          await checkAuth();
-        } catch (error) {
-          console.warn("Authentification échouée, redirection vers la page de connexion");
-          // Utiliser router.replace pour éviter d'ajouter une entrée dans l'historique
-          router.replace("/auth/login");
-        }
-      }
-    };
-
-      verifyAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Exécuter une seule fois au montage
+  // Double protection : layout + page (au cas où)
+  if (isAuthLoading || !isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   // Charger les données
   useEffect(() => {
     const loadData = async () => {
-      if (isAuthLoading) return;
-      if (!isAuthenticated || !user) return;
+      if (!user) return;
 
       setIsLoading(true);
       setError(null);

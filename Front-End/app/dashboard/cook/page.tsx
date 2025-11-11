@@ -7,16 +7,19 @@ import Link from "next/link";
 import { Calendar, Euro, Star, TrendingUp, Clock, Users, FileText, ChefHat, Loader2, AlertCircle } from "lucide-react";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
+import { useAuthGuard } from "@/lib/hooks/useAuthGuard";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
 /**
  * Page Dashboard (Accueil) du cuisinier
  * Vue synthétique des activités et statistiques avec données réelles
+ * PROTÉGÉE : Nécessite une authentification (protégée par layout + vérification locale)
  */
 export default function CookDashboardPage() {
   const router = useRouter();
-  const { user, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
+  const { user } = useAuthStore();
+  const { isAuthenticated, isLoading: isAuthLoading } = useAuthGuard();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState({
@@ -30,31 +33,19 @@ export default function CookDashboardPage() {
   const [upcomingBookings, setUpcomingBookings] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
 
-  // Vérifier l'authentification au montage (une seule fois)
-  useEffect(() => {
-    if (isAuthLoading) return;
-    
-    const verifyAuth = async () => {
-      if (!isAuthenticated) {
-        try {
-          await checkAuth();
-        } catch (error) {
-          console.warn("Authentification échouée, redirection vers la page de connexion");
-          // Utiliser router.replace pour éviter d'ajouter une entrée dans l'historique
-          router.replace("/auth/login");
-        }
-      }
-    };
-
-    verifyAuth();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Exécuter une seule fois au montage
+  // Double protection : layout + page (au cas où)
+  if (isAuthLoading || !isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   // Charger les données du dashboard
   useEffect(() => {
     const loadDashboardData = async () => {
-      if (isAuthLoading) return;
-      if (!isAuthenticated || !user) return;
+      if (!user) return;
 
       setIsLoading(true);
       setError(null);
