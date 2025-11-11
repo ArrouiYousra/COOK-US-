@@ -21,8 +21,15 @@ class ApiClient {
   public client: AxiosInstance;
 
   constructor() {
-          this.client = axios.create({
-            baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api",
+    // S'assurer que l'URL de base se termine par /api
+    let baseURL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    // Si l'URL ne se termine pas par /api, l'ajouter
+    if (!baseURL.endsWith("/api")) {
+      baseURL = baseURL.endsWith("/") ? `${baseURL}api` : `${baseURL}/api`;
+    }
+    
+    this.client = axios.create({
+      baseURL,
             timeout: 60000, // Augmenté à 60 secondes pour les uploads d'avatar
             withCredentials: true,
             headers: {

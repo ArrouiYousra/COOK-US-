@@ -78,7 +78,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://votre-projet.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=votre_anon_key
 
 # Backend API (URL de votre backend Render)
-NEXT_PUBLIC_API_URL=https://votre-backend.onrender.com
+# ⚠️ IMPORTANT : L'URL doit se terminer par /api
+NEXT_PUBLIC_API_URL=https://votre-backend.onrender.com/api
+# Exemple: NEXT_PUBLIC_API_URL=https://cook-us-back-end.onrender.com/api
 
 # Stripe (si utilisé)
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...

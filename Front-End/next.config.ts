@@ -35,7 +35,8 @@ const nextConfig: NextConfig = {
   // Headers pour Mapbox et backend
   async headers() {
     // Récupérer l'URL du backend depuis les variables d'environnement
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+    // Extraire le hostname (sans /api)
     const backendHost = backendUrl.replace(/^https?:\/\//, "").split("/")[0];
     
     return [
