@@ -35,7 +35,7 @@ export function CTASection() {
               size="lg"
               className="bg-blue-600 hover:bg-blue-700 text-white text-lg px-8 py-6 shadow-lg shadow-blue-500/30"
             >
-              <Link href="/cooks">Trouver mon chef maintenant</Link>
+              <Link href="/auth/register/client">Trouver mon chef maintenant</Link>
             </Button>
           </motion.div>
         </motion.div>

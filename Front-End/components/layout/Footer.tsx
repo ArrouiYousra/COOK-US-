@@ -7,7 +7,7 @@ const footerLinks = {
   company: [
     { label: "À propos", href: "/about" },
     { label: "Comment ça marche", href: "#how-it-works" },
-    { label: "Devenir chef", href: "/register-cook" },
+    { label: "Devenir chef", href: "/auth/role" },
     { label: "Contact", href: "/contact" },
   ],
   legal: [
@@ -97,7 +97,7 @@ export function Footer() {
               ))}
             </div>
             <Link
-              href="/register-cook"
+              href="/auth/role"
               className="mt-6 inline-block text-cookus-text/70 hover:text-cookus-text text-sm font-semibold transition-colors"
             >
               Devenir partenaire →

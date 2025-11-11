@@ -284,7 +284,7 @@ export function HeroSection() {
                 size="lg"
                 className="bg-blue-600 hover:bg-blue-700 text-white text-lg px-8 py-6 border-0 shadow-lg shadow-blue-500/30"
               >
-                <Link href="/cooks">Réservez votre chef</Link>
+                <Link href="/auth/register/client">Réservez votre chef</Link>
               </Button>
             </motion.div>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -294,7 +294,7 @@ export function HeroSection() {
                 size="lg"
                 className="border-cookus-text/20 text-cookus-text hover:bg-cookus-text/10 border-2 hover:border-blue-500 text-lg px-8 py-6"
               >
-                <Link href="/register-cook">Je suis chef</Link>
+                <Link href="/auth/role">Je suis chef</Link>
               </Button>
             </motion.div>
           </motion.div>

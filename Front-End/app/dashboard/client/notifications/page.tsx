@@ -1,7 +1,8 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Bell, CheckCheck, Trash2 } from "lucide-react";
+import { Bell, CheckCheck, Trash2, Undo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { formatDistanceToNow } from "date-fns";
@@ -14,9 +15,6 @@ import {
   CreditCard,
   X,
   BookOpen,
-  UserCheck,
-  UserX,
-  Info,
 } from "lucide-react";
 
 /**
@@ -24,8 +22,52 @@ import {
  * Vue complète de toutes les notifications avec gestion
  */
 export default function NotificationsPage() {
-  const { notifications, unreadCount, markAsRead, markAllAsRead, removeNotification } =
-    useNotificationStore();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAsUnread,
+    markAllAsRead,
+    removeNotification,
+  } = useNotificationStore();
+  const [activeFilter, setActiveFilter] = useState<
+    "all" | "booking" | "message" | "review" | "payment"
+  >("all");
+
+  const filteredNotifications = useMemo(() => {
+    if (activeFilter === "all") {
+      return notifications;
+    }
+
+    const bookingTypes: Notification["type"][] = [
+      "BOOKING_REQUEST",
+      "BOOKING_ACCEPTED",
+      "BOOKING_CONFIRMED",
+      "BOOKING_CANCELLED",
+      "BOOKING_REMINDER",
+    ];
+
+    switch (activeFilter) {
+      case "booking":
+        return notifications.filter((notif) =>
+          bookingTypes.includes(notif.type),
+        );
+      case "message":
+        return notifications.filter(
+          (notif) => notif.type === "MESSAGE_RECEIVED",
+        );
+      case "review":
+        return notifications.filter(
+          (notif) => notif.type === "REVIEW_RECEIVED",
+        );
+      case "payment":
+        return notifications.filter(
+          (notif) => notif.type === "PAYMENT_RECEIVED",
+        );
+      default:
+        return notifications;
+    }
+  }, [notifications, activeFilter]);
 
   const getNotificationIcon = (type: Notification["type"]) => {
     switch (type) {
@@ -75,7 +117,9 @@ export default function NotificationsPage() {
           </h1>
           <p className="text-muted-foreground">
             {unreadCount > 0
-              ? `${unreadCount} notification${unreadCount > 1 ? "s" : ""} non lue${unreadCount > 1 ? "s" : ""}`
+              ? `${unreadCount} notification${
+                  unreadCount > 1 ? "s" : ""
+                } non lue${unreadCount > 1 ? "s" : ""}`
               : "Toutes vos notifications"}
           </p>
         </div>
@@ -91,9 +135,35 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      {/* Filtres */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2">
+        {[
+          { id: "all" as const, label: "Toutes" },
+          { id: "booking" as const, label: "Réservations" },
+          { id: "message" as const, label: "Messages" },
+          { id: "review" as const, label: "Avis" },
+          { id: "payment" as const, label: "Paiements" },
+        ].map((filter) => (
+          <button
+            key={filter.id}
+            onClick={() => setActiveFilter(filter.id)}
+            className={`
+              px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors
+              ${
+                activeFilter === filter.id
+                  ? "bg-blue-600 text-white"
+                  : "bg-accent text-foreground hover:bg-accent/80"
+              }
+            `}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
       {/* Liste des notifications */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        {notifications.length === 0 ? (
+        {filteredNotifications.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-16 h-16 rounded-full bg-yellow-500/10 dark:bg-yellow-500/20 flex items-center justify-center mx-auto mb-4">
               <Bell className="w-8 h-8 text-yellow-600 dark:text-yellow-400" />
@@ -107,7 +177,7 @@ export default function NotificationsPage() {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {notifications.map((notification, index) => {
+            {filteredNotifications.map((notification, index) => {
               const { icon: Icon, color } = getNotificationIcon(notification.type);
               const bgColor = getNotificationBgColor(notification.type);
 
@@ -124,9 +194,7 @@ export default function NotificationsPage() {
                 >
                   <div className="flex items-start gap-4">
                     {/* Icône */}
-                    <div
-                      className={`flex-shrink-0 w-12 h-12 rounded-lg ${bgColor} flex items-center justify-center`}
-                    >
+                    <div className={`flex-shrink-0 w-12 h-12 rounded-lg ${bgColor} flex items-center justify-center`}>
                       <Icon className={`w-6 h-6 ${color}`} />
                     </div>
 
@@ -171,7 +239,7 @@ export default function NotificationsPage() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {!notification.isRead && (
+                          {!notification.isRead ? (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -180,6 +248,16 @@ export default function NotificationsPage() {
                               aria-label="Marquer comme lu"
                             >
                               <CheckCheck className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => markAsUnread(notification.id)}
+                              className="h-8 w-8 p-0"
+                              aria-label="Marquer comme non lu"
+                            >
+                              <Undo className="w-4 h-4" />
                             </Button>
                           )}
                           <Button

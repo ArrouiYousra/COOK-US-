@@ -157,7 +157,7 @@ export function CooksSection() {
           className="text-center"
         >
           <Button asChild size="lg" className="bg-blue-600 hover:bg-blue-700">
-            <Link href="/cooks">Découvrir tous nos chefs</Link>
+          <Link href="/auth/register/client">Découvrir tous nos chefs</Link>
           </Button>
         </motion.div>
       </div>

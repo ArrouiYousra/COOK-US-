@@ -60,13 +60,6 @@ const menuSections = [
         bgColor: "bg-indigo-500/10 dark:bg-indigo-500/20",
       },
       {
-        label: "Propositions reçues",
-        icon: Bell,
-        href: "/dashboard/cook/received-proposals",
-        color: "text-yellow-600 dark:text-yellow-400",
-        bgColor: "bg-yellow-500/10 dark:bg-yellow-500/20",
-      },
-      {
         label: "Demandes clients",
         icon: FileText,
         href: "/dashboard/cook/requests",

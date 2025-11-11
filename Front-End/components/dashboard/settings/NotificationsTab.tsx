@@ -3,12 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Bell, Mail, Smartphone, MessageSquare, Loader2, CheckCircle2 } from "lucide-react";
+import { Bell, Mail, Smartphone, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
-// Toast notifications - utiliser alert pour l'instant
 
 interface NotificationPreferences {
   email: {
@@ -43,8 +42,8 @@ export function NotificationsTab() {
   const router = useRouter();
   const { user, isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [preferences, setPreferences] = useState<NotificationPreferences>({
     email: {
       bookings: true,
@@ -110,6 +109,7 @@ export function NotificationsTab() {
           dispute_opened: { email: true, sms: false, push: true },
           profile_approved: { email: true, sms: false, push: true },
           profile_rejected: { email: true, sms: false, push: true },
+          marketing_promotions: { email: false, sms: false, push: true },
         };
 
         // Mapper les préférences détaillées vers l'interface locale
@@ -119,13 +119,13 @@ export function NotificationsTab() {
             bookings: prefs.booking_request?.email || prefs.booking_confirmed?.email || false,
             messages: prefs.message_received?.email || false,
             reviews: prefs.review_received?.email || false,
-            promotions: false, // Pas de préférence détaillée pour les promotions
+            promotions: prefs.marketing_promotions?.email ?? false,
           },
           app: {
             bookings: prefs.booking_request?.push || prefs.booking_confirmed?.push || false,
             messages: prefs.message_received?.push || false,
             reviews: prefs.review_received?.push || false,
-            promotions: false,
+            promotions: prefs.marketing_promotions?.push ?? false,
           },
           sms: {
             bookings: prefs.booking_confirmed?.sms || false,
@@ -155,6 +155,7 @@ export function NotificationsTab() {
           dispute_opened: { email: true, sms: false, push: true },
           profile_approved: { email: true, sms: false, push: true },
           profile_rejected: { email: true, sms: false, push: true },
+          marketing_promotions: { email: false, sms: false, push: true },
         };
         
         setPreferences((prev) => ({
@@ -163,13 +164,13 @@ export function NotificationsTab() {
             bookings: defaultPrefs.booking_request?.email || defaultPrefs.booking_confirmed?.email || false,
             messages: defaultPrefs.message_received?.email || false,
             reviews: defaultPrefs.review_received?.email || false,
-            promotions: false,
+            promotions: defaultPrefs.marketing_promotions?.email ?? false,
           },
           app: {
             bookings: defaultPrefs.booking_request?.push || defaultPrefs.booking_confirmed?.push || false,
             messages: defaultPrefs.message_received?.push || false,
             reviews: defaultPrefs.review_received?.push || false,
-            promotions: false,
+            promotions: defaultPrefs.marketing_promotions?.push ?? false,
           },
           sms: {
             bookings: defaultPrefs.booking_confirmed?.sms || false,
@@ -191,13 +192,16 @@ export function NotificationsTab() {
     key: string,
     value: boolean
   ) => {
-    setPreferences((prev) => ({
-      ...prev,
+    setErrorMessage(null);
+    const previousPreferences = preferences;
+    const nextPreferences = {
+      ...preferences,
       [category]: {
-        ...prev[category],
+        ...preferences[category],
         [key]: value,
       },
-    }));
+    } as NotificationPreferences;
+    setPreferences(nextPreferences);
 
     // Mapper les préférences locales vers les préférences détaillées de l'API
     try {
@@ -206,63 +210,118 @@ export function NotificationsTab() {
       // Mapper les préférences email
       if (category === "email") {
         if (key === "bookings") {
-          updateData.booking_request = { email: value, sms: false, push: preferences.app.bookings };
-          updateData.booking_confirmed = { email: value, sms: preferences.sms.bookings, push: preferences.app.bookings };
+          updateData.booking_request = {
+            email: nextPreferences.email.bookings,
+            sms: false,
+            push: nextPreferences.app.bookings,
+          };
+          updateData.booking_confirmed = {
+            email: nextPreferences.email.bookings,
+            sms: nextPreferences.sms.bookings,
+            push: nextPreferences.app.bookings,
+          };
         } else if (key === "messages") {
-          updateData.message_received = { email: value, sms: false, push: preferences.app.messages };
+          updateData.message_received = {
+            email: nextPreferences.email.messages,
+            sms: false,
+            push: nextPreferences.app.messages,
+          };
         } else if (key === "reviews") {
-          updateData.review_received = { email: value, sms: false, push: preferences.app.reviews };
+          updateData.review_received = {
+            email: nextPreferences.email.reviews,
+            sms: false,
+            push: nextPreferences.app.reviews,
+          };
+        } else if (key === "promotions") {
+          updateData.marketing_promotions = {
+            email: nextPreferences.email.promotions,
+            sms: false,
+            push: nextPreferences.app.promotions,
+          };
         }
       }
 
       // Mapper les préférences app (push)
       if (category === "app") {
         if (key === "bookings") {
-          updateData.booking_request = { email: preferences.email.bookings, sms: false, push: value };
-          updateData.booking_confirmed = { email: preferences.email.bookings, sms: preferences.sms.bookings, push: value };
+          updateData.booking_request = {
+            email: nextPreferences.email.bookings,
+            sms: false,
+            push: nextPreferences.app.bookings,
+          };
+          updateData.booking_confirmed = {
+            email: nextPreferences.email.bookings,
+            sms: nextPreferences.sms.bookings,
+            push: nextPreferences.app.bookings,
+          };
         } else if (key === "messages") {
-          updateData.message_received = { email: preferences.email.messages, sms: false, push: value };
+          updateData.message_received = {
+            email: nextPreferences.email.messages,
+            sms: false,
+            push: nextPreferences.app.messages,
+          };
         } else if (key === "reviews") {
-          updateData.review_received = { email: preferences.email.reviews, sms: false, push: value };
+          updateData.review_received = {
+            email: nextPreferences.email.reviews,
+            sms: false,
+            push: nextPreferences.app.reviews,
+          };
+        } else if (key === "promotions") {
+          updateData.marketing_promotions = {
+            email: nextPreferences.email.promotions,
+            sms: false,
+            push: nextPreferences.app.promotions,
+          };
         }
       }
 
       // Mapper les préférences SMS
       if (category === "sms") {
         if (key === "bookings") {
-          updateData.booking_confirmed = { email: preferences.email.bookings, sms: value, push: preferences.app.bookings };
+          updateData.booking_confirmed = {
+            email: nextPreferences.email.bookings,
+            sms: nextPreferences.sms.bookings,
+            push: nextPreferences.app.bookings,
+          };
         } else if (key === "urgent") {
-          updateData.booking_reminder = { email: true, sms: value, push: true };
+          updateData.booking_reminder = {
+            email: true,
+            sms: nextPreferences.sms.urgent,
+            push: true,
+          };
         }
+      }
+
+      if (key === "promotions" && !updateData.marketing_promotions) {
+        updateData.marketing_promotions = {
+          email: nextPreferences.email.promotions,
+          sms: false,
+          push: nextPreferences.app.promotions,
+        };
       }
 
       // Sauvegarder les préférences détaillées
       await apiClient.updateNotificationPreferences(updateData);
 
       // Mettre à jour les préférences globales
-      const notificationsEnabled = value || 
-        preferences.email.bookings || preferences.email.messages || preferences.email.reviews ||
-        preferences.app.bookings || preferences.app.messages || preferences.app.reviews;
+      const notificationsEnabled =
+        Object.values(nextPreferences.email).some(Boolean) ||
+        Object.values(nextPreferences.app).some(Boolean);
 
       await apiClient.updateMyProfile({
         notifications_enabled: notificationsEnabled,
-        email_notifications: category === "email" ? value : (preferences.email.bookings || preferences.email.messages || preferences.email.reviews),
-        sms_notifications: category === "sms" ? value : (preferences.sms.bookings || preferences.sms.urgent),
+        email_notifications: Object.values(nextPreferences.email).some(Boolean),
+        sms_notifications: Object.values(nextPreferences.sms).some(Boolean),
       });
 
       setSuccessMessage("Préférences mises à jour !");
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (error: any) {
       console.error("Erreur lors de la sauvegarde des préférences:", error);
-      alert("Erreur: Impossible de sauvegarder les préférences");
-      // Revert the change
-      setPreferences((prev) => ({
-        ...prev,
-        [category]: {
-          ...prev[category],
-          [key]: !value,
-        },
-      }));
+      setErrorMessage("Impossible de sauvegarder les préférences pour le moment.");
+      // Revert to previous preferences
+      setPreferences(previousPreferences);
+      setTimeout(() => setErrorMessage(null), 3000);
     }
   };
 
@@ -284,6 +343,12 @@ export function NotificationsTab() {
         <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20 flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400" />
           <p className="text-sm text-green-600 dark:text-green-400">{successMessage}</p>
+        </div>
+      )}
+      {errorMessage && (
+        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+          <p className="text-sm text-red-600 dark:text-red-400">{errorMessage}</p>
         </div>
       )}
 
@@ -440,7 +505,7 @@ export function NotificationsTab() {
       {/* Notifications par SMS */}
       <div className="bg-card border border-border rounded-xl p-6 space-y-4">
         <div className="flex items-center gap-2 mb-4">
-          <MessageSquare className="w-5 h-5 text-muted-foreground" />
+          <Smartphone className="w-5 h-5 text-muted-foreground" />
           <h3 className="font-cera text-xl font-bold text-foreground">Notifications par SMS</h3>
         </div>
 

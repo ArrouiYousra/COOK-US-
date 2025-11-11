@@ -21,6 +21,12 @@ export default function CookDashboardLayout({
   // Protection d'authentification au niveau du layout
   const { isAuthenticated, isLoading: isAuthLoading } = useAuthGuard();
 
+  // Initialiser les notifications en temps réel (gère l'absence d'utilisateur en interne)
+  useNotifications();
+
+  // Initialiser les rappels automatiques
+  useBookingReminders();
+
   // NE PAS AFFICHER LE LAYOUT SI L'UTILISATEUR N'EST PAS AUTHENTIFIÉ
   if (isAuthLoading || !isAuthenticated) {
     return (
@@ -29,12 +35,6 @@ export default function CookDashboardLayout({
       </div>
     );
   }
-
-  // Initialiser les notifications en temps réel
-  useNotifications();
-  
-  // Initialiser les rappels automatiques
-  useBookingReminders();
 
   return (
     <div className="min-h-screen bg-background flex">

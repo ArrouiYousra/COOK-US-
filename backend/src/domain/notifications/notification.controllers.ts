@@ -198,6 +198,62 @@ export const markAllAsRead = async (
   }
 };
 
+export const markAsUnread = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: "Unauthorized",
+        message: "User not authenticated",
+      });
+      return;
+    }
+
+    const { notificationId } = req.params;
+    if (!notificationId) {
+      res.status(400).json({
+        error: "Bad Request",
+        message: "Notification ID is required",
+      });
+      return;
+    }
+
+    const notification = await NotificationStore.markAsUnread(
+      notificationId,
+      req.user.id,
+    );
+
+    res.status(200).json({
+      message: "Notification marked as unread",
+      notification,
+    });
+  } catch (error) {
+    console.error("Mark as unread error:", error);
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Failed to mark notification as unread";
+
+    if (
+      errorMessage.includes("not found") ||
+      errorMessage.includes("only mark")
+    ) {
+      res.status(400).json({
+        error: "Bad Request",
+        message: errorMessage,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: errorMessage,
+    });
+  }
+};
+
 export const deleteNotification = async (
   req: AuthRequest,
   res: Response,

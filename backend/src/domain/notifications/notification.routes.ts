@@ -4,6 +4,7 @@ import {
   getNotificationById,
   markAsRead,
   markAllAsRead,
+  markAsUnread,
   deleteNotification,
   getUnreadCount,
 } from "./notification.controllers";
@@ -149,6 +150,26 @@ router.get("/:notificationId", authGuard, getNotificationById);
  *         description: Notification marked as read
  */
 router.put("/:notificationId/read", authGuard, markAsRead);
+
+/**
+ * @swagger
+ * /api/notifications/{notificationId}/unread:
+ *   put:
+ *     summary: Mark notification as unread
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: notificationId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Notification marked as unread
+ */
+router.put("/:notificationId/unread", authGuard, markAsUnread);
 
 /**
  * @swagger

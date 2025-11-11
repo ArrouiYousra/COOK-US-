@@ -14,6 +14,7 @@ import {
   CreditCard,
   Calendar,
   Clock,
+  Undo,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNotificationStore } from "@/stores/notificationStore";
@@ -29,7 +30,13 @@ export function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  const { notifications, unreadCount, markAsRead, markAllAsRead } =
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAsUnread,
+    markAllAsRead,
+  } =
     useNotificationStore();
 
   // Fermer le dropdown quand on clique à l'extérieur
@@ -174,6 +181,8 @@ export function NotificationsDropdown() {
                       onClick={() => handleNotificationClick(notification)}
                       getIcon={getNotificationIcon}
                       getColor={getNotificationColor}
+                      markAsRead={markAsRead}
+                      markAsUnread={markAsUnread}
                     />
                   ))}
                 </div>
@@ -191,6 +200,8 @@ interface NotificationItemProps {
   onClick: () => void;
   getIcon: (type: Notification["type"]) => typeof Bell;
   getColor: (type: Notification["type"]) => string;
+  markAsRead: (id: string) => Promise<void>;
+  markAsUnread: (id: string) => Promise<void>;
 }
 
 function NotificationItem({
@@ -198,31 +209,32 @@ function NotificationItem({
   onClick,
   getIcon,
   getColor,
+  markAsRead,
+  markAsUnread,
 }: NotificationItemProps) {
   const Icon = getIcon(notification.type);
   const colorClass = getColor(notification.type);
 
-  const content = notification.actionUrl ? (
-    <Link
-      href={notification.actionUrl}
-      onClick={onClick}
-      className="block w-full"
-    >
-      <NotificationContent
-        notification={notification}
-        Icon={Icon}
-        colorClass={colorClass}
-      />
-    </Link>
-  ) : (
-    <div onClick={onClick} className="cursor-pointer">
-      <NotificationContent
-        notification={notification}
-        Icon={Icon}
-        colorClass={colorClass}
-      />
-    </div>
-  );
+  const ContentWrapper = ({ children }: { children: React.ReactNode }) =>
+    notification.actionUrl ? (
+      <Link href={notification.actionUrl} onClick={onClick} className="block w-full">
+        {children}
+      </Link>
+    ) : (
+      <div onClick={onClick} className="cursor-pointer">
+        {children}
+      </div>
+    );
+
+  const handleMarkRead = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    await markAsRead(notification.id);
+  };
+
+  const handleMarkUnread = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    await markAsUnread(notification.id);
+  };
 
   return (
     <motion.div
@@ -234,59 +246,65 @@ function NotificationItem({
         hover:bg-accent
       `}
     >
-      {content}
+      <ContentWrapper>
+        <div className="flex gap-3">
+          <div className={`flex-shrink-0 w-10 h-10 rounded-lg ${colorClass} flex items-center justify-center`}>
+            <Icon className="w-5 h-5" />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <h4
+                className={`font-semibold text-sm ${
+                  !notification.isRead ? "text-foreground" : "text-muted-foreground"
+                }`}
+              >
+                {notification.title}
+              </h4>
+              {!notification.isRead && (
+                <div className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 mt-1.5" />
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+              {notification.message}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Clock className="w-3 h-3" />
+              <span>
+                {formatDistanceToNow(new Date(notification.createdAt), {
+                  addSuffix: true,
+                  locale: fr,
+                })}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {!notification.isRead ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                onClick={handleMarkRead}
+              >
+                <Check className="w-3 h-3 mr-1" />
+                Lu
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                onClick={handleMarkUnread}
+              >
+                <Undo className="w-3 h-3 mr-1" />
+                Non lu
+              </Button>
+            )}
+          </div>
+        </div>
+      </ContentWrapper>
     </motion.div>
-  );
-}
-
-interface NotificationContentProps {
-  notification: Notification;
-  Icon: typeof Bell;
-  colorClass: string;
-}
-
-function NotificationContent({
-  notification,
-  Icon,
-  colorClass,
-}: NotificationContentProps) {
-  return (
-    <div className="flex gap-3">
-      {/* Icône */}
-      <div className={`flex-shrink-0 w-10 h-10 rounded-lg ${colorClass} flex items-center justify-center`}>
-        <Icon className="w-5 h-5" />
-      </div>
-
-      {/* Contenu */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <h4
-            className={`font-semibold text-sm ${
-              !notification.isRead
-                ? "text-foreground"
-                : "text-muted-foreground"
-            }`}
-          >
-            {notification.title}
-          </h4>
-          {!notification.isRead && (
-            <div className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 mt-1.5" />
-          )}
-        </div>
-        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-          {notification.message}
-        </p>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Clock className="w-3 h-3" />
-          <span>
-            {formatDistanceToNow(new Date(notification.createdAt), {
-              addSuffix: true,
-              locale: fr,
-            })}
-          </span>
-        </div>
-      </div>
-    </div>
   );
 }
 

@@ -984,6 +984,17 @@ class ApiClient {
   }
 
   /**
+   * Marquer une notification comme non lue
+   * @param notificationId - ID de la notification
+   */
+  async markNotificationAsUnread(notificationId: string): Promise<{ message: string }> {
+    const response = await this.client.put<{ message: string }>(
+      `/notifications/${notificationId}/unread`
+    );
+    return response.data;
+  }
+
+  /**
    * Marquer toutes les notifications comme lues
    */
   async markAllNotificationsAsRead(): Promise<{ message: string }> {
@@ -1486,6 +1497,7 @@ class ApiClient {
       dispute_opened?: { email: boolean; sms: boolean; push: boolean };
       profile_approved?: { email: boolean; sms: boolean; push: boolean };
       profile_rejected?: { email: boolean; sms: boolean; push: boolean };
+      marketing_promotions?: { email: boolean; sms: boolean; push: boolean };
     };
   }> {
     const response = await this.client.get("/notifications/preferences");
@@ -1507,6 +1519,7 @@ class ApiClient {
     dispute_opened?: { email: boolean; sms: boolean; push: boolean };
     profile_approved?: { email: boolean; sms: boolean; push: boolean };
     profile_rejected?: { email: boolean; sms: boolean; push: boolean };
+    marketing_promotions?: { email: boolean; sms: boolean; push: boolean };
   }): Promise<{
     message: string;
     preferences: any;

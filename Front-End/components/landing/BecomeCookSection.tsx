@@ -58,7 +58,7 @@ export function BecomeCookSection() {
               size="lg"
               className="bg-blue-600 hover:bg-blue-700 text-white"
             >
-              <Link href="/register-cook">Postuler comme chef</Link>
+              <Link href="/auth/role">Postuler comme chef</Link>
             </Button>
           </motion.div>
 

@@ -10,6 +10,7 @@ interface NotificationStore {
   error: string | null;
   addNotification: (notification: Notification) => void;
   markAsRead: (notificationId: string) => Promise<void>;
+  markAsUnread: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   removeNotification: (notificationId: string) => void;
   clearAll: () => void;
@@ -72,6 +73,41 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
         return {
           notifications: updated,
           unreadCount: state.unreadCount + 1,
+        };
+      });
+    }
+  },
+
+  markAsUnread: async (notificationId) => {
+    set((state) => {
+      const target = state.notifications.find((n) => n.id === notificationId);
+      const wasRead = target?.isRead ?? false;
+      const updated = state.notifications.map((notif) =>
+        notif.id === notificationId
+          ? { ...notif, isRead: false, readAt: undefined }
+          : notif
+      );
+      return {
+        notifications: updated,
+        unreadCount: wasRead ? state.unreadCount + 1 : state.unreadCount,
+      };
+    });
+
+    try {
+      const { apiClient } = await import("@/lib/api/client");
+      await apiClient.markNotificationAsUnread(notificationId);
+    } catch (error) {
+      console.error("Erreur lors du marquage de la notification comme non lue:", error);
+      // revert
+      set((state) => {
+        const updated = state.notifications.map((notif) =>
+          notif.id === notificationId
+            ? { ...notif, isRead: true, readAt: new Date().toISOString() }
+            : notif
+        );
+        return {
+          notifications: updated,
+          unreadCount: Math.max(0, state.unreadCount - 1),
         };
       });
     }

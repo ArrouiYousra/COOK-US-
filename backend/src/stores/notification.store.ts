@@ -138,6 +138,41 @@ export class NotificationStore {
   }
 
   /**
+   * Mark notification as unread
+   */
+  static async markAsUnread(
+    notificationId: string,
+    userId: string,
+  ): Promise<Notification> {
+    const notification = await this.getNotificationById(notificationId);
+    if (!notification) {
+      throw new Error("Notification not found");
+    }
+
+    if (notification.user_id !== userId) {
+      throw new Error("You can only mark your own notifications as unread");
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("notifications")
+      .update({
+        is_read: false,
+        read_at: null,
+      })
+      .eq("id", notificationId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(
+        `Failed to mark notification as unread: ${error.message}`,
+      );
+    }
+
+    return data as Notification;
+  }
+
+  /**
    * Mark all notifications as read for a user
    */
   static async markAllAsRead(userId: string): Promise<void> {

@@ -132,6 +132,13 @@ const notificationPreferencesSchema = z.object({
       push: z.boolean().default(true),
     })
     .optional(),
+  marketing_promotions: z
+    .object({
+      email: z.boolean().default(false),
+      sms: z.boolean().default(false),
+      push: z.boolean().default(true),
+    })
+    .optional(),
 });
 
 type NotificationPreferences = z.infer<typeof notificationPreferencesSchema>;
@@ -156,6 +163,7 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
   proposal_received: { email: true, sms: false, push: true },
   proposal_accepted: { email: true, sms: true, push: true },
   proposal_rejected: { email: true, sms: false, push: true },
+  marketing_promotions: { email: false, sms: false, push: true },
 };
 
 /**
