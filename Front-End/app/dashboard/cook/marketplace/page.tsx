@@ -592,9 +592,9 @@ export default function MarketplacePage() {
       ) : viewMode === "map" ? (
         cookLocation ? (
           <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg" style={{ height: "600px" }}>
-            <MapboxMap
+          <MapboxMap
               center={[cookLocation.lat, cookLocation.lng]}
-              zoom={11}
+            zoom={11}
               markers={[
                 {
                   id: "cook-location",
@@ -605,7 +605,7 @@ export default function MarketplacePage() {
                   color: "#10b981",
                 },
                 ...filteredAndSortedRequests
-                  .filter((req) => req.address?.location)
+              .filter((req) => req.address?.location)
                   .map((request) => {
                     const requestLocation = request.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
                     if (!requestLocation) return null;
@@ -620,27 +620,27 @@ export default function MarketplacePage() {
                       : true;
                     
                     return {
-                      id: request.id,
+                id: request.id,
                       lat: requestLat,
                       lng: requestLng,
-                      title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
+                title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
                       description: `${request.number_of_guests || 0} invité(s)${distance ? ` • ${distance.distance_km}` : ""}`,
                       color: isInRadius ? "#3b82f6" : "#ef4444",
                     };
                   })
                   .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
               ]}
-              height="100%"
+            height="100%"
               interactive={true}
-              onMarkerClick={(marker) => {
+            onMarkerClick={(marker) => {
                 if (marker.id === "cook-location") return;
                 const request = filteredAndSortedRequests.find((r) => r.id === marker.id);
-                if (request) {
-                  handlePropose(request);
-                }
-              }}
-            />
-          </div>
+              if (request) {
+                handlePropose(request);
+              }
+            }}
+          />
+        </div>
         ) : (
           <div className="bg-card border border-border rounded-xl p-8 text-center">
             <MapPin className="w-12 h-12 text-muted-foreground mx-auto mb-4" />

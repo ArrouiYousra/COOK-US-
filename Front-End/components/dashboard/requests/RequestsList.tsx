@@ -43,9 +43,10 @@ export function RequestsList({ status }: RequestsListProps) {
         console.log("🔄 [RequestsList] Chargement des données, statut:", status);
         // Charger les bookings et propositions en parallèle
         // IMPORTANT: Réinitialiser le filtre de statut pour obtenir TOUS les bookings
+        const { fetchBookings: fetchBookingsFn, fetchProposals: fetchProposalsFn } = useBookingStore.getState();
         await Promise.all([
-          fetchBookings({ limit: 1000, status: undefined }),
-          fetchProposals({ filter: "pending", limit: 100 }),
+          fetchBookingsFn({ limit: 1000, status: undefined }),
+          fetchProposalsFn({ filter: "pending", limit: 100 }),
         ]);
         // Attendre un peu pour que le store se mette à jour
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -68,7 +69,7 @@ export function RequestsList({ status }: RequestsListProps) {
 
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, fetchBookings, fetchProposals]); // Recharger quand le statut change
+  }, [status]); // Recharger uniquement quand le statut change
   
   // Recharger aussi quand les bookings changent dans le store
   useEffect(() => {
@@ -441,12 +442,12 @@ export function RequestsList({ status }: RequestsListProps) {
           </div>
         )
       ) : (
-        <div className="grid gap-4">
-          {requests.map((request, index) => (
+    <div className="grid gap-4">
+      {requests.map((request, index) => (
             <div key={request.id} id={`request-${request.id}`}>
               <RequestCard request={request} index={index} reloadData={reloadData} />
             </div>
-          ))}
+      ))}
         </div>
       )}
     </div>

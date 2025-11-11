@@ -25,8 +25,10 @@ function RequestsPageContent() {
       console.log("[RequestsPage] Chargement des bookings...");
       // IMPORTANT: Réinitialiser le filtre de statut pour obtenir TOUS les bookings
       // Sinon le filtre persistant (ex: status: 'CONFIRMED') exclut les demandes PENDING
-      await fetchBookings({ limit: 1000, status: undefined });
-      console.log("[RequestsPage] Bookings chargés:", bookings.length);
+      const { fetchBookings: fetchBookingsFn } = useBookingStore.getState();
+      await fetchBookingsFn({ limit: 1000, status: undefined });
+      const currentBookings = useBookingStore.getState().bookings;
+      console.log("[RequestsPage] Bookings chargés:", currentBookings.length);
       
       // Si on vient d'une redirection avec refresh, retirer le paramètre
       if (searchParams.get("refresh") === "true") {
@@ -35,7 +37,7 @@ function RequestsPageContent() {
     };
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, fetchBookings]);
+  }, [searchParams]);
 
   useEffect(() => {
     console.log("[RequestsPage] Calcul des compteurs, bookings:", bookings.length);

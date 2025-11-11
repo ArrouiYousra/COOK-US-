@@ -189,7 +189,7 @@ export default function RequestProposalsPage() {
       
       // Rediriger vers la page de paiement ou de détails du booking après un court délai
       setTimeout(() => {
-        router.push(`/dashboard/client/bookings/${bookingId}`);
+      router.push(`/dashboard/client/bookings/${bookingId}`);
       }, 1500);
     } catch (err: unknown) {
       console.error("Erreur lors de l'acceptation:", err);
@@ -501,16 +501,16 @@ export default function RequestProposalsPage() {
                   </p>
                 </div>
               </div>
-            </div>
-          )}
+        </div>
+      )}
 
-          {/* Liste des propositions */}
-          <ReservationsList
+      {/* Liste des propositions */}
+      <ReservationsList
             reservations={sortedReservations}
-            isLoading={isLoading}
+        isLoading={isLoading}
             onAccept={handleAcceptClick}
-            onReject={handleReject}
-            showActions={true}
+        onReject={handleReject}
+        showActions={true}
             distances={distances}
             bookingId={bookingId}
           />
