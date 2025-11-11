@@ -34,10 +34,51 @@ const app: Express = express();
 
 // Middleware
 const frontendOrigin = process.env.FRONTEND_URL || "http://localhost:3000";
+// Permettre plusieurs origines frontend (local, Vercel, etc.)
+const allowedOrigins = [
+  frontendOrigin,
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  // Ajouter les URLs Vercel (production et preview)
+  ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
+  // Ajouter les URLs Vercel depuis FRONTEND_URL si c'est une URL Vercel
+  ...(frontendOrigin.includes("vercel.app") ? [frontendOrigin] : []),
+  // Permettre tous les sous-domaines Vercel si FRONTEND_URL contient vercel.app
+  ...(frontendOrigin.includes("vercel.app") 
+    ? [`https://*.vercel.app`] 
+    : []),
+];
 
 app.use(
   cors({
-    origin: [frontendOrigin, "http://localhost:3000", "http://127.0.0.1:3000"],
+    origin: (origin, callback) => {
+      // Permettre les requêtes sans origine (ex: Postman, mobile apps)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      // Vérifier si l'origine est autorisée
+      const isAllowed = allowedOrigins.some(allowed => {
+        // Support des wildcards simples
+        if (allowed.includes("*")) {
+          const pattern = allowed.replace("*", ".*");
+          const regex = new RegExp(`^${pattern}$`);
+          return regex.test(origin);
+        }
+        return allowed === origin;
+      });
+      
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        // En production, autoriser aussi les domaines Vercel
+        if (origin.includes("vercel.app")) {
+          callback(null, true);
+        } else {
+          callback(new Error("Not allowed by CORS"));
+        }
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Cookie"],

@@ -63,10 +63,59 @@ INSEE_API_SECRET=... (si utilisé)
 # Frontend URL (IMPORTANT pour CORS)
 # Mettez l'URL de votre frontend déployé (ex: Vercel)
 # Localement: http://localhost:3000
+# ⚠️ CRITIQUE : Cette variable doit être configurée avec l'URL Vercel pour que CORS fonctionne
 FRONTEND_URL=https://votre-frontend.vercel.app
+# Exemple: FRONTEND_URL=https://cook-us.vercel.app
 ```
 
 💡 **Astuce** : Ouvrez votre fichier `.env` local et copiez-collez chaque ligne dans Render.
+
+### 📝 Comment ajouter FRONTEND_URL sur Render (Étape par étape)
+
+**⚠️ IMPORTANT** : Cette variable est **CRITIQUE** pour que votre frontend Vercel puisse communiquer avec le backend Render.
+
+#### Méthode 1 : Via le Dashboard Render (Recommandé)
+
+1. **Connectez-vous** à [render.com](https://render.com)
+2. **Sélectionnez votre service** backend (`cook-us-backend` ou le nom que vous avez donné)
+3. Dans le menu de gauche, cliquez sur **"Environment"** (ou **"Variables d'environnement"**)
+4. Cliquez sur **"Add Environment Variable"** (ou **"Ajouter une variable"**)
+5. Remplissez les champs :
+   - **Key** : `FRONTEND_URL`
+   - **Value** : `https://cook-us.vercel.app` (remplacez par votre URL Vercel réelle)
+6. Cliquez sur **"Save Changes"** (ou **"Enregistrer"**)
+7. **Redéployez** votre service :
+   - Cliquez sur **"Manual Deploy"** → **"Deploy latest commit"**
+   - Ou attendez le prochain déploiement automatique
+
+#### Méthode 2 : Si le service n'existe pas encore
+
+Lors de la création du service, dans la section **"Environment Variables"** :
+
+1. Cliquez sur **"Add Environment Variable"**
+2. Ajoutez :
+   - **Key** : `FRONTEND_URL`
+   - **Value** : `https://cook-us.vercel.app` (votre URL Vercel)
+3. Continuez avec les autres variables d'environnement
+4. Cliquez sur **"Create Web Service"**
+
+#### 🔍 Comment trouver votre URL Vercel
+
+1. Allez sur [vercel.com](https://vercel.com)
+2. Sélectionnez votre projet frontend
+3. L'URL est affichée en haut de la page, par exemple : `https://cook-us.vercel.app`
+4. Copiez cette URL complète
+
+#### ✅ Vérification
+
+Après avoir ajouté la variable et redéployé :
+
+1. Vérifiez dans les **logs Render** que le service démarre sans erreur
+2. Testez depuis votre frontend Vercel : les requêtes vers le backend devraient fonctionner
+3. Si vous voyez encore des erreurs CORS, vérifiez que :
+   - La variable `FRONTEND_URL` est bien définie sur Render
+   - L'URL correspond exactement à votre URL Vercel (avec `https://`)
+   - Le backend a été redéployé après l'ajout de la variable
 
 ### 4️⃣ Déployer
 
