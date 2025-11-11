@@ -121,9 +121,14 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
       } else {
         router.replace("/dashboard/client/requests?refresh=true");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erreur lors de la création de la demande:", error);
-      setErrorMessage(error.response?.data?.message || "Erreur lors de la création de la demande. Veuillez réessayer.");
+      const errorMessage = error && typeof error === 'object' && 'response' in error && 
+        typeof (error as { response?: { data?: { message?: string } } }).response === 'object' &&
+        (error as { response?: { data?: { message?: string } } }).response?.data?.message
+        ? (error as { response: { data: { message: string } } }).response.data.message
+        : "Erreur lors de la création de la demande. Veuillez réessayer.";
+      setErrorMessage(errorMessage);
       setTimeout(() => setErrorMessage(null), 5000);
     } finally {
       setIsSubmitting(false);

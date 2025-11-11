@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Plus } from "lucide-react";
+import { Plus, TrendingUp, Bell, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { RequestsList } from "@/components/dashboard/requests/RequestsList";
 import { CreateRequestModal } from "@/components/dashboard/requests/CreateRequestModal";
@@ -115,6 +115,25 @@ function RequestsPageContent() {
         </Button>
       </div>
 
+      {/* Statistiques rapides */}
+      {counts.pending > 0 && (
+        <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+              <Bell className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-foreground">
+                {counts.pending} demande{counts.pending > 1 ? "s" : ""} en attente de propositions
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Les cuisiniers peuvent maintenant voir et proposer leurs services
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Onglets */}
       <div className="border-b border-border">
         <div className="flex gap-2 overflow-x-auto">
@@ -124,7 +143,7 @@ function RequestsPageContent() {
               onClick={() => setActiveTab(tab.id)}
               className={`
                 relative px-6 py-3 font-medium text-sm transition-colors
-                border-b-2 -mb-px
+                border-b-2 -mb-px flex items-center gap-2
                 ${
                   activeTab === tab.id
                     ? "text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400"
@@ -136,7 +155,7 @@ function RequestsPageContent() {
               {tab.count > 0 && (
                 <span
                   className={`
-                    ml-2 px-2 py-0.5 rounded-full text-xs
+                    px-2 py-0.5 rounded-full text-xs font-semibold
                     ${
                       activeTab === tab.id
                         ? "bg-blue-600 dark:bg-blue-400 text-white"

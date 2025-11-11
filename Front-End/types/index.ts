@@ -266,6 +266,7 @@ export interface CookProfile {
   experience: string | null;
   video_intro_url: string | null;
   service_radius: number;
+  location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } | null;
   hourly_rate: number;
   minimum_booking_hours: number;
   can_do_groceries: boolean;

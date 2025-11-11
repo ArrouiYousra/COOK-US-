@@ -31,10 +31,10 @@ export default function RequestProposalsPage() {
   const bookingId = params.id as string;
 
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<{ total: number; pending: number; accepted: number; rejected: number; expired: number } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [booking, setBooking] = useState<any>(null);
+  const [booking, setBooking] = useState<{ booking_date?: string; address?: { address?: string } } | null>(null);
   const [selectedReservationId, setSelectedReservationId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
@@ -85,11 +85,14 @@ export default function RequestProposalsPage() {
         let bookingAddr: { lat: number; lng: number } | null = null;
         if (bookingResponse.booking?.address?.location) {
           const location = bookingResponse.booking.address.location;
+          const locationObj = location as { lat?: number; lng?: number; latitude?: number; longitude?: number };
           bookingAddr = {
-            lat: typeof location === 'object' && 'lat' in location ? location.lat : (location as any).latitude || 0,
-            lng: typeof location === 'object' && 'lng' in location ? location.lng : (location as any).longitude || 0,
+            lat: locationObj.lat ?? locationObj.latitude ?? 0,
+            lng: locationObj.lng ?? locationObj.longitude ?? 0,
           };
-          setBookingAddress(bookingAddr);
+          if (bookingAddr.lat !== 0 && bookingAddr.lng !== 0) {
+            setBookingAddress(bookingAddr);
+          }
         } else if (bookingResponse.booking?.address_id) {
           // TODO: Charger l'adresse depuis l'API si nécessaire
         }
@@ -97,19 +100,22 @@ export default function RequestProposalsPage() {
         // Calculer les distances pour chaque proposition
         if (bookingAddr && bookingAddr.lat !== 0 && bookingAddr.lng !== 0) {
           const distancePromises = loadedReservations
-            .filter(r => r.cook?.location || (r as any).cook?.user?.location)
+            .filter(r => {
+              const cookLoc = (r.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
+              return !!cookLoc;
+            })
             .map(async (reservation) => {
               try {
-                const cookLocation = (reservation.cook as any)?.location || (reservation as any).cook?.user?.location;
+                const cookLocation = (reservation.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
                 if (!cookLocation) return null;
 
-                const cookLat = typeof cookLocation === 'object' && 'lat' in cookLocation ? cookLocation.lat : cookLocation.latitude;
-                const cookLng = typeof cookLocation === 'object' && 'lng' in cookLocation ? cookLocation.lng : cookLocation.longitude;
+                const cookLat = cookLocation.lat ?? cookLocation.latitude;
+                const cookLng = cookLocation.lng ?? cookLocation.longitude;
 
-                if (!cookLat || !cookLng) return null;
+                if (!cookLat || !cookLng || !bookingAddr) return null;
 
                 const distanceResult = await apiClient.calculateDistance(
-                  [bookingAddress.lat, bookingAddress.lng],
+                  [bookingAddr.lat, bookingAddr.lng],
                   [cookLat, cookLng],
                   "driving"
                 );
@@ -137,9 +143,14 @@ export default function RequestProposalsPage() {
           });
           setDistances(distancesMap);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur lors du chargement des propositions:", err);
-        setError(err.response?.data?.message || "Impossible de charger les propositions");
+        const errorMessage = err && typeof err === 'object' && 'response' in err && 
+          typeof (err as { response?: { data?: { message?: string } } }).response === 'object' &&
+          (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          ? (err as { response: { data: { message: string } } }).response.data.message
+          : "Impossible de charger les propositions";
+        setError(errorMessage);
       } finally {
         setIsLoading(false);
       }
@@ -168,9 +179,14 @@ export default function RequestProposalsPage() {
       
       // Rediriger vers la page de paiement ou de détails du booking
       router.push(`/dashboard/client/bookings/${bookingId}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Erreur lors de l'acceptation:", err);
-      alert(err.response?.data?.message || "Erreur lors de l'acceptation de la proposition");
+      const errorMessage = err && typeof err === 'object' && 'response' in err && 
+        typeof (err as { response?: { data?: { message?: string } } }).response === 'object' &&
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        ? (err as { response: { data: { message: string } } }).response.data.message
+        : "Erreur lors de l'acceptation de la proposition";
+      alert(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -196,9 +212,14 @@ export default function RequestProposalsPage() {
       const response = await apiClient.getReservationsByBookingId(bookingId);
       setReservations(response.reservations || []);
       setStats(response.stats || null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Erreur lors du refus:", err);
-      alert(err.response?.data?.message || "Erreur lors du refus de la proposition");
+      const errorMessage = err && typeof err === 'object' && 'response' in err && 
+        typeof (err as { response?: { data?: { message?: string } } }).response === 'object' &&
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        ? (err as { response: { data: { message: string } } }).response.data.message
+        : "Erreur lors du refus de la proposition";
+      alert(errorMessage);
     } finally {
       setIsProcessing(false);
     }
@@ -312,7 +333,12 @@ export default function RequestProposalsPage() {
             <span className="text-sm text-muted-foreground">Trier par :</span>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === "price" || value === "distance" || value === "rating" || value === "date") {
+                  setSortBy(value);
+                }
+              }}
               className="px-3 py-1.5 rounded-lg border border-border bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
               <option value="date">Date de proposition</option>
@@ -371,11 +397,18 @@ export default function RequestProposalsPage() {
                 color: "#3b82f6",
               },
               ...sortedReservations
-                .filter(r => r.cook && (r.cook as any)?.location)
+                .filter(r => {
+                  const cookLoc = (r.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
+                  return !!cookLoc;
+                })
                 .map((reservation) => {
-                  const cookLocation = (reservation.cook as any)?.location;
-                  const cookLat = cookLocation?.lat || cookLocation?.latitude;
-                  const cookLng = cookLocation?.lng || cookLocation?.longitude;
+                  const cookLocation = (reservation.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
+                  if (!cookLocation) return null;
+                  
+                  const cookLat = cookLocation.lat ?? cookLocation.latitude;
+                  const cookLng = cookLocation.lng ?? cookLocation.longitude;
+                  if (!cookLat || !cookLng) return null;
+                  
                   const distance = distances[reservation.id];
                   
                   return {
@@ -386,55 +419,63 @@ export default function RequestProposalsPage() {
                     description: `${reservation.proposed_price.toFixed(2)}€${distance ? ` • ${distance.distance_km}` : ""}`,
                     color: reservation.status === "PENDING" ? "#10b981" : "#6b7280",
                   };
-                }),
+                })
+                .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
             ]}
-            route={sortedReservations.length > 0 && sortedReservations[0].cook && (sortedReservations[0].cook as any)?.location ? {
-              origin: [bookingAddress.lat, bookingAddress.lng],
-              destination: [
-                (sortedReservations[0].cook as any).location.lat || (sortedReservations[0].cook as any).location.latitude,
-                (sortedReservations[0].cook as any).location.lng || (sortedReservations[0].cook as any).location.longitude,
-              ],
-              color: "#10b981",
-            } : undefined}
+            route={(() => {
+              const firstReservation = sortedReservations[0];
+              if (!firstReservation?.cook) return undefined;
+              const cookLoc = (firstReservation.cook as { location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } })?.location;
+              if (!cookLoc) return undefined;
+              const cookLat = cookLoc.lat ?? cookLoc.latitude;
+              const cookLng = cookLoc.lng ?? cookLoc.longitude;
+              if (!cookLat || !cookLng) return undefined;
+              return {
+                origin: [bookingAddress.lat, bookingAddress.lng] as [number, number],
+                destination: [cookLat, cookLng] as [number, number],
+                color: "#10b981",
+              };
+            })()}
             height="100%"
             interactive={true}
           />
         </div>
       ) : (
-        <>
+        <div className="space-y-4">
           {/* Comparaison rapide */}
           {sortedReservations.length > 1 && (
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-              <h3 className="font-semibold text-foreground">Comparaison rapide</h3>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-card border border-border rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">Prix le plus bas</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  {Math.min(...sortedReservations.map(r => r.proposed_price)).toFixed(2)}€
-                </p>
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <h3 className="font-semibold text-foreground">Comparaison rapide</h3>
               </div>
-              <div className="bg-card border border-border rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">Meilleure note</p>
-                <div className="flex items-center gap-1">
-                  <Star className="w-5 h-5 fill-yellow-500 text-yellow-500" />
-                  <p className="text-2xl font-bold">
-                    {Math.max(...sortedReservations.map(r => r.cook?.average_rating || 0)).toFixed(1)}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-card border border-border rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Prix le plus bas</p>
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {Math.min(...sortedReservations.map(r => r.proposed_price)).toFixed(2)}€
+                  </p>
+                </div>
+                <div className="bg-card border border-border rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Meilleure note</p>
+                  <div className="flex items-center gap-1">
+                    <Star className="w-5 h-5 fill-yellow-500 text-yellow-500" />
+                    <p className="text-2xl font-bold">
+                      {Math.max(...sortedReservations.map(r => r.cook?.average_rating || 0)).toFixed(1)}
+                    </p>
+                  </div>
+                </div>
+                <div className="bg-card border border-border rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Plus proche</p>
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    {Object.keys(distances).length > 0
+                      ? Math.min(...Object.values(distances).map(d => d.distance)).toFixed(1) + " km"
+                      : "N/A"}
                   </p>
                 </div>
               </div>
-              <div className="bg-card border border-border rounded-lg p-3">
-                <p className="text-xs text-muted-foreground mb-1">Plus proche</p>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {Object.keys(distances).length > 0
-                    ? Math.min(...Object.values(distances).map(d => d.distance)).toFixed(1) + " km"
-                    : "N/A"}
-                </p>
-              </div>
             </div>
-          </div>
+          )}
 
           {/* Liste des propositions */}
           <ReservationsList
@@ -445,7 +486,7 @@ export default function RequestProposalsPage() {
             showActions={true}
             distances={distances}
           />
-        </>
+        </div>
       )}
 
       {/* Dialog de refus */}

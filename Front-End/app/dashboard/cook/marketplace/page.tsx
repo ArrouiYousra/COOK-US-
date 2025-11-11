@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { CookProfile } from "@/types";
 import {
   Calendar,
   Clock,
@@ -35,6 +36,23 @@ import { fr } from "date-fns/locale";
 import { CreateReservationModal } from "@/components/dashboard/reservations/CreateReservationModal";
 import { MapboxMap } from "@/components/mapbox/MapboxMap";
 
+interface PublicRequest {
+  id: string;
+  client?: { firstName?: string; lastName?: string; city?: string; avatarUrl?: string };
+  special_requests?: string;
+  address?: { address?: string; location?: { lat?: number; lng?: number; latitude?: number; longitude?: number } };
+  booking_date?: string;
+  start_time?: string;
+  end_time?: string;
+  number_of_guests?: number;
+  need_groceries?: boolean;
+  need_table_setting?: boolean;
+  need_dishes?: boolean;
+  created_at?: string;
+  budget?: number;
+  total_price?: number;
+}
+
 /**
  * Page "Marché" - Demandes publiques
  * Permet aux cuisiniers de voir et postuler aux demandes publiques des clients
@@ -46,12 +64,13 @@ export default function MarketplacePage() {
   const [cityFilter, setCityFilter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [publicRequests, setPublicRequests] = useState<any[]>([]);
-  const [selectedRequest, setSelectedRequest] = useState<any | null>(null);
+  
+  const [publicRequests, setPublicRequests] = useState<PublicRequest[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<PublicRequest | null>(null);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [cookLocation, setCookLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [cookProfile, setCookProfile] = useState<any>(null);
+  const [cookProfile, setCookProfile] = useState<CookProfile | null>(null);
   const [distances, setDistances] = useState<Record<string, { distance: number; distance_km: string; duration_minutes: number }>>({});
   const [sortBy, setSortBy] = useState<"date" | "distance" | "guests" | "budget">("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
@@ -88,9 +107,9 @@ export default function MarketplacePage() {
           setCookProfile(profile.cookProfile);
           // Récupérer la localisation du cuisinier
           if (profile.cookProfile.location) {
-            const location = profile.cookProfile.location;
-            const lat = typeof location === 'object' && 'lat' in location ? location.lat : (location as any).latitude;
-            const lng = typeof location === 'object' && 'lng' in location ? location.lng : (location as any).longitude;
+            const location = profile.cookProfile.location as { lat?: number; lng?: number; latitude?: number; longitude?: number };
+            const lat = location.lat ?? location.latitude;
+            const lng = location.lng ?? location.longitude;
             if (lat && lng) {
               setCookLocation({ lat, lng });
               // Utiliser le rayon de service comme distance max par défaut
@@ -133,13 +152,11 @@ export default function MarketplacePage() {
             .filter(req => req.address?.location)
             .map(async (request) => {
               try {
-                const requestLocation = request.address.location;
-                const requestLat = typeof requestLocation === 'object' && 'lat' in requestLocation 
-                  ? requestLocation.lat 
-                  : (requestLocation as any).latitude;
-                const requestLng = typeof requestLocation === 'object' && 'lng' in requestLocation 
-                  ? requestLocation.lng 
-                  : (requestLocation as any).longitude;
+                const requestLocation = request.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
+                if (!requestLocation) return null;
+                
+                const requestLat = requestLocation.lat ?? requestLocation.latitude;
+                const requestLng = requestLocation.lng ?? requestLocation.longitude;
 
                 if (!requestLat || !requestLng) return null;
 
@@ -172,9 +189,14 @@ export default function MarketplacePage() {
           });
           setDistances(distancesMap);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur lors du chargement des demandes publiques:", err);
-        setError(err.response?.data?.message || "Impossible de charger les demandes publiques");
+        const errorMessage = err && typeof err === 'object' && 'response' in err && 
+          typeof (err as { response?: { data?: { message?: string } } }).response === 'object' &&
+          (err as { response?: { data?: { message?: string } } }).response?.data?.message
+          ? (err as { response: { data: { message: string } } }).response.data.message
+          : "Impossible de charger les demandes publiques";
+        setError(errorMessage);
       } finally {
         setIsLoading(false);
       }
@@ -240,7 +262,9 @@ export default function MarketplacePage() {
           break;
         case "date":
         default:
-          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          comparison = dateA - dateB;
           break;
       }
       
@@ -250,7 +274,7 @@ export default function MarketplacePage() {
     return filtered;
   }, [publicRequests, searchQuery, distances, maxDistance, minBudget, maxBudget, sortBy, sortOrder, cookProfile]);
 
-  const handlePropose = (request: any) => {
+  const handlePropose = (request: PublicRequest) => {
     setSelectedRequest(request);
     setIsProposalModalOpen(true);
   };
@@ -264,7 +288,7 @@ export default function MarketplacePage() {
           limit: 100,
         });
         setPublicRequests(response.bookings || []);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Erreur lors du rechargement:", err);
       }
     };
@@ -444,7 +468,12 @@ export default function MarketplacePage() {
             <div className="flex gap-2">
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                onChange={(e) => {
+                const value = e.target.value;
+                if (value === "date" || value === "distance" || value === "guests" || value === "budget") {
+                  setSortBy(value);
+                }
+              }}
                 className="flex-1 px-2 py-1.5 rounded-lg border border-border bg-background text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="date">Date</option>
@@ -491,13 +520,13 @@ export default function MarketplacePage() {
               ...filteredAndSortedRequests
                 .filter((req) => req.address?.location)
                 .map((request) => {
-                  const requestLocation = request.address.location;
-                  const requestLat = typeof requestLocation === 'object' && 'lat' in requestLocation 
-                    ? requestLocation.lat 
-                    : (requestLocation as any).latitude;
-                  const requestLng = typeof requestLocation === 'object' && 'lng' in requestLocation 
-                    ? requestLocation.lng 
-                    : (requestLocation as any).longitude;
+                  const requestLocation = request.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
+                  if (!requestLocation) return null;
+                  
+                  const requestLat = requestLocation.lat ?? requestLocation.latitude;
+                  const requestLng = requestLocation.lng ?? requestLocation.longitude;
+                  if (!requestLat || !requestLng) return null;
+                  
                   const distance = distances[request.id];
                   const isInRadius = cookProfile?.service_radius 
                     ? (distance?.distance || Infinity) <= (cookProfile.service_radius * 1000)
@@ -511,7 +540,8 @@ export default function MarketplacePage() {
                     description: `${request.number_of_guests || 0} invité(s)${distance ? ` • ${distance.distance_km}` : ""}`,
                     color: isInRadius ? "#3b82f6" : "#ef4444",
                   };
-                }),
+                })
+                .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
             ]}
             height="100%"
             onMarkerClick={(marker) => {
@@ -563,11 +593,11 @@ export default function MarketplacePage() {
 }
 
 interface RequestCardProps {
-  request: any;
+  request: PublicRequest;
   index: number;
   onPropose: () => void;
   distance?: { distance: number; distance_km: string; duration_minutes: number };
-  cookProfile?: any;
+  cookProfile?: CookProfile | null;
 }
 
 function RequestCard({ request, index, onPropose, distance, cookProfile }: RequestCardProps) {
@@ -691,9 +721,11 @@ function RequestCard({ request, index, onPropose, distance, cookProfile }: Reque
             <MessageSquare className="w-4 h-4 mr-2" />
             Faire une proposition
           </Button>
-          <p className="text-xs text-muted-foreground text-center">
-            Publié le {format(new Date(request.created_at), "d MMM yyyy", { locale: fr })}
-          </p>
+          {request.created_at && (
+            <p className="text-xs text-muted-foreground text-center">
+              Publié le {format(new Date(request.created_at), "d MMM yyyy", { locale: fr })}
+            </p>
+          )}
         </div>
       </div>
     </motion.div>

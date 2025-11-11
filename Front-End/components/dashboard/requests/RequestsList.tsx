@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Calendar, Clock, Users, Euro, MapPin, Eye, Edit, Trash2, Copy, Loader2, MessageSquare } from "lucide-react";
+import { Calendar, Clock, Users, Euro, MapPin, Eye, Edit, Trash2, Copy, Loader2, MessageSquare, CheckCircle2, XCircle, AlertCircle, CreditCard, ChefHat, Sparkles, ArrowRight, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { PropositionsModal } from "./PropositionsModal";
@@ -354,22 +354,57 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
 
-  const statusConfig = {
-    pending: {
-      label: "En attente",
-      color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
-    },
-    confirmed: {
-      label: "Confirmée",
-      color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
-    },
-    completed: {
-      label: "Terminée",
-      color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-    },
+  const getStatusConfig = (status: string) => {
+    const statusLower = status.toLowerCase();
+    
+    if (statusLower === "pending" || statusLower === "proposition_pending" || statusLower === "payment_pending") {
+      return {
+        label: "En attente de propositions",
+        color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
+        icon: Clock,
+        step: 1,
+        totalSteps: 5,
+      };
+    }
+    if (statusLower === "confirmed" || statusLower === "proposition_accepted") {
+      return {
+        label: "Confirmée",
+        color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+        icon: CheckCircle2,
+        step: 3,
+        totalSteps: 5,
+      };
+    }
+    if (statusLower === "completed" || statusLower === "done") {
+      return {
+        label: "Terminée",
+        color: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+        icon: CheckCircle2,
+        step: 5,
+        totalSteps: 5,
+      };
+    }
+    if (statusLower === "cancelled") {
+      return {
+        label: "Annulée",
+        color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+        icon: XCircle,
+        step: 0,
+        totalSteps: 5,
+      };
+    }
+    
+    return {
+      label: status,
+      color: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
+      icon: AlertCircle,
+      step: 1,
+      totalSteps: 5,
+    };
   };
 
-  const config = statusConfig[request.status as keyof typeof statusConfig];
+  const statusConfig = getStatusConfig(request.status);
+  const StatusIcon = statusConfig.icon;
 
   return (
     <>
@@ -381,15 +416,22 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
       >
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <h3 className="font-cera text-xl font-bold text-foreground">
                 {request.title}
               </h3>
               <span
-                className={`px-3 py-1 rounded-full text-xs font-medium border ${config.color}`}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 ${statusConfig.color}`}
               >
-                {config.label}
+                <StatusIcon className="w-3.5 h-3.5" />
+                {statusConfig.label}
               </span>
+              {request.proposalCount > 0 && request.status === "pending" && (
+                <span className="px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs font-medium flex items-center gap-1.5 animate-pulse">
+                  <Bell className="w-3.5 h-3.5" />
+                  {request.proposalCount} nouvelle{request.proposalCount > 1 ? "s" : ""} proposition{request.proposalCount > 1 ? "s" : ""}
+                </span>
+              )}
             </div>
             <p className="text-muted-foreground mb-4">{request.description}</p>
           </div>
@@ -430,81 +472,207 @@ function RequestCard({ request, index, reloadData }: RequestCardProps) {
           <span>{request.address}</span>
         </div>
 
+        {/* Timeline du flux */}
+        {statusConfig.step > 0 && (
+          <div className="mb-4 p-4 bg-accent/50 rounded-lg border border-border">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-muted-foreground">Progression</span>
+              <span className="text-xs text-muted-foreground">
+                Étape {statusConfig.step} sur {statusConfig.totalSteps}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((step) => {
+                const isCompleted = step <= statusConfig.step;
+                const isCurrent = step === statusConfig.step;
+                
+                return (
+                  <div key={step} className="flex items-center flex-1">
+                    <div className="flex items-center gap-2 flex-1">
+                      <div
+                        className={`
+                          w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all
+                          ${isCompleted
+                            ? "bg-green-500 text-white"
+                            : "bg-muted text-muted-foreground"
+                          }
+                          ${isCurrent ? "ring-2 ring-green-500 ring-offset-2" : ""}
+                        `}
+                      >
+                        {isCompleted ? <CheckCircle2 className="w-4 h-4" /> : step}
+                      </div>
+                      {step < 5 && (
+                        <div
+                          className={`flex-1 h-1 rounded-full transition-all ${
+                            isCompleted ? "bg-green-500" : "bg-muted"
+                          }`}
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+              <span>Publication</span>
+              <span>Propositions</span>
+              <span>Acceptation</span>
+              <span>Paiement</span>
+              <span>Service</span>
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex items-center justify-between pt-4 border-t border-border">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {request.status === "pending" && (
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-              >
-                <Link href={`/dashboard/client/requests/${request.id}/proposals`}>
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Voir les propositions {request.proposalCount > 0 && `(${request.proposalCount})`}
-                </Link>
-              </Button>
+              <>
+                <Button
+                  variant="default"
+                  size="sm"
+                  asChild
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Link href={`/dashboard/client/requests/${request.id}/proposals`}>
+                    {request.proposalCount > 0 ? (
+                      <>
+                        <Bell className="w-4 h-4 mr-2 animate-pulse" />
+                        Voir les propositions ({request.proposalCount})
+                      </>
+                    ) : (
+                      <>
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        Voir les propositions
+                      </>
+                    )}
+                  </Link>
+                </Button>
+                {request.proposalCount > 0 && (
+                  <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 px-2 py-1 rounded-full">
+                    <Sparkles className="w-3 h-3" />
+                    Nouvelles propositions disponibles
+                  </div>
+                )}
+              </>
             )}
             {request.status === "confirmed" && request.cookName && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Chef : </span>
-                <span className="font-medium text-foreground">{request.cookName}</span>
-                {request.cookRating && (
-                  <span className="ml-2 text-yellow-600 dark:text-yellow-400">
-                    ⭐ {request.cookRating}
-                  </span>
-                )}
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 text-sm bg-green-50 dark:bg-green-950/20 px-3 py-1.5 rounded-lg border border-green-200 dark:border-green-800">
+                  <ChefHat className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <div>
+                    <span className="text-muted-foreground text-xs">Chef assigné : </span>
+                    <span className="font-medium text-foreground">{request.cookName}</span>
+                    {request.cookRating && (
+                      <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                        ⭐ {request.cookRating}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                >
+                  <Link href={`/dashboard/client/bookings/${request.id}`}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    Voir les détails
+                  </Link>
+                </Button>
+              </div>
+            )}
+            {request.status === "completed" && (
+              <div className="flex items-center gap-2">
+                <div className="text-sm text-muted-foreground">
+                  Service terminé
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                >
+                  <Link href={`/dashboard/client/bookings/${request.id}`}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    Voir l'historique
+                  </Link>
+                </Button>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {/* Bouton dupliquer (tous statuts) */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                setIsDuplicating(true);
-                // TODO: Appel API pour dupliquer la demande
-                // await apiClient.duplicateRequest(request.id);
-                // Rediriger vers la page de création avec les données pré-remplies
-                const queryParams = new URLSearchParams({
-                  duplicate: request.id,
-                  title: request.title,
-                  description: request.description,
-                  date: request.date,
-                  timeSlot: request.timeSlot,
-                  guestCount: request.guestCount.toString(),
-                  budget: request.budget.toString(),
-                  address: request.address,
-                });
-                window.location.href = `/dashboard/client/requests/new?${queryParams.toString()}`;
-                setTimeout(() => setIsDuplicating(false), 500);
-              }}
-              disabled={isDuplicating}
-            >
-              <Copy className="w-4 h-4 mr-2" />
-              Dupliquer
-            </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Actions rapides selon le statut */}
             {request.status === "pending" && (
               <>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowEditModal(true)}
+                  className="flex items-center gap-2"
                 >
-                  <Edit className="w-4 h-4 mr-2" />
+                  <Edit className="w-4 h-4" />
                   Modifier
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-destructive hover:text-destructive"
+                  onClick={async () => {
+                    setIsDuplicating(true);
+                    const queryParams = new URLSearchParams({
+                      duplicate: request.id,
+                      title: request.title,
+                      description: request.description,
+                      date: request.date,
+                      timeSlot: request.timeSlot,
+                      guestCount: request.guestCount.toString(),
+                      budget: request.budget.toString(),
+                      address: request.address,
+                    });
+                    window.location.href = `/dashboard/client/requests/new?${queryParams.toString()}`;
+                    setTimeout(() => setIsDuplicating(false), 500);
+                  }}
+                  disabled={isDuplicating}
+                  className="flex items-center gap-2"
+                >
+                  <Copy className="w-4 h-4" />
+                  Dupliquer
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive hover:bg-destructive/10"
                   onClick={() => setShowDeleteDialog(true)}
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Supprimer
                 </Button>
               </>
+            )}
+            {(request.status === "confirmed" || request.status === "completed") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  setIsDuplicating(true);
+                  const queryParams = new URLSearchParams({
+                    duplicate: request.id,
+                    title: request.title,
+                    description: request.description,
+                    date: request.date,
+                    timeSlot: request.timeSlot,
+                    guestCount: request.guestCount.toString(),
+                    budget: request.budget.toString(),
+                    address: request.address,
+                  });
+                  window.location.href = `/dashboard/client/requests/new?${queryParams.toString()}`;
+                  setTimeout(() => setIsDuplicating(false), 500);
+                }}
+                disabled={isDuplicating}
+                className="flex items-center gap-2"
+              >
+                <Copy className="w-4 h-4" />
+                Réutiliser
+              </Button>
             )}
           </div>
         </div>
