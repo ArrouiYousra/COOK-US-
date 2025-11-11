@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { Search, MessageSquare, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/lib/api/client";
+import { useNotificationStore } from "@/stores/notificationStore";
 
 interface ConversationsListProps {
   selectedConversationId: string | null;
@@ -25,61 +26,86 @@ export function ConversationsList({
   const [conversations, setConversations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { notifications } = useNotificationStore();
+  const previousNotificationIdsRef = useRef<Set<string>>(new Set());
 
   // Charger les conversations depuis l'API
+  const loadConversations = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await apiClient.getConversations({ limit: 100 });
+      
+      // Transformer les conversations pour correspondre au format attendu
+      // other_user est l'autre participant (cuisinier pour client, client pour cuisinier)
+      const transformedConversations = data.conversations.map((conv: any) => {
+        const otherUser = conv.other_user;
+        const otherUserName = otherUser?.first_name && otherUser?.last_name
+          ? `${otherUser.first_name} ${otherUser.last_name}`
+          : otherUser?.first_name || (otherUser?.role === "COOK" ? "Cuisinier" : "Client");
+
+        return {
+          id: conv.id,
+          otherUserId: otherUser?.id,
+          otherUser: {
+            id: otherUser?.id,
+            name: otherUserName,
+            avatarUrl: otherUser?.avatar_url,
+            role: otherUser?.role,
+          },
+          lastMessage: conv.last_message_content || "Aucun message",
+          lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at) : new Date(conv.created_at),
+          unreadCount: conv.unread_count || 0,
+          isOnline: false, // TODO: Implémenter le statut en ligne via WebSocket
+          bookingId: conv.booking_id,
+        };
+      });
+
+      // Trier par date du dernier message (plus récent en premier)
+      transformedConversations.sort((a: any, b: any) => 
+        b.lastMessageTime.getTime() - a.lastMessageTime.getTime()
+      );
+
+      setConversations(transformedConversations);
+    } catch (err) {
+      console.error("Erreur lors du chargement des conversations:", err);
+      setError("Impossible de charger les conversations");
+      setConversations([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Charger les conversations au montage et périodiquement
   useEffect(() => {
-    const loadConversations = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const data = await apiClient.getConversations({ limit: 100 });
-        
-        // Transformer les conversations pour correspondre au format attendu
-        // other_user est l'autre participant (cuisinier pour client, client pour cuisinier)
-        const transformedConversations = data.conversations.map((conv: any) => {
-          const otherUser = conv.other_user;
-          const otherUserName = otherUser?.first_name && otherUser?.last_name
-            ? `${otherUser.first_name} ${otherUser.last_name}`
-            : otherUser?.first_name || (otherUser?.role === "COOK" ? "Cuisinier" : "Client");
-
-          return {
-            id: conv.id,
-            otherUserId: otherUser?.id,
-            otherUser: {
-              id: otherUser?.id,
-              name: otherUserName,
-              avatarUrl: otherUser?.avatar_url,
-              role: otherUser?.role,
-            },
-            lastMessage: conv.last_message_content || "Aucun message",
-            lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at) : new Date(conv.created_at),
-            unreadCount: conv.unread_count || 0,
-            isOnline: false, // TODO: Implémenter le statut en ligne via WebSocket
-            bookingId: conv.booking_id,
-          };
-        });
-
-        // Trier par date du dernier message (plus récent en premier)
-        transformedConversations.sort((a: any, b: any) => 
-          b.lastMessageTime.getTime() - a.lastMessageTime.getTime()
-        );
-
-        setConversations(transformedConversations);
-      } catch (err) {
-        console.error("Erreur lors du chargement des conversations:", err);
-        setError("Impossible de charger les conversations");
-        setConversations([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     loadConversations();
     
     // Rafraîchir les conversations toutes les 30 secondes
     const interval = setInterval(loadConversations, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Rafraîchir les conversations quand une notification de message arrive
+  useEffect(() => {
+    const currentNotificationIds = new Set(notifications.map((n) => n.id));
+    const previousIds = previousNotificationIdsRef.current;
+
+    // Détecter les nouvelles notifications de type MESSAGE_RECEIVED
+    const newMessageNotifications = notifications.filter(
+      (notif) =>
+        !previousIds.has(notif.id) &&
+        !notif.isRead &&
+        notif.type === "MESSAGE_RECEIVED"
+    );
+
+    // Si une nouvelle notification de message arrive, rafraîchir les conversations
+    if (newMessageNotifications.length > 0) {
+      loadConversations();
+    }
+
+    // Mettre à jour la référence
+    previousNotificationIdsRef.current = currentNotificationIds;
+  }, [notifications, loadConversations]);
 
   const filteredConversations = useMemo(() => {
     if (!searchQuery.trim()) return conversations;

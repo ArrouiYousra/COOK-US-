@@ -51,6 +51,7 @@ export type BookingStatus =
   | "confirmed"               // Paiement effectué, réservation confirmée
   | "pending"                 // Ancien flux : demande publique, en attente de propositions
   | "done"                    // Réservation terminée
+  | "completed"               // Variante minuscule utilisée par certains services
   | "cancelled"               // Réservation annulée
   | "PENDING"                  // Variante majuscule
   | "CONFIRMED"                // Variante majuscule

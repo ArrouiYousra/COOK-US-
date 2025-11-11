@@ -49,7 +49,7 @@ export default function BookingDetailsPage() {
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
   const [isCancelling, setIsCancelling] = useState(false);
-  const { showNotificationToast } = useNotificationToast();
+  const { showErrorToast, showSuccessToast } = useNotificationToast();
 
   // Charger la réservation
   useEffect(() => {
@@ -183,23 +183,23 @@ export default function BookingDetailsPage() {
   // Gérer l'annulation
   const handleCancel = async () => {
     if (!cancellationReason.trim()) {
-      showNotificationToast("Veuillez indiquer une raison d'annulation", "error");
+      showErrorToast("Veuillez indiquer une raison d'annulation");
       return;
     }
 
     setIsCancelling(true);
     try {
       await apiClient.cancelBooking(bookingId, "CLIENT_REQUEST", cancellationReason);
-      showNotificationToast("Réservation annulée avec succès", "success");
+      showSuccessToast("Réservation annulée avec succès");
       setShowCancelDialog(false);
       setCancellationReason("");
       // Recharger la page pour voir les mises à jour
       window.location.reload();
     } catch (err: any) {
       console.error("Erreur lors de l'annulation:", err);
-      showNotificationToast(
-        err.response?.data?.message || "Erreur lors de l'annulation",
-        "error"
+      showErrorToast(
+        "Erreur lors de l'annulation",
+        err.response?.data?.message,
       );
     } finally {
       setIsCancelling(false);

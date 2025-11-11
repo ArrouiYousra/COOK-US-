@@ -147,7 +147,14 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
             setMessages(transformedMessages);
 
             // Marquer comme lu
-            await apiClient.markConversationAsRead(actualConversationId);
+            if (convId) {
+              setActualConversationId(convId);
+              try {
+                await apiClient.markConversationAsRead(convId);
+              } catch (err) {
+                console.warn("Erreur lors du marquage comme lu:", err);
+              }
+            }
           } catch (err: any) {
             // Si erreur 404, c'est une nouvelle conversation
             if (err.response?.status !== 404) {
@@ -307,7 +314,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     );
   }
 
-  if (!client) {
+  if (!otherUser) {
     return (
       <div className="flex-1 flex items-center justify-center bg-card border border-border rounded-xl">
         <p className="text-muted-foreground">Conversation introuvable</p>
