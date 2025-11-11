@@ -9,7 +9,7 @@
     "lint": "npx eslint \"src/**/*.{ts,tsx,js,jsx}\"",
     "lint:fix": "npx eslint \"src/**/*.{ts,tsx,js,jsx}\" --fix",
     "prebuild": "(npm run lint || true) && npm run type-check",
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node dist/server.js",
     "format": "npx prettier --write src/**/*.ts",
     "test:insee": "tsx scripts/test-insee-api.ts"
@@ -34,6 +34,7 @@
     "swagger-jsdoc": "^6.2.8",
     "ts-jest": "^29.4.5",
     "ts-node": "^10.9.2",
+    "tsc-alias": "^1.8.10",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3"
   },
