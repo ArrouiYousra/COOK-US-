@@ -2,6 +2,7 @@ import { type Response } from "express";
 import { type AuthRequest } from "@core/middleware";
 import { MessageStore } from "@stores/message.store";
 import { UserStore } from "@stores/user.store";
+import { MessageImageService } from "@core/services/message-image.service";
 
 export const sendMessage = async (
   req: AuthRequest,
@@ -53,6 +54,37 @@ export const sendMessage = async (
       attachment_url,
       booking_id,
     });
+
+    // Envoyer une notification au destinataire
+    try {
+      const { NotificationService } = await import(
+        "@core/services/notification.service"
+      );
+      const senderUser = await UserStore.getUserById(req.user.id);
+      const senderName =
+        senderUser && senderUser.first_name
+          ? `${senderUser.first_name} ${senderUser.last_name || ""}`.trim()
+          : "Un utilisateur";
+      await NotificationService.sendNotification(recipient_id, {
+        user_id: recipient_id,
+        type: "MESSAGE_RECEIVED",
+        title: "Nouveau message",
+        message: `${senderName} vous a envoyé un message${
+          attachment_url ? " avec une image" : ""
+        }.`,
+        action_url: `/dashboard/client/messages?conversation=${message.conversation_id}`,
+        metadata: {
+          conversation_id: message.conversation_id,
+          sender_id: req.user.id,
+          sender_name: senderName,
+        },
+      }).catch((err) =>
+        console.error("Failed to send message notification:", err),
+      );
+    } catch (notifError) {
+      // Ne pas bloquer l'envoi du message si la notification échoue
+      console.warn("Failed to send notification for message:", notifError);
+    }
 
     res.status(201).json({
       message: "Message sent successfully",
@@ -364,6 +396,62 @@ export const deleteMessage = async (
     ) {
       res.status(404).json({
         error: "Not Found",
+        message: errorMessage,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      error: "Internal Server Error",
+      message: errorMessage,
+    });
+  }
+};
+
+export const uploadMessageImage = async (
+  req: AuthRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        error: "Unauthorized",
+        message: "User not authenticated",
+      });
+      return;
+    }
+
+    const { image_base64 } = req.body;
+
+    if (!image_base64) {
+      res.status(400).json({
+        error: "Bad Request",
+        message: "image_base64 is required",
+      });
+      return;
+    }
+
+    const imageUrl = await MessageImageService.uploadMessageImageFromBase64(
+      req.user.id,
+      image_base64,
+    );
+
+    res.status(200).json({
+      message: "Image uploaded successfully",
+      image_url: imageUrl,
+    });
+  } catch (error) {
+    console.error("Upload message image error:", error);
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to upload image";
+
+    if (
+      errorMessage.includes("Format") ||
+      errorMessage.includes("taille") ||
+      errorMessage.includes("size")
+    ) {
+      res.status(400).json({
+        error: "Bad Request",
         message: errorMessage,
       });
       return;

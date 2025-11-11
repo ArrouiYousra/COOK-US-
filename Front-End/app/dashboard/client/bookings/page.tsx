@@ -50,7 +50,10 @@ export default function BookingsPage() {
     const confirmedCount = confirmedBookings.filter(
       (b) => b.status === "confirmed" || b.status === "proposition_accepted"
     ).length;
-    const completedCount = confirmedBookings.filter((b) => b.status === "done").length;
+    // Inclure "done", "completed", "COMPLETED" pour les réservations terminées
+    const completedCount = confirmedBookings.filter(
+      (b) => b.status === "done" || b.status === "completed" || b.status === "COMPLETED"
+    ).length;
     const cancelledCount = confirmedBookings.filter((b) => b.status === "cancelled").length;
 
     setCounts({

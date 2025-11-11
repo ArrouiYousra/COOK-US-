@@ -28,8 +28,10 @@ interface PaymentSectionProps {
     totalPrice: number;
     paymentStatus?: string;
     paidAt?: string;
-    partialPaymentAmount?: number;
-    remainingAmount?: number;
+    depositAmount?: number | null;
+    remainingAmount?: number | null;
+    depositPaidAt?: string | null;
+    remainingPaidAt?: string | null;
   };
 }
 
@@ -73,7 +75,16 @@ export function PaymentSection({ booking }: PaymentSectionProps) {
 
   // Calculer les montants
   const baseAmount = booking.totalPrice;
-  const partialPaid = booking.partialPaymentAmount || 0;
+  
+  // Utiliser les valeurs du backend (deposit_amount et remaining_amount)
+  // Si non définies, calculer à partir du total (30% / 70%)
+  const depositAmount = booking.depositAmount ?? Math.round(baseAmount * 0.3);
+  const remainingAmount = booking.remainingAmount ?? Math.round(baseAmount * 0.7);
+  
+  // Vérifier les paiements effectués
+  const depositPaid = booking.depositPaidAt ? depositAmount : 0;
+  const remainingPaid = booking.remainingPaidAt ? remainingAmount : 0;
+  const totalPaid = depositPaid + remainingPaid;
   
   // Calculer la réduction du code promo
   let discountAmount = 0;
@@ -86,9 +97,9 @@ export function PaymentSection({ booking }: PaymentSectionProps) {
   }
   
   const totalAmount = Math.max(0, baseAmount - discountAmount);
-  const remaining = booking.remainingAmount || (totalAmount - partialPaid);
-  const isFullyPaid = remaining <= 0;
-  const hasPartialPayment = partialPaid > 0 && !isFullyPaid;
+  const remaining = totalAmount - totalPaid;
+  const isFullyPaid = remaining <= 0 || (booking.remainingPaidAt !== null && booking.remainingPaidAt !== undefined);
+  const hasPartialPayment = depositPaid > 0 && !isFullyPaid;
 
   // Déterminer le statut du paiement
   const getPaymentStatus = () => {
@@ -346,13 +357,18 @@ export function PaymentSection({ booking }: PaymentSectionProps) {
           {hasPartialPayment && (
             <>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Acompte payé</span>
+                <span className="text-muted-foreground">Acompte payé (30%)</span>
                 <span className="text-green-600 dark:text-green-400 font-semibold">
-                  - {formatPrice(partialPaid)}
+                  - {formatPrice(depositPaid)}
                 </span>
+                {booking.depositPaidAt && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    le {new Date(booking.depositPaidAt).toLocaleDateString("fr-FR")}
+                  </span>
+                )}
               </div>
               <div className="pt-2 border-t border-border flex justify-between items-center">
-                <span className="text-muted-foreground font-medium">Solde restant</span>
+                <span className="text-muted-foreground font-medium">Solde restant (70%)</span>
                 <span className="text-xl font-bold text-foreground">
                   {formatPrice(remaining)}
                 </span>
@@ -407,7 +423,7 @@ export function PaymentSection({ booking }: PaymentSectionProps) {
                 className="w-full"
                 size="lg"
               >
-                Payer un acompte (30% - {formatPrice(Math.round(totalAmount * 0.3))})
+                Payer un acompte ({formatPrice(depositAmount)} - 30%)
               </Button>
             </>
           )}

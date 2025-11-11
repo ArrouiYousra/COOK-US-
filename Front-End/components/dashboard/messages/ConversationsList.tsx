@@ -13,8 +13,9 @@ interface ConversationsListProps {
 }
 
 /**
- * Liste des conversations avec les clients (pour les cuisiniers)
- * Affiche les conversations actives avec état en ligne/hors ligne
+ * Liste des conversations
+ * Pour les clients : affiche les conversations avec les cuisiniers
+ * Pour les cuisiniers : affiche les conversations avec les clients
  */
 export function ConversationsList({
   selectedConversationId,
@@ -34,25 +35,27 @@ export function ConversationsList({
         const data = await apiClient.getConversations({ limit: 100 });
         
         // Transformer les conversations pour correspondre au format attendu
-        // Pour un cuisinier, other_user est le client
+        // other_user est l'autre participant (cuisinier pour client, client pour cuisinier)
         const transformedConversations = data.conversations.map((conv: any) => {
           const otherUser = conv.other_user;
-          const clientName = otherUser?.first_name && otherUser?.last_name
+          const otherUserName = otherUser?.first_name && otherUser?.last_name
             ? `${otherUser.first_name} ${otherUser.last_name}`
-            : otherUser?.first_name || "Client";
+            : otherUser?.first_name || (otherUser?.role === "COOK" ? "Cuisinier" : "Client");
 
           return {
             id: conv.id,
-            clientId: otherUser?.id,
-            client: {
+            otherUserId: otherUser?.id,
+            otherUser: {
               id: otherUser?.id,
-              name: clientName,
+              name: otherUserName,
               avatarUrl: otherUser?.avatar_url,
+              role: otherUser?.role,
             },
             lastMessage: conv.last_message_content || "Aucun message",
             lastMessageTime: conv.last_message_at ? new Date(conv.last_message_at) : new Date(conv.created_at),
             unreadCount: conv.unread_count || 0,
             isOnline: false, // TODO: Implémenter le statut en ligne via WebSocket
+            bookingId: conv.booking_id,
           };
         });
 
@@ -83,8 +86,8 @@ export function ConversationsList({
     
     const query = searchQuery.toLowerCase();
     return conversations.filter((conv) => {
-      // Recherche dans le nom du client
-      if (conv.client?.name?.toLowerCase().includes(query)) return true;
+      // Recherche dans le nom de l'autre utilisateur
+      if (conv.otherUser?.name?.toLowerCase().includes(query)) return true;
       
       // Recherche dans le dernier message
       if (conv.lastMessage?.toLowerCase().includes(query)) return true;
@@ -184,16 +187,18 @@ export function ConversationsList({
 
 interface Conversation {
   id: string;
-  clientId: string;
-  client: {
+  otherUserId: string;
+  otherUser: {
     id: string;
     name: string;
     avatarUrl?: string | null;
+    role?: string;
   };
   lastMessage: string;
   lastMessageTime: Date;
   unreadCount: number;
   isOnline: boolean;
+  bookingId?: string | null;
 }
 
 interface ConversationItemProps {
@@ -226,17 +231,17 @@ function ConversationItem({
         {/* Avatar avec indicateur en ligne */}
         <div className="relative flex-shrink-0">
           <div className="relative w-12 h-12 rounded-full overflow-hidden">
-            {conversation.client.avatarUrl ? (
+            {conversation.otherUser.avatarUrl ? (
               <Image
-                src={conversation.client.avatarUrl}
-                alt={conversation.client.name}
+                src={conversation.otherUser.avatarUrl}
+                alt={conversation.otherUser.name}
                 fill
                 className="object-cover"
                 unoptimized
               />
             ) : (
               <div className="w-full h-full bg-muted flex items-center justify-center">
-                <span className="text-lg">👤</span>
+                <span className="text-lg">{conversation.otherUser.role === "COOK" ? "👨‍🍳" : "👤"}</span>
               </div>
             )}
           </div>
@@ -257,7 +262,7 @@ function ConversationItem({
                 isSelected ? "text-foreground" : "text-foreground"
               }`}
             >
-              {conversation.client.name}
+              {conversation.otherUser.name}
             </h3>
             <span className="text-xs text-muted-foreground flex-shrink-0 ml-2">
               {formatTime(conversation.lastMessageTime)}

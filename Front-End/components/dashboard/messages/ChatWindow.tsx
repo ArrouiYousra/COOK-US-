@@ -51,13 +51,15 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [client, setClient] = useState<any>(null);
+  const [otherUser, setOtherUser] = useState<any>(null);
+  const [actualConversationId, setActualConversationId] = useState<string | null>(null);
   const { user } = useAuthStore();
 
-  // Charger les messages et les infos du client (pour un cuisinier)
+  // Charger les messages et les infos de l'autre utilisateur
   useEffect(() => {
     const loadMessages = async () => {
       setIsLoading(true);
@@ -69,48 +71,51 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
           (c: any) => c.id === conversationId || c.other_user?.id === conversationId
         );
 
-        let actualConversationId = conversationId;
-        let clientData = null;
+        let convId = conversationId;
+        let otherUserData = null;
 
         if (existingConv) {
           // C'est une conversation existante
-          actualConversationId = existingConv.id;
+          convId = existingConv.id;
+          setActualConversationId(convId);
           if (existingConv.other_user) {
-            // Pour un cuisinier, other_user est le client
-            clientData = {
+            // other_user est l'autre participant (cuisinier pour client, client pour cuisinier)
+            otherUserData = {
               id: existingConv.other_user.id,
               name: existingConv.other_user.first_name && existingConv.other_user.last_name
                 ? `${existingConv.other_user.first_name} ${existingConv.other_user.last_name}`
-                : existingConv.other_user.first_name || "Client",
+                : existingConv.other_user.first_name || (existingConv.other_user.role === "COOK" ? "Cuisinier" : "Client"),
               avatarUrl: existingConv.other_user.avatar_url,
+              role: existingConv.other_user.role,
             };
           }
         } else {
-          // C'est probablement un clientId, charger les infos du client
+          // C'est probablement un userId, charger les infos de l'utilisateur
           try {
-            const clientProfile = await apiClient.getUserProfile(conversationId);
-            if (clientProfile?.user) {
-              clientData = {
-                id: clientProfile.user.id,
-                name: clientProfile.user.first_name && clientProfile.user.last_name
-                  ? `${clientProfile.user.first_name} ${clientProfile.user.last_name}`
-                  : clientProfile.user.first_name || "Client",
-                avatarUrl: clientProfile.user.avatar_url,
+            const userProfile = await apiClient.getUserProfile(conversationId);
+            if (userProfile?.user) {
+              otherUserData = {
+                id: userProfile.user.id,
+                name: userProfile.user.first_name && userProfile.user.last_name
+                  ? `${userProfile.user.first_name} ${userProfile.user.last_name}`
+                  : userProfile.user.first_name || (userProfile.user.role === "COOK" ? "Cuisinier" : "Client"),
+                avatarUrl: userProfile.user.avatar_url,
+                role: userProfile.user.role,
               };
             }
           } catch (err) {
-            console.warn("Impossible de charger le profil du client:", err);
+            console.warn("Impossible de charger le profil de l'utilisateur:", err);
           }
         }
 
-        if (clientData) {
-          setClient(clientData);
+        if (otherUserData) {
+          setOtherUser(otherUserData);
         }
 
         // Essayer de charger les messages si c'est une conversation existante
-        if (existingConv) {
+        if (existingConv && convId) {
           try {
-            const data = await apiClient.getMessages(actualConversationId, { limit: 100 });
+            const data = await apiClient.getMessages(convId, { limit: 100 });
             
             // Transformer les messages pour correspondre au format attendu
             const transformedMessages = data.messages.map((msg: any) => {
@@ -129,6 +134,8 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                 timestamp: new Date(msg.created_at),
                 isRead: msg.is_read || false,
                 sender: msg.sender,
+                attachmentUrl: msg.attachment_url,
+                messageType: msg.type || "TEXT",
               };
             });
 
@@ -176,19 +183,39 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || !client || !user?.id || isSending) return;
+    if ((!newMessage.trim() && !selectedImage) || !otherUser || !user?.id || isSending) return;
 
     const messageText = newMessage;
+    const imageToSend = selectedImage;
     setNewMessage(""); // Vider immédiatement pour meilleure UX
+    setSelectedImage(null); // Vider l'image
     setIsSending(true);
     setError(null);
 
     try {
+      let attachmentUrl: string | undefined;
+      
+      // Uploader l'image si elle existe
+      if (imageToSend) {
+        try {
+          const uploadResponse = await apiClient.uploadMessageImage(imageToSend);
+          attachmentUrl = uploadResponse.image_url;
+        } catch (uploadError: any) {
+          console.error("Erreur lors de l'upload de l'image:", uploadError);
+          setError(uploadError.response?.data?.message || "Erreur lors de l'upload de l'image");
+          setNewMessage(messageText); // Restaurer le message
+          setSelectedImage(imageToSend); // Restaurer l'image
+          setIsSending(false);
+          return;
+        }
+      }
+
       // Envoyer le message via l'API (cela créera automatiquement la conversation si elle n'existe pas)
       const response = await apiClient.sendMessage({
-        recipient_id: client.id,
-        content: messageText,
-        message_type: "TEXT",
+        recipient_id: otherUser.id,
+        content: messageText || (attachmentUrl ? "📷 Image" : ""),
+        message_type: attachmentUrl ? "IMAGE" : "TEXT",
+        attachment_url: attachmentUrl,
       });
 
       // Ajouter le message à la liste localement (optimistic update)
@@ -196,9 +223,11 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
         id: response.message.id,
         senderId: user.id,
         senderName: "Vous",
-        text: messageText,
+        text: messageText || (attachmentUrl ? "📷 Image" : ""),
         timestamp: new Date(response.message.created_at),
         isRead: false,
+        attachmentUrl: attachmentUrl,
+        messageType: attachmentUrl ? "IMAGE" : "TEXT",
       };
 
       setMessages([...messages, newMsg]);
@@ -209,14 +238,21 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
         try {
           const conversationsData = await apiClient.getConversations({ limit: 100 });
           const newConv = conversationsData.conversations.find(
-            (c: any) => c.other_user?.id === client.id
+            (c: any) => c.other_user?.id === otherUser.id
           );
-          if (newConv && newConv.id !== conversationId) {
-            // La conversation a été créée, rediriger vers la nouvelle conversation
-            router.push(`/dashboard/cook/messages?conversation=${newConv.id}`);
-          } else if (conversationId || newConv?.id) {
+          if (newConv && newConv.id !== actualConversationId) {
+            // La conversation a été créée, mettre à jour l'ID
+            setActualConversationId(newConv.id);
+            // Recharger la page pour mettre à jour l'URL si nécessaire
+            if (conversationId !== newConv.id) {
+              router.push(`/dashboard/client/messages?conversation=${newConv.id}`);
+            }
+          }
+          
+          const convIdToUse = actualConversationId || newConv?.id || conversationId;
+          if (convIdToUse) {
             // Recharger les messages de la conversation actuelle
-            const updatedData = await apiClient.getMessages(conversationId || newConv!.id, { limit: 100 });
+            const updatedData = await apiClient.getMessages(convIdToUse, { limit: 100 });
             const updatedMessages = updatedData.messages.map((msg: any) => {
               const isOwnMessage = msg.sender_id === user?.id;
               const senderName = isOwnMessage 
@@ -233,6 +269,8 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                 timestamp: new Date(msg.created_at),
                 isRead: msg.is_read || false,
                 sender: msg.sender,
+                attachmentUrl: msg.attachment_url,
+                messageType: msg.type || "TEXT",
               };
             });
             updatedMessages.sort((a: any, b: any) => 
@@ -295,10 +333,10 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
           )}
           <div className="relative">
             <div className="relative w-10 h-10 rounded-full overflow-hidden">
-              {client.avatarUrl ? (
+              {otherUser?.avatarUrl ? (
                 <Image
-                  src={client.avatarUrl}
-                  alt={client.name}
+                  src={otherUser.avatarUrl}
+                  alt={otherUser.name}
                   fill
                   className="object-cover"
                   unoptimized
@@ -313,7 +351,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
             <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-gray-400 border-2 border-background" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-foreground">{client.name}</h3>
+            <h3 className="font-semibold text-foreground">{otherUser?.name || "Utilisateur"}</h3>
             <p className="text-xs text-muted-foreground">Hors ligne</p>
           </div>
         </div>
@@ -337,10 +375,10 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                 {/* Avatar */}
                 {showAvatar && !isOwnMessage && (
                   <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
-                    {client.avatarUrl ? (
+                    {otherUser?.avatarUrl ? (
                       <Image
-                        src={client.avatarUrl}
-                        alt={client.name}
+                        src={otherUser.avatarUrl}
+                        alt={otherUser.name}
                         fill
                         className="object-cover"
                         unoptimized
@@ -375,7 +413,21 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                       }
                     `}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                    {/* Afficher l'image si elle existe */}
+                    {message.attachmentUrl && (
+                      <div className="mb-2 rounded-lg overflow-hidden max-w-full">
+                        <img
+                          src={message.attachmentUrl}
+                          alt="Image partagée"
+                          className="max-w-full h-auto rounded-lg"
+                          style={{ maxHeight: "300px" }}
+                        />
+                      </div>
+                    )}
+                    {/* Afficher le texte si présent */}
+                    {message.text && message.text.trim() && (
+                      <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                    )}
                     {/* Indicateur de lecture (seulement pour les messages envoyés) */}
                     {isOwnMessage && (
                       <div className="absolute -bottom-1 -right-1 flex items-center gap-0.5">
@@ -442,6 +494,8 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
           value={newMessage}
           onChange={setNewMessage}
           onSend={handleSendMessage}
+          onImageSelect={setSelectedImage}
+          selectedImage={selectedImage}
         />
       </div>
     </div>

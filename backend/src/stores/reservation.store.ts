@@ -54,11 +54,7 @@ export class ReservationStore {
       throw new Error("Vous avez déjà fait une proposition sur cette demande");
     }
 
-    // Calculer l'expiration (72h par défaut)
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 72);
-
-    // Créer la réservation
+    // Créer la réservation (sans expiration)
     const { data, error } = await supabaseAdmin
       .from("reservations")
       .insert({
@@ -72,7 +68,6 @@ export class ReservationStore {
         can_set_table: reservationData.can_set_table || false,
         can_do_dishes: reservationData.can_do_dishes || false,
         status: "PENDING",
-        expires_at: expiresAt.toISOString(),
       })
       .select()
       .single();
@@ -96,26 +91,19 @@ export class ReservationStore {
   /**
    * Récupérer toutes les propositions pour une demande publique
    * @param bookingId - ID de la demande publique
-   * @param includeExpired - Inclure les propositions expirées
+   * @param _includeExpired - Inclure les propositions expirées (déprécié, les propositions n'expirent plus)
    * @returns Liste des propositions enrichies avec les données du cuisinier
    */
   static async getReservationsByBookingId(
     bookingId: string,
-    includeExpired: boolean = false,
+    _includeExpired: boolean = false,
   ): Promise<Reservation[]> {
-    // Récupérer les réservations d'abord
-    let query = supabaseAdmin
+    // Récupérer les réservations (sans expiration)
+    const query = supabaseAdmin
       .from("reservations")
       .select("*")
       .eq("booking_id", bookingId)
       .order("created_at", { ascending: false });
-
-    // Exclure les expirées par défaut
-    if (!includeExpired) {
-      query = query.or(
-        "status.neq.EXPIRED,expires_at.is.null,expires_at.gt.now()",
-      );
-    }
 
     const { data: reservationsData, error: reservationsError } = await query;
 
@@ -589,32 +577,17 @@ export class ReservationStore {
       accepted: reservations.filter((r) => r.status === "ACCEPTED").length,
       rejected: reservations.filter((r) => r.status === "REJECTED").length,
       cancelled: reservations.filter((r) => r.status === "CANCELLED").length,
-      expired: reservations.filter((r) => r.status === "EXPIRED").length,
+      expired: 0, // Les propositions n'expirent plus
     };
   }
 
   /**
    * Expirer automatiquement les propositions expirées
-   * (À appeler via un cron job)
+   * (Déprécié - les propositions n'expirent plus)
+   * @deprecated Les propositions n'expirent plus
    */
   static async expireOldReservations(): Promise<number> {
-    // Utiliser la fonction SQL créée
-    const { error } = await supabaseAdmin.rpc("expire_old_reservations");
-
-    if (error) {
-      console.error("Expire old reservations error:", error);
-      throw new Error(
-        `Erreur lors de l'expiration des propositions: ${error.message}`,
-      );
-    }
-
-    // La fonction SQL retourne void, donc on ne peut pas compter
-    // On peut faire une requête pour compter les expirées
-    const { count } = await supabaseAdmin
-      .from("reservations")
-      .select("*", { count: "exact", head: true })
-      .eq("status", "EXPIRED");
-
-    return count || 0;
+    // Les propositions n'expirent plus
+    return 0;
   }
 }

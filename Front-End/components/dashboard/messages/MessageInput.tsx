@@ -9,6 +9,8 @@ interface MessageInputProps {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
+  onImageSelect?: (imageBase64: string) => void;
+  selectedImage?: string | null;
 }
 
 // Emojis disponibles - défini en dehors du composant pour éviter les recréations
@@ -18,10 +20,13 @@ const EMOJIS = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", 
  * Composant d'input pour envoyer des messages
  * Supporte texte, emoji, et images (optionnel)
  */
-export function MessageInput({ value, onChange, onSend }: MessageInputProps) {
+export function MessageInput({ value, onChange, onSend, onImageSelect, selectedImage: externalSelectedImage }: MessageInputProps) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [internalSelectedImage, setInternalSelectedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Utiliser l'image externe si fournie, sinon l'image interne
+  const selectedImage = externalSelectedImage !== undefined ? externalSelectedImage : internalSelectedImage;
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -35,7 +40,12 @@ export function MessageInput({ value, onChange, onSend }: MessageInputProps) {
     if (file && file.type.startsWith("image/")) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setSelectedImage(reader.result as string);
+        const imageBase64 = reader.result as string;
+        if (onImageSelect) {
+          onImageSelect(imageBase64);
+        } else {
+          setInternalSelectedImage(imageBase64);
+        }
       };
       reader.readAsDataURL(file);
     }
@@ -47,7 +57,11 @@ export function MessageInput({ value, onChange, onSend }: MessageInputProps) {
   };
 
   const removeImage = () => {
-    setSelectedImage(null);
+    if (onImageSelect) {
+      onImageSelect("");
+    } else {
+      setInternalSelectedImage(null);
+    }
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }

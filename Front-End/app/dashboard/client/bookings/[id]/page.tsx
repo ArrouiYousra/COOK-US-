@@ -19,13 +19,20 @@ import {
   XCircle,
   Hourglass,
   Loader2,
+  X,
+  Edit,
+  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { apiClient } from "@/lib/api/client";
 import { BookingMessages } from "@/components/dashboard/bookings/BookingMessages";
 import { PaymentSection } from "@/components/dashboard/bookings/PaymentSection";
 import { InvoiceExport } from "@/components/dashboard/bookings/InvoiceExport";
+import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
 
 /**
  * Page de détails d'une réservation
@@ -39,6 +46,10 @@ export default function BookingDetailsPage() {
   const [cook, setCook] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
+  const { showNotificationToast } = useNotificationToast();
 
   // Charger la réservation
   useEffect(() => {
@@ -130,7 +141,7 @@ export default function BookingDetailsPage() {
     mappedStatus = "pending";
   } else if (booking.status === "confirmed" || booking.status === "proposition_accepted") {
     mappedStatus = "confirmed";
-  } else if (booking.status === "done") {
+  } else if (booking.status === "done" || booking.status === "completed" || booking.status === "COMPLETED") {
     mappedStatus = "done";
   } else if (booking.status === "cancelled") {
     mappedStatus = "cancelled";
@@ -168,6 +179,36 @@ export default function BookingDetailsPage() {
       ? booking.time
       : `${booking.time}h`
     : "Non spécifié";
+
+  // Gérer l'annulation
+  const handleCancel = async () => {
+    if (!cancellationReason.trim()) {
+      showNotificationToast("Veuillez indiquer une raison d'annulation", "error");
+      return;
+    }
+
+    setIsCancelling(true);
+    try {
+      await apiClient.cancelBooking(bookingId, "CLIENT_REQUEST", cancellationReason);
+      showNotificationToast("Réservation annulée avec succès", "success");
+      setShowCancelDialog(false);
+      setCancellationReason("");
+      // Recharger la page pour voir les mises à jour
+      window.location.reload();
+    } catch (err: any) {
+      console.error("Erreur lors de l'annulation:", err);
+      showNotificationToast(
+        err.response?.data?.message || "Erreur lors de l'annulation",
+        "error"
+      );
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  // Vérifier si les actions sont disponibles
+  const canCancel = mappedStatus === "pending" || mappedStatus === "confirmed";
+  const canModify = mappedStatus === "pending" || mappedStatus === "confirmed";
 
   return (
     <div className="space-y-6">
@@ -334,9 +375,103 @@ export default function BookingDetailsPage() {
         totalPrice: booking.totalPrice || booking.total_price || 0,
         paymentStatus: booking.paymentStatus || booking.payment_status,
         paidAt: booking.paidAt || booking.paid_at,
-        partialPaymentAmount: booking.partialPaymentAmount || booking.partial_payment_amount,
+        depositAmount: booking.depositAmount || booking.deposit_amount,
         remainingAmount: booking.remainingAmount || booking.remaining_amount,
+        depositPaidAt: booking.depositPaidAt || booking.deposit_paid_at,
+        remainingPaidAt: booking.remainingPaidAt || booking.remaining_paid_at,
       }} />
+
+      {/* Actions disponibles */}
+      {(canCancel || canModify) && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="bg-card border border-border rounded-xl p-6"
+        >
+          <h3 className="font-cera text-lg font-bold text-foreground mb-4">
+            Actions
+          </h3>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+            >
+              <Link href={`/dashboard/client/messages?cook=${cook.id}`}>
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Contacter le cuisinier
+              </Link>
+            </Button>
+            {canModify && (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+              >
+                <Link href={`/dashboard/client/bookings/${bookingId}/edit`}>
+                  <Edit className="w-4 h-4 mr-2" />
+                  Modifier
+                </Link>
+              </Button>
+            )}
+            {canCancel && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowCancelDialog(true)}
+              >
+                <X className="w-4 h-4 mr-2" />
+                Annuler la réservation
+              </Button>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* Dialog d'annulation */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Annuler la réservation</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir annuler cette réservation ? Cette action est irréversible.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="reason">Raison de l'annulation *</Label>
+              <Textarea
+                id="reason"
+                placeholder="Expliquez pourquoi vous annulez cette réservation..."
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+                rows={4}
+                className="mt-2"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCancelDialog(false);
+                setCancellationReason("");
+              }}
+              disabled={isCancelling}
+            >
+              Retour
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancel}
+              disabled={isCancelling || !cancellationReason.trim()}
+            >
+              {isCancelling ? "Annulation..." : "Confirmer l'annulation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Bouton Laisser un avis (si terminée) */}
       {mappedStatus === "done" && (

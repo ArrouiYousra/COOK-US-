@@ -838,6 +838,16 @@ class ApiClient {
     return response.data;
   }
 
+  /**
+   * Uploader une image pour un message
+   */
+  async uploadMessageImage(imageBase64: string): Promise<{ message: string; image_url: string }> {
+    const response = await this.client.post<{ message: string; image_url: string }>("/messages/upload-image", {
+      image_base64: imageBase64,
+    });
+    return response.data;
+  }
+
   // ========== FAVORITES ==========
 
   /**

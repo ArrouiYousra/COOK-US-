@@ -6,6 +6,7 @@ import {
   markAsRead,
   updateMessage,
   deleteMessage,
+  uploadMessageImage,
 } from "./message.controllers";
 import { authGuard } from "@core/middleware";
 
@@ -187,5 +188,44 @@ router.get("/conversations/:conversationId", authGuard, getMessages);
  *         description: Conversation not found or unauthorized
  */
 router.put("/conversations/:conversationId/read", authGuard, markAsRead);
+
+/**
+ * @swagger
+ * /api/messages/upload-image:
+ *   post:
+ *     summary: Upload an image for a message
+ *     tags: [Messages]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - image_base64
+ *             properties:
+ *               image_base64:
+ *                 type: string
+ *                 description: Base64 encoded image (data:image/...;base64,...)
+ *     responses:
+ *       200:
+ *         description: Image uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 image_url:
+ *                   type: string
+ *       400:
+ *         description: Bad request (invalid format or size)
+ *       401:
+ *         description: Unauthorized
+ */
+router.post("/upload-image", authGuard, uploadMessageImage);
 
 export default router;

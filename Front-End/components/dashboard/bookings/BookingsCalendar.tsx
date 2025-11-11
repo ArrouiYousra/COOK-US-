@@ -34,9 +34,22 @@ export function BookingsCalendar() {
   const adjustedStartingDay = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1;
 
   // Filtrer les réservations du mois
+  // IMPORTANT: Exclure les demandes publiques (cook_profile_id = null)
+  // Cette page est pour les "Réservations & Paiements", donc uniquement les réservations confirmées
   const monthBookings = useMemo(() => {
     return bookings.filter((booking: any) => {
+      // Exclure les demandes publiques (sans cuisinier assigné)
+      const cookProfileId = booking.cook_profile_id ?? booking.cookId;
+      if (!cookProfileId || cookProfileId === null || cookProfileId === "") {
+        return false;
+      }
+
+      // Filtrer par date
       const bookingDate = new Date(booking.date || booking.booking_date);
+      if (isNaN(bookingDate.getTime())) {
+        return false;
+      }
+
       return (
         bookingDate.getFullYear() === year &&
         bookingDate.getMonth() === month

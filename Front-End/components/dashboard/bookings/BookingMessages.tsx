@@ -1,45 +1,79 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { MessageSquare, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatMessageTime } from "@/lib/utils/messageTime";
+import { apiClient } from "@/lib/api/client";
+import { useAuthStore } from "@/stores/authStore";
 
 interface BookingMessagesProps {
   bookingId: string;
   cookId: string;
 }
 
-// Mock data - À remplacer par les vraies données
-const mockBookingMessages = [
-  {
-    id: "1",
-    senderId: "cook-1",
-    senderName: "Marie Martin",
-    text: "Bonjour ! Je confirme ma disponibilité pour le 15 janvier à 19h.",
-    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: "2",
-    senderId: "client",
-    senderName: "Vous",
-    text: "Parfait, merci ! J'ai hâte de goûter vos plats.",
-    timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-  },
-];
-
 /**
  * Historique des messages liés à une réservation
  */
 export function BookingMessages({ bookingId, cookId }: BookingMessagesProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const messages = mockBookingMessages;
+  const [messages, setMessages] = useState<any[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { user } = useAuthStore();
 
-  if (messages.length === 0) {
-    return null;
-  }
+  // Charger la conversation et les messages
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (!user?.id) return;
+
+      setIsLoading(true);
+      try {
+        // Récupérer toutes les conversations
+        const conversationsData = await apiClient.getConversations({ limit: 1000 });
+        
+        // Trouver la conversation liée à ce booking
+        const conversation = conversationsData.conversations.find(
+          (conv: any) => conv.booking_id === bookingId
+        );
+
+        if (conversation) {
+          setConversationId(conversation.id);
+          
+          // Charger les messages de la conversation
+          const messagesData = await apiClient.getMessages(conversation.id, { limit: 50 });
+          
+          // Transformer les messages pour l'affichage
+          const formattedMessages = messagesData.messages.map((msg: any) => ({
+            id: msg.id,
+            senderId: msg.sender_id,
+            senderName: msg.sender_id === user.id 
+              ? "Vous" 
+              : msg.sender?.first_name && msg.sender?.last_name
+              ? `${msg.sender.first_name} ${msg.sender.last_name}`
+              : msg.sender?.first_name || "Cuisinier",
+            text: msg.content,
+            timestamp: new Date(msg.created_at),
+          }));
+
+          setMessages(formattedMessages);
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement des messages:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (isExpanded && user?.id) {
+      loadMessages();
+    }
+  }, [isExpanded, bookingId, user?.id]);
+
+  // Toujours afficher le composant (pour permettre l'expansion)
+  // Les messages seront chargés quand on expand
 
   return (
     <motion.div
@@ -55,7 +89,7 @@ export function BookingMessages({ bookingId, cookId }: BookingMessagesProps) {
         <div className="flex items-center gap-3">
           <MessageSquare className="w-5 h-5 text-muted-foreground" />
           <h3 className="font-cera text-lg font-bold text-foreground">
-            Messages liés ({messages.length})
+            Messages liés{conversationId ? ` (${messages.length})` : ""}
           </h3>
         </div>
         {isExpanded ? (
@@ -101,18 +135,42 @@ export function BookingMessages({ bookingId, cookId }: BookingMessagesProps) {
               </div>
             </motion.div>
           ))}
-          <div className="pt-4 border-t border-border">
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="w-full"
-            >
-              <Link href={`/dashboard/client/messages?cook=${cookId}`}>
-                Ouvrir la conversation
-              </Link>
-            </Button>
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="pt-4 border-t border-border text-center">
+              <p className="text-sm text-muted-foreground mb-4">
+                Aucun message pour cette réservation
+              </p>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="w-full"
+              >
+                <Link href={`/dashboard/client/messages?cook=${cookId}`}>
+                  Ouvrir la conversation
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="pt-4 border-t border-border">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                >
+                  <Link href={conversationId ? `/dashboard/client/messages?conversation=${conversationId}` : `/dashboard/client/messages?cook=${cookId}`}>
+                    Ouvrir la conversation
+                  </Link>
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </motion.div>

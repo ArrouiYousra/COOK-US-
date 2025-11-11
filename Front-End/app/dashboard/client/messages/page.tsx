@@ -11,8 +11,14 @@ function MessagesContent() {
 
   // Initialiser depuis les paramètres d'URL
   useEffect(() => {
+    const conversationId = searchParams.get("conversation");
     const cookId = searchParams.get("cook");
-    if (cookId) {
+    
+    // Priorité : conversation > cook
+    if (conversationId) {
+      setSelectedConversationId(conversationId);
+    } else if (cookId) {
+      // Si c'est un cookId, on le passe à ChatWindow qui gérera la création de conversation
       setSelectedConversationId(cookId);
     }
   }, [searchParams]);
