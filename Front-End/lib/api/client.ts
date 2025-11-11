@@ -39,6 +39,30 @@ class ApiClient {
             maxBodyLength: 5242880, // 5MB max body length
           });
 
+    // Intercepteur pour ajouter le token d'authentification dans les headers
+    this.client.interceptors.request.use(
+      (config) => {
+        // Essayer de récupérer le token depuis les cookies accessibles
+        // Note: Les cookies HttpOnly ne sont pas accessibles depuis JavaScript
+        // Le backend devrait gérer l'authentification via les cookies avec withCredentials: true
+        // Mais on ajoute quand même le header Authorization si un token est disponible dans les cookies non-HttpOnly
+        if (typeof document !== 'undefined') {
+          const cookies = document.cookie.split(';');
+          for (const cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'access_token' && value) {
+              config.headers.Authorization = `Bearer ${value}`;
+              break;
+            }
+          }
+        }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
+      }
+    );
+
     // Intercepteur pour gérer les erreurs globalement
     this.client.interceptors.response.use(
       (response) => response,
