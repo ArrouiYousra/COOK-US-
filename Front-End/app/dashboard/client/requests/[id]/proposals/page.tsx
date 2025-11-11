@@ -325,7 +325,7 @@ export default function RequestProposalsPage() {
       )}
 
       {/* Filtres et tri */}
-      <div className="bg-card border border-border rounded-xl p-4">
+      <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
         <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
           {/* Tri */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -357,34 +357,38 @@ export default function RequestProposalsPage() {
             </Button>
           </div>
 
-          {/* Vue Liste/Carte */}
-          <div className="flex items-center gap-2 border border-border rounded-lg p-1">
-            <Button
-              variant={viewMode === "list" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("list")}
-              className="flex items-center gap-2"
-            >
-              <List className="w-4 h-4" />
-              Liste
-            </Button>
-            <Button
-              variant={viewMode === "map" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("map")}
-              className="flex items-center gap-2"
-            >
-              <Map className="w-4 h-4" />
-              Carte
-            </Button>
+          {/* Vue Liste/Carte - Plus visible */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground hidden sm:inline">Vue :</span>
+            <div className="flex items-center gap-2 border border-border rounded-lg p-1 bg-background">
+              <Button
+                variant={viewMode === "list" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("list")}
+                className="flex items-center gap-2"
+              >
+                <List className="w-4 h-4" />
+                <span className="hidden sm:inline">Liste</span>
+              </Button>
+              <Button
+                variant={viewMode === "map" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("map")}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white data-[state=active]:bg-blue-700"
+              >
+                <Map className="w-4 h-4" />
+                <span className="hidden sm:inline">Carte</span>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Vue Carte ou Liste */}
-      {viewMode === "map" && bookingAddress ? (
-        <div className="bg-card border border-border rounded-xl overflow-hidden" style={{ height: "600px" }}>
-          <MapboxMap
+      {viewMode === "map" ? (
+        bookingAddress ? (
+          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg" style={{ height: "600px" }}>
+            <MapboxMap
             center={[bookingAddress.lat, bookingAddress.lng]}
             zoom={11}
             markers={[
@@ -436,10 +440,18 @@ export default function RequestProposalsPage() {
                 color: "#10b981",
               };
             })()}
-            height="100%"
-            interactive={true}
-          />
-        </div>
+              height="100%"
+              interactive={true}
+            />
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-xl p-8 text-center">
+            <Map className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">
+              Adresse de la demande non disponible pour afficher la carte
+            </p>
+          </div>
+        )
       ) : (
         <div className="space-y-4">
           {/* Comparaison rapide */}

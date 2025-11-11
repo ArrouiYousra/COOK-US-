@@ -103,29 +103,10 @@ export class ReservationStore {
     bookingId: string,
     includeExpired: boolean = false,
   ): Promise<Reservation[]> {
-    // Récupérer les réservations avec jointure vers cook_profiles et users
+    // Récupérer les réservations d'abord
     let query = supabaseAdmin
       .from("reservations")
-      .select(
-        `
-        *,
-        cook_profiles!inner(
-          id,
-          headline,
-          bio,
-          hourly_rate,
-          average_rating,
-          user_id,
-          users!inner(
-            id,
-            first_name,
-            last_name,
-            avatar_url,
-            email
-          )
-        )
-      `,
-      )
+      .select("*")
       .eq("booking_id", bookingId)
       .order("created_at", { ascending: false });
 
@@ -136,19 +117,82 @@ export class ReservationStore {
       );
     }
 
-    const { data, error } = await query;
+    const { data: reservationsData, error: reservationsError } = await query;
 
-    if (error) {
-      console.error("Get reservations by booking error:", error);
+    if (reservationsError) {
+      console.error("Get reservations by booking error:", reservationsError);
       throw new Error(
-        `Erreur lors de la récupération des propositions: ${error.message}`,
+        `Erreur lors de la récupération des propositions: ${reservationsError.message}`,
       );
     }
 
-    // Transformer les données pour avoir une structure plus simple
-    const reservations = ((data as any[]) || []).map((reservation: any) => {
-      const cookProfile = reservation.cook_profiles;
-      const user = cookProfile?.users;
+    if (!reservationsData || reservationsData.length === 0) {
+      return [];
+    }
+
+    // Récupérer les IDs des profils cuisiniers
+    const cookProfileIds = [
+      ...new Set(
+        reservationsData
+          .map((r: any) => r.cook_profile_id)
+          .filter((id: string) => id),
+      ),
+    ];
+
+    if (cookProfileIds.length === 0) {
+      return reservationsData as Reservation[];
+    }
+
+    // Récupérer les profils cuisiniers
+    const { data: cookProfilesData, error: cookProfilesError } =
+      await supabaseAdmin
+        .from("cook_profiles")
+        .select("id, headline, bio, hourly_rate, average_rating, user_id")
+        .in("id", cookProfileIds);
+
+    if (cookProfilesError) {
+      console.error("Get cook profiles error:", cookProfilesError);
+      // Continuer même si on ne peut pas récupérer les profils
+    }
+
+    // Récupérer les user_ids uniques
+    const userIds = [
+      ...new Set(
+        (cookProfilesData || [])
+          .map((p: any) => p.user_id)
+          .filter((id: string) => id),
+      ),
+    ];
+
+    // Récupérer les utilisateurs
+    let usersMap = new Map();
+    if (userIds.length > 0) {
+      const { data: usersData, error: usersError } = await supabaseAdmin
+        .from("users")
+        .select("id, first_name, last_name, avatar_url, email")
+        .in("id", userIds);
+
+      if (!usersError && usersData) {
+        usersData.forEach((user: any) => {
+          usersMap.set(user.id, user);
+        });
+      }
+    }
+
+    // Créer un map pour accéder rapidement aux profils
+    const cookProfilesMap = new Map();
+    if (cookProfilesData) {
+      cookProfilesData.forEach((profile: any) => {
+        cookProfilesMap.set(profile.id, profile);
+      });
+    }
+
+    // Joindre les données
+    const reservations = reservationsData.map((reservation: any) => {
+      const cookProfile = cookProfilesMap.get(reservation.cook_profile_id);
+      const user = cookProfile?.user_id
+        ? usersMap.get(cookProfile.user_id)
+        : null;
 
       return {
         ...reservation,

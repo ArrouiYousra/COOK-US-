@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Calendar, Clock, Users, Euro, MapPin, Eye, Edit, Trash2, Copy, Loader2, MessageSquare, CheckCircle2, XCircle, AlertCircle, CreditCard, ChefHat, Sparkles, ArrowRight, Bell } from "lucide-react";
+import { Calendar, Clock, Users, Euro, MapPin, Eye, Edit, Trash2, Copy, Loader2, MessageSquare, CheckCircle2, XCircle, AlertCircle, CreditCard, ChefHat, Sparkles, ArrowRight, Bell, Map, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { PropositionsModal } from "./PropositionsModal";
@@ -10,6 +10,7 @@ import { EditRequestModal } from "./EditRequestModal";
 import { DeleteRequestDialog } from "./DeleteRequestDialog";
 import { useBookingStore } from "@/stores/bookingStore";
 import { apiClient } from "@/lib/api/client";
+import { MapboxMap } from "@/components/mapbox/MapboxMap";
 import Link from "next/link";
 
 interface RequestsListProps {
@@ -24,6 +25,7 @@ export function RequestsList({ status }: RequestsListProps) {
   const { bookings, proposals, fetchBookings, fetchProposals, isLoadingBookings, isLoadingProposals } = useBookingStore();
   const [isLoading, setIsLoading] = useState(true);
   const [requests, setRequests] = useState<any[]>([]);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
   
   // Fonction pour recharger les données
   const reloadData = async () => {
@@ -322,6 +324,53 @@ export function RequestsList({ status }: RequestsListProps) {
     );
   }
 
+  // Calculer les coordonnées pour la carte
+  const mapMarkers = useMemo(() => {
+    return requests
+      .filter((req) => {
+        const address = req.address || (req as any).location?.address;
+        const location = (req as any).address?.location || (req as any).location?.location;
+        return address && location;
+      })
+      .map((request) => {
+        const location = (request as any).address?.location || (request as any).location?.location;
+        const locationObj = location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
+        if (!locationObj) return null;
+
+        const lat = locationObj.lat ?? locationObj.latitude;
+        const lng = locationObj.lng ?? locationObj.longitude;
+        if (!lat || !lng) return null;
+
+        const statusLower = (request.status || "").toLowerCase();
+        let color = "#3b82f6"; // Bleu par défaut
+        if (statusLower === "confirmed" || statusLower === "proposition_accepted") {
+          color = "#10b981"; // Vert
+        } else if (statusLower === "completed" || statusLower === "done") {
+          color = "#6b7280"; // Gris
+        } else if (statusLower === "cancelled") {
+          color = "#ef4444"; // Rouge
+        }
+
+        return {
+          id: request.id,
+          lat,
+          lng,
+          title: request.title || "Demande de repas",
+          description: `${request.guestCount || 0} personne(s) • ${request.budget || 0}€`,
+          color,
+        };
+      })
+      .filter((marker): marker is NonNullable<typeof marker> => marker !== null);
+  }, [requests]);
+
+  // Calculer le centre de la carte (moyenne des coordonnées)
+  const mapCenter = useMemo(() => {
+    if (mapMarkers.length === 0) return [48.8566, 2.3522] as [number, number]; // Paris par défaut
+    const avgLat = mapMarkers.reduce((sum, m) => sum + m.lat, 0) / mapMarkers.length;
+    const avgLng = mapMarkers.reduce((sum, m) => sum + m.lng, 0) / mapMarkers.length;
+    return [avgLat, avgLng] as [number, number];
+  }, [mapMarkers]);
+
   if (requests.length === 0) {
     return (
       <div className="text-center py-12">
@@ -333,10 +382,73 @@ export function RequestsList({ status }: RequestsListProps) {
   }
 
   return (
-    <div className="grid gap-4">
-      {requests.map((request, index) => (
-        <RequestCard key={request.id} request={request} index={index} reloadData={reloadData} />
-      ))}
+    <div className="space-y-4">
+      {/* Toggle Vue Liste/Carte */}
+      {requests.length > 0 && (
+        <div className="flex items-center justify-end">
+          <div className="flex items-center gap-2 border border-border rounded-lg p-1 bg-card">
+            <Button
+              variant={viewMode === "list" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("list")}
+              className="flex items-center gap-2"
+            >
+              <List className="w-4 h-4" />
+              Liste
+            </Button>
+            <Button
+              variant={viewMode === "map" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setViewMode("map")}
+              className="flex items-center gap-2"
+            >
+              <Map className="w-4 h-4" />
+              Carte
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Vue Carte ou Liste */}
+      {viewMode === "map" ? (
+        mapMarkers.length > 0 ? (
+          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg" style={{ height: "600px" }}>
+            <MapboxMap
+              center={mapCenter}
+              zoom={11}
+              markers={mapMarkers}
+              height="100%"
+              interactive={true}
+              onMarkerClick={(marker) => {
+                const request = requests.find((r) => r.id === marker.id);
+                if (request) {
+                  // Scroll vers la demande dans la liste ou ouvrir les détails
+                  const element = document.getElementById(`request-${request.id}`);
+                  if (element) {
+                    element.scrollIntoView({ behavior: "smooth", block: "center" });
+                    setViewMode("list");
+                  }
+                }
+              }}
+            />
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-xl p-8 text-center">
+            <Map className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">
+              Aucune adresse disponible pour afficher la carte
+            </p>
+          </div>
+        )
+      ) : (
+        <div className="grid gap-4">
+          {requests.map((request, index) => (
+            <div key={request.id} id={`request-${request.id}`}>
+              <RequestCard request={request} index={index} reloadData={reloadData} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

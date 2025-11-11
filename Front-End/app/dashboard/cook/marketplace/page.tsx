@@ -105,7 +105,7 @@ export default function MarketplacePage() {
         const profile = await apiClient.getMyProfile();
         if (profile.cookProfile) {
           setCookProfile(profile.cookProfile);
-          // Récupérer la localisation du cuisinier
+          // Récupérer la localisation du cuisinier depuis le profil
           if (profile.cookProfile.location) {
             const location = profile.cookProfile.location as { lat?: number; lng?: number; latitude?: number; longitude?: number };
             const lat = location.lat ?? location.latitude;
@@ -117,6 +117,30 @@ export default function MarketplacePage() {
                 setMaxDistance(profile.cookProfile.service_radius);
               }
             }
+          }
+          
+          // Si pas de localisation dans le profil, essayer la géolocalisation du navigateur
+          if (!profile.cookProfile.location && typeof window !== "undefined" && navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              async (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                setCookLocation({ lat, lng });
+                
+                // Optionnel : Sauvegarder la localisation dans le profil
+                try {
+                  // On peut sauvegarder plus tard, pour l'instant on utilise juste la géolocalisation
+                  console.log("Localisation obtenue via géolocalisation:", { lat, lng });
+                } catch (err) {
+                  console.warn("Impossible de sauvegarder la localisation:", err);
+                }
+              },
+              (error) => {
+                console.warn("Erreur géolocalisation:", error.message);
+                // On continue sans localisation
+              },
+              { timeout: 5000, enableHighAccuracy: false }
+            );
           }
         }
       } catch (err) {
@@ -223,19 +247,19 @@ export default function MarketplacePage() {
       address.includes(searchLower)
     );
 
-      // Filtre par distance
-      const distance = distances[request.id]?.distance || Infinity;
-      const matchesDistance = !maxDistance || distance <= maxDistance * 1000; // Convertir km en mètres
+      // Filtre par distance (seulement si localisation disponible)
+      const distance = distances[request.id]?.distance;
+      const matchesDistance = !cookLocation || !maxDistance || (distance !== undefined && distance <= maxDistance * 1000);
 
       // Filtre par budget (si disponible dans la demande)
       const requestBudget = request.budget || request.total_price || 0;
       const matchesMinBudget = !minBudget || requestBudget >= minBudget;
       const matchesMaxBudget = !maxBudget || requestBudget <= maxBudget;
 
-      // Vérifier si la demande est dans le rayon de service du cuisinier
-      const isInServiceRadius = cookProfile?.service_radius 
-        ? distance <= (cookProfile.service_radius * 1000) // Convertir km en mètres
-        : true;
+      // Vérifier si la demande est dans le rayon de service du cuisinier (seulement si localisation disponible)
+      const isInServiceRadius = !cookLocation || !cookProfile?.service_radius 
+        ? true // Si pas de localisation, on accepte toutes les demandes
+        : (distance !== undefined && distance <= (cookProfile.service_radius * 1000));
 
       return matchesSearch && matchesDistance && matchesMinBudget && matchesMaxBudget && isInServiceRadius;
     });
@@ -323,8 +347,56 @@ export default function MarketplacePage() {
         </div>
       )}
 
+      {/* Avertissement si pas de localisation */}
+      {!cookLocation && cookProfile && (
+        <div className="bg-yellow-500/10 border-yellow-500/20 border rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-foreground mb-1">Localisation non définie</h3>
+              <p className="text-sm text-muted-foreground mb-3">
+                Pour utiliser les filtres de distance et voir la carte, vous devez définir votre localisation.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (typeof window !== "undefined" && navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                          const lat = position.coords.latitude;
+                          const lng = position.coords.longitude;
+                          setCookLocation({ lat, lng });
+                        },
+                        (error) => {
+                          alert(`Erreur de géolocalisation : ${error.message}`);
+                        },
+                        { timeout: 10000, enableHighAccuracy: true }
+                      );
+                    } else {
+                      alert("La géolocalisation n'est pas disponible dans votre navigateur.");
+                    }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  Utiliser ma position actuelle
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => router.push("/dashboard/cook/profile")}
+                >
+                  Définir dans mon profil
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Suggestions intelligentes */}
-      {cookProfile && filteredAndSortedRequests.length > 0 && (
+      {cookProfile && filteredAndSortedRequests.length > 0 && cookLocation && (
         <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -335,8 +407,8 @@ export default function MarketplacePage() {
               <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400" />
               <span className="text-muted-foreground">
                 {filteredAndSortedRequests.filter(r => {
-                  const dist = distances[r.id]?.distance || Infinity;
-                  return dist <= (cookProfile.service_radius * 1000);
+                  const dist = distances[r.id]?.distance;
+                  return dist !== undefined && dist <= (cookProfile.service_radius * 1000);
                 }).length} demande{filteredAndSortedRequests.length > 1 ? "s" : ""} dans votre rayon ({cookProfile.service_radius} km)
               </span>
             </div>
@@ -424,7 +496,14 @@ export default function MarketplacePage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-4 border-t border-border">
           {/* Filtre par distance */}
           <div>
-            <Label className="text-xs text-muted-foreground mb-1 block">Distance max (km)</Label>
+            <Label className="text-xs text-muted-foreground mb-1 block flex items-center gap-2">
+              Distance max (km)
+              {!cookLocation && (
+                <span className="text-xs text-yellow-600 dark:text-yellow-400" title="Localisation requise">
+                  ⚠️
+                </span>
+              )}
+            </Label>
             <Input
               type="number"
               placeholder={cookProfile?.service_radius ? `Rayon: ${cookProfile.service_radius}km` : "Toutes"}
@@ -433,7 +512,14 @@ export default function MarketplacePage() {
               min="0"
               max="100"
               className="text-sm"
+              disabled={!cookLocation}
+              title={!cookLocation ? "Définissez votre localisation pour utiliser ce filtre" : ""}
             />
+            {!cookLocation && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                Localisation requise
+              </p>
+            )}
           </div>
 
           {/* Filtre par budget min */}
@@ -503,56 +589,106 @@ export default function MarketplacePage() {
               : "Aucune demande ne correspond à vos critères"}
           </p>
         </div>
-      ) : viewMode === "map" && cookLocation ? (
-        <div className="bg-card border border-border rounded-xl overflow-hidden" style={{ height: "600px" }}>
-          <MapboxMap
-            center={[cookLocation.lat, cookLocation.lng]}
-            zoom={11}
-            markers={[
-              {
-                id: "cook-location",
-                lat: cookLocation.lat,
-                lng: cookLocation.lng,
-                title: "Votre position",
-                description: "Votre localisation",
-                color: "#10b981",
-              },
-              ...filteredAndSortedRequests
-              .filter((req) => req.address?.location)
-                .map((request) => {
-                  const requestLocation = request.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
-                  if (!requestLocation) return null;
-                  
-                  const requestLat = requestLocation.lat ?? requestLocation.latitude;
-                  const requestLng = requestLocation.lng ?? requestLocation.longitude;
-                  if (!requestLat || !requestLng) return null;
-                  
-                  const distance = distances[request.id];
-                  const isInRadius = cookProfile?.service_radius 
-                    ? (distance?.distance || Infinity) <= (cookProfile.service_radius * 1000)
-                    : true;
-                  
-                  return {
-                id: request.id,
-                    lat: requestLat,
-                    lng: requestLng,
-                title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
-                    description: `${request.number_of_guests || 0} invité(s)${distance ? ` • ${distance.distance_km}` : ""}`,
-                    color: isInRadius ? "#3b82f6" : "#ef4444",
-                  };
-                })
-                .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
-            ]}
-            height="100%"
-            onMarkerClick={(marker) => {
-              if (marker.id === "cook-location") return;
-              const request = filteredAndSortedRequests.find((r) => r.id === marker.id);
-              if (request) {
-                handlePropose(request);
-              }
-            }}
-          />
-        </div>
+      ) : viewMode === "map" ? (
+        cookLocation ? (
+          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg" style={{ height: "600px" }}>
+            <MapboxMap
+              center={[cookLocation.lat, cookLocation.lng]}
+              zoom={11}
+              markers={[
+                {
+                  id: "cook-location",
+                  lat: cookLocation.lat,
+                  lng: cookLocation.lng,
+                  title: "Votre position",
+                  description: "Votre localisation",
+                  color: "#10b981",
+                },
+                ...filteredAndSortedRequests
+                  .filter((req) => req.address?.location)
+                  .map((request) => {
+                    const requestLocation = request.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
+                    if (!requestLocation) return null;
+                    
+                    const requestLat = requestLocation.lat ?? requestLocation.latitude;
+                    const requestLng = requestLocation.lng ?? requestLocation.longitude;
+                    if (!requestLat || !requestLng) return null;
+                    
+                    const distance = distances[request.id];
+                    const isInRadius = cookProfile?.service_radius && distance !== undefined
+                      ? distance <= (cookProfile.service_radius * 1000)
+                      : true;
+                    
+                    return {
+                      id: request.id,
+                      lat: requestLat,
+                      lng: requestLng,
+                      title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
+                      description: `${request.number_of_guests || 0} invité(s)${distance ? ` • ${distance.distance_km}` : ""}`,
+                      color: isInRadius ? "#3b82f6" : "#ef4444",
+                    };
+                  })
+                  .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
+              ]}
+              height="100%"
+              interactive={true}
+              onMarkerClick={(marker) => {
+                if (marker.id === "cook-location") return;
+                const request = filteredAndSortedRequests.find((r) => r.id === marker.id);
+                if (request) {
+                  handlePropose(request);
+                }
+              }}
+            />
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-xl p-8 text-center">
+            <MapPin className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="font-semibold text-foreground mb-2">Localisation requise</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Pour afficher la carte et utiliser les filtres de distance, vous devez définir votre localisation.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button
+                onClick={async () => {
+                  if (typeof window !== "undefined" && navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                      async (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        setCookLocation({ lat, lng });
+                        // Optionnel : Sauvegarder dans le profil
+                        try {
+                          await apiClient.updateMyProfile({
+                            // Le backend devrait gérer la conversion en format PostGIS
+                          });
+                        } catch (err) {
+                          console.warn("Impossible de sauvegarder la localisation:", err);
+                        }
+                      },
+                      (error) => {
+                        alert(`Erreur de géolocalisation : ${error.message}`);
+                      },
+                      { timeout: 10000, enableHighAccuracy: true }
+                    );
+                  } else {
+                    alert("La géolocalisation n'est pas disponible dans votre navigateur.");
+                  }
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                Utiliser ma position actuelle
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push("/dashboard/cook/profile")}
+              >
+                Définir dans mon profil
+              </Button>
+            </div>
+          </div>
+        )
       ) : (
         <div className="grid gap-4">
           {filteredAndSortedRequests.map((request, index) => (
