@@ -274,33 +274,31 @@ class ApiClient {
           // Toujours logger errorDetails - il devrait toujours contenir au moins message et timestamp
           // Vérifier que errorDetails existe et n'est pas vide avant de le logger
           try {
-            const errorDetailsKeys = errorDetails ? Object.keys(errorDetails) : [];
+            // S'assurer que errorDetails a toujours message et timestamp
+            if (!errorDetails.message) {
+              errorDetails.message = errorMessage || 'Erreur inconnue';
+            }
+            if (!errorDetails.timestamp) {
+              errorDetails.timestamp = errorTimestamp || new Date().toISOString();
+            }
             
-            // Debug: vérifier pourquoi errorDetails pourrait être vide
-            if (!errorDetails || errorDetailsKeys.length === 0) {
-              console.error('⚠️ ERREUR CRITIQUE: errorDetails est vide ou undefined!', {
-                errorMessage,
-                errorTimestamp,
-                errorDetailsObject: errorDetails,
-                errorDetailsType: typeof errorDetails,
-                errorDetailsConstructor: errorDetails?.constructor?.name,
-              });
-              
-              // Recréer errorDetails de manière simple
-              const fallbackErrorDetails = {
+            // Vérifier que l'objet n'est pas vide
+            const errorDetailsKeys = Object.keys(errorDetails);
+            if (errorDetailsKeys.length === 0) {
+              // Si l'objet est vide, le recréer complètement
+              Object.assign(errorDetails, {
                 message: errorMessage || 'Erreur inconnue',
                 timestamp: errorTimestamp || new Date().toISOString(),
-                error: 'errorDetails was empty or undefined',
-              };
-              console.error('API Error Details (fallback):', fallbackErrorDetails);
-            } else {
-              // S'assurer que errorDetails a au moins message et timestamp
-              if (!errorDetails.message || !errorDetails.timestamp) {
-                errorDetails.message = errorDetails.message || errorMessage || 'Erreur inconnue';
-                errorDetails.timestamp = errorDetails.timestamp || errorTimestamp || new Date().toISOString();
-              }
-              console.error('API Error Details:', errorDetails);
+                errorType: 'AxiosError',
+                code: error.code || 'ERR_BAD_RESPONSE',
+                url: error.config?.url || 'unknown',
+                status: error.response?.status || null,
+                statusText: error.response?.statusText || 'No response',
+                data: error.response?.data || null,
+              });
             }
+            
+            console.error('API Error Details:', errorDetails);
           } catch (logError) {
             // Si même le logging échoue, utiliser un fallback minimal
             console.error('Erreur lors du logging des détails:', logError);

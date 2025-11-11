@@ -246,9 +246,6 @@ export default function MyReservationsPage() {
 
                     <p className="text-xs text-muted-foreground">
                       Proposé le {format(new Date(reservation.created_at), "d MMMM yyyy 'à' HH:mm", { locale: fr })}
-                      {reservation.expires_at && reservation.status === "PENDING" && (
-                        <> • Expire le {format(new Date(reservation.expires_at), "d MMMM yyyy 'à' HH:mm", { locale: fr })}</>
-                      )}
                     </p>
 
                     {reservation.accepted_at && (

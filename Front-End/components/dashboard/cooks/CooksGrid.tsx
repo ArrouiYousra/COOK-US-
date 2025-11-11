@@ -245,14 +245,11 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
           {searchQuery || filters.location || filters.minRating > 0 || filters.maxBudget < 1000
             ? "Aucun cuisinier ne correspond à vos critères."
             : cooks.length === 0
-            ? "Aucun cuisinier disponible pour le moment. Vérifiez que des cuisiniers avec le statut ACTIVE existent dans la base de données."
+            ? "Aucun cuisinier disponible pour le moment. Veuillez réessayer plus tard."
             : "Aucun cuisinier ne correspond à votre recherche."}
         </p>
         {cooks.length === 0 && (
-          <div className="mt-4 space-y-2">
-            <p className="text-xs text-muted-foreground">
-              Total de cuisiniers chargés: {count}
-            </p>
+          <div className="mt-4">
             <Button variant="outline" onClick={() => window.location.reload()}>
               Actualiser
             </Button>

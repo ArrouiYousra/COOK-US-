@@ -147,11 +147,26 @@ export default function RequestProposalsPage() {
         }
       } catch (err: unknown) {
         console.error("Erreur lors du chargement des propositions:", err);
-        const errorMessage = err && typeof err === 'object' && 'response' in err && 
-          typeof (err as { response?: { data?: { message?: string } } }).response === 'object' &&
-          (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          ? (err as { response: { data: { message: string } } }).response.data.message
-          : "Impossible de charger les propositions";
+        let errorMessage = "Impossible de charger les propositions";
+        
+        if (err && typeof err === 'object') {
+          // Essayer d'extraire le message depuis error.response.data
+          if ('response' in err && err.response && typeof err.response === 'object') {
+            const response = err.response as { data?: { message?: string; error?: string }; status?: number };
+            if (response.data) {
+              errorMessage = response.data.message || response.data.error || errorMessage;
+            }
+            // Si c'est une erreur 500, ajouter plus de contexte
+            if (response.status === 500) {
+              errorMessage = `Erreur serveur: ${errorMessage}`;
+            }
+          }
+          // Si c'est une erreur Axios, essayer d'extraire le message
+          if ('message' in err && typeof err.message === 'string') {
+            errorMessage = err.message || errorMessage;
+          }
+        }
+        
         setError(errorMessage);
       } finally {
         setIsLoading(false);
