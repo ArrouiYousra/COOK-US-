@@ -23,7 +23,7 @@ export class MessageStore {
 
     if (participants && participants.length > 0) {
       // Group by conversation_id to find conversations with both users
-      const conversationIds = [
+      const conversationIds: string[] = [
         ...new Set(participants.map((p: { conversation_id: string }) => p.conversation_id)),
       ];
 

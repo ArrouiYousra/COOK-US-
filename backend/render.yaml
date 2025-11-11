@@ -7,7 +7,7 @@ services:
     runtime: node
     region: frankfurt  # Choisissez: oregon, frankfurt, singapore, mumbai, sydney
     plan: free  # free ou starter ($7/mois)
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: NPM_CONFIG_PRODUCTION=false npm ci && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
