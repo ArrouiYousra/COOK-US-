@@ -86,8 +86,19 @@ const setSessionCookies = (res: Response, session: Session): void => {
 };
 
 const clearSessionCookies = (res: Response): void => {
-  res.clearCookie("access_token", cookieBaseOptions);
-  res.clearCookie("refresh_token", cookieBaseOptions);
+  // Supprimer les cookies avec TOUTES les configurations possibles
+  // (anciens cookies avec sameSite: "lax" et nouveaux avec sameSite: "none")
+  const clearOptions = [
+    { ...cookieBaseOptions }, // Configuration actuelle
+    { ...cookieBaseOptions, sameSite: "lax" as const }, // Ancienne configuration
+    { ...cookieBaseOptions, sameSite: "none" as const, secure: true }, // Configuration cross-origin
+    { path: "/" }, // Configuration minimale
+  ];
+  
+  clearOptions.forEach(options => {
+    res.clearCookie("access_token", options);
+    res.clearCookie("refresh_token", options);
+  });
 };
 
 const baseRegisterSchema = z.object({
