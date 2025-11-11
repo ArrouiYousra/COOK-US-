@@ -252,7 +252,11 @@ export default function MarketplacePage() {
 
       // Filtre par distance (seulement si localisation disponible)
       const distance = distances[request.id]?.distance;
-      const matchesDistance = !cookLocation || !maxDistance || (distance !== undefined && distance <= maxDistance * 1000);
+      const matchesDistance =
+        !cookLocation ||
+        !maxDistance ||
+        distance === undefined ||
+        distance <= maxDistance * 1000;
 
       // Filtre par budget (si disponible dans la demande)
       const requestBudget = request.budget || request.total_price || 0;
@@ -260,9 +264,11 @@ export default function MarketplacePage() {
       const matchesMaxBudget = !maxBudget || requestBudget <= maxBudget;
 
       // Vérifier si la demande est dans le rayon de service du cuisinier (seulement si localisation disponible)
-      const isInServiceRadius = !cookLocation || !cookProfile?.service_radius 
-        ? true // Si pas de localisation, on accepte toutes les demandes
-        : (distance !== undefined && distance <= (cookProfile.service_radius * 1000));
+      const isInServiceRadius =
+        !cookLocation || !cookProfile?.service_radius
+          ? true
+          : distance === undefined ||
+            distance <= cookProfile.service_radius * 1000;
 
       return matchesSearch && matchesDistance && matchesMinBudget && matchesMaxBudget && isInServiceRadius;
     });

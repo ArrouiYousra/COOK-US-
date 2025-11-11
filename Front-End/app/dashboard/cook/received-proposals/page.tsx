@@ -13,6 +13,7 @@ import {
   Euro,
   MapPin,
   MessageSquare,
+  Phone,
   Loader2,
   AlertCircle,
   Filter,
@@ -90,7 +91,7 @@ export default function ReceivedProposalsPage() {
 
   // Filtrer et trier les propositions
   const filteredAndSortedProposals = useMemo(() => {
-    let filtered = proposals;
+    let filtered = [...proposals];
 
     // Filtrer par statut
     if (activeTab === "pending") {
@@ -100,7 +101,9 @@ export default function ReceivedProposalsPage() {
         (p) => p.status === "ACCEPTED" || p.status === "CONFIRMED",
       );
     } else if (activeTab === "rejected") {
-      filtered = filtered.filter((p) => p.status === "CANCELLED");
+      filtered = filtered.filter(
+        (p) => p.status === "CANCELLED" || p.status === "REJECTED",
+      );
     }
 
     // Trier
@@ -206,7 +209,7 @@ export default function ReceivedProposalsPage() {
         color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
         icon: CheckCircle2,
       };
-    } else if (statusLower === "cancelled") {
+    } else if (statusLower === "cancelled" || statusLower === "rejected") {
       return {
         label: "Refusée",
         color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
@@ -333,6 +336,8 @@ export default function ReceivedProposalsPage() {
             const clientName = proposal.client
               ? `${proposal.client.firstName || ""} ${proposal.client.lastName || ""}`.trim()
               : "Client";
+            const clientEmail = proposal.client?.email;
+            const clientPhone = proposal.client?.phoneNumber;
 
             return (
               <motion.div
@@ -402,7 +407,9 @@ export default function ReceivedProposalsPage() {
                         <div>
                           <p className="text-xs text-muted-foreground">Lieu</p>
                           <p className="font-semibold text-foreground text-xs">
-                            {proposal.address?.address || "Non spécifié"}
+                            {proposal.address?.address ||
+                              proposal.address?.city ||
+                              "Non spécifié"}
                           </p>
                         </div>
                       </div>
@@ -414,6 +421,29 @@ export default function ReceivedProposalsPage() {
                         <p className="text-sm text-foreground whitespace-pre-wrap">
                           {proposal.special_requests}
                         </p>
+                      </div>
+                    )}
+
+                    {/* Coordonnées client */}
+                    {(clientEmail || clientPhone) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-muted-foreground">
+                        {clientEmail && (
+                          <div className="flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                            <a
+                              href={`mailto:${clientEmail}`}
+                              className="text-blue-600 dark:text-blue-400 hover:underline"
+                            >
+                              {clientEmail}
+                            </a>
+                          </div>
+                        )}
+                        {clientPhone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="w-4 h-4 text-muted-foreground" />
+                            <span>{clientPhone}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
