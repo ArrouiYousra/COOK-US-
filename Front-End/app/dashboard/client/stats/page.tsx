@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -13,11 +13,15 @@ import {
   BarChart3,
   PieChart,
   Loader2,
+  Download,
 } from "lucide-react";
 import { apiClient } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/authStore";
 import { useAuthGuard } from "@/lib/hooks/useAuthGuard";
 import { useBookingStore } from "@/stores/bookingStore";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
 
 /**
  * Page Statistiques et Insights
@@ -147,6 +151,61 @@ const generateTrendData = (bookings: any[], timeRange: TimeRange) => {
   return { labels, spendingValues, bookingValues };
 };
 
+const currencyFormatter = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+});
+
+type NormalizedStatus = "pending" | "confirmed" | "completed" | "cancelled";
+
+const statusConfig: Record<
+  NormalizedStatus,
+  { label: string; badgeClass: string }
+> = {
+  pending: {
+    label: "En attente",
+    badgeClass:
+      "bg-yellow-500/10 text-yellow-700 border border-yellow-500/20 dark:text-yellow-300",
+  },
+  confirmed: {
+    label: "Confirmée",
+    badgeClass:
+      "bg-green-500/10 text-green-700 border border-green-500/20 dark:text-green-300",
+  },
+  completed: {
+    label: "Terminée",
+    badgeClass:
+      "bg-blue-500/10 text-blue-700 border border-blue-500/20 dark:text-blue-300",
+  },
+  cancelled: {
+    label: "Annulée",
+    badgeClass:
+      "bg-red-500/10 text-red-700 border border-red-500/20 dark:text-red-300",
+  },
+};
+
+const normalizeStatus = (status?: string | null): NormalizedStatus => {
+  const value = status?.toString().toUpperCase() ?? "PENDING";
+
+  if (
+    value === "CONFIRMED" ||
+    value === "PROPOSITION_ACCEPTED" ||
+    value === "ACCEPTED"
+  ) {
+    return "confirmed";
+  }
+
+  if (value === "COMPLETED" || value === "DONE") {
+    return "completed";
+  }
+
+  if (value === "CANCELLED" || value === "CANCELED") {
+    return "cancelled";
+  }
+
+  return "pending";
+};
+
 export default function StatsPage() {
   const router = useRouter();
   const { user } = useAuthStore();
@@ -156,6 +215,8 @@ export default function StatsPage() {
   const [reviews, setReviews] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showSuccessToast, showErrorToast } = useNotificationToast();
+  const [isExporting, setIsExporting] = useState(false);
 
   // Double protection : layout + page (au cas où)
   if (isAuthLoading || !isAuthenticated) {
@@ -287,6 +348,133 @@ export default function StatsPage() {
       currentPeriodBookings,
     };
   }, [filteredBookings, reviews, timeRange]);
+
+  const bookingHistory = useMemo(() => {
+    if (!filteredBookings || filteredBookings.length === 0) {
+      return [];
+    }
+
+    return filteredBookings
+      .slice()
+      .sort(
+        (a, b) =>
+          getBookingDate(b).getTime() - getBookingDate(a).getTime(),
+      )
+      .map((booking) => {
+        const date = getBookingDate(booking);
+        const total = getBookingTotal(booking);
+        const guests =
+          booking.numberOfGuests ?? booking.number_of_guests ?? 0;
+        const cookData = (booking as any).cook;
+        const cookUser = cookData?.user;
+        const cookName =
+          cookData?.name ||
+          [
+            cookUser?.first_name || cookUser?.firstName,
+            cookUser?.last_name || cookUser?.lastName,
+          ]
+            .filter(Boolean)
+            .join(" ") ||
+          (booking as any).cookName ||
+          "Cuisinier";
+        const normalizedStatus = normalizeStatus(booking.status);
+
+        const formattedTime = (() => {
+          const timeValue =
+            booking.time ||
+            booking.start_time ||
+            (booking as any).startTime ||
+            null;
+          if (!timeValue) return null;
+          try {
+            const [hours, minutes] = timeValue.split(":");
+            const dateClone = new Date(date);
+            dateClone.setHours(Number(hours), Number(minutes), 0, 0);
+            return dateClone.toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          } catch {
+            return timeValue;
+          }
+        })();
+
+        return {
+          id: booking.id,
+          dateLabel: date.toLocaleDateString("fr-FR", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+          timeLabel: formattedTime,
+          total,
+          guests,
+          cookName,
+          status: normalizedStatus,
+        };
+      });
+  }, [filteredBookings]);
+
+  const handleExportData = useCallback(() => {
+    if (!bookingHistory.length) {
+      showErrorToast("Aucune réservation à exporter pour cette période.");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const headers = [
+        "Date",
+        "Heure",
+        "Cuisinier",
+        "Invités",
+        "Montant",
+        "Statut",
+      ];
+
+      const rows = bookingHistory.map((booking) => [
+        booking.dateLabel,
+        booking.timeLabel ?? "",
+        booking.cookName,
+        booking.guests.toString(),
+        currencyFormatter.format(booking.total),
+        statusConfig[booking.status].label,
+      ]);
+
+      const escapeCsvValue = (value: string) =>
+        `"${value.replace(/"/g, '""')}"`;
+
+      const csvContent = [
+        headers.map(escapeCsvValue).join(";"),
+        ...rows.map((row) => row.map(escapeCsvValue).join(";")),
+      ].join("\n");
+
+      const blob = new Blob([csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute(
+        "download",
+        `historique_reservations_${timeRange}_${new Date()
+          .toISOString()
+          .split("T")[0]}.csv`,
+      );
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showSuccessToast("Export CSV téléchargé.");
+    } catch (exportError) {
+      console.error("Erreur lors de l'export CSV:", exportError);
+      showErrorToast("Impossible de générer le fichier CSV.");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [bookingHistory, showErrorToast, showSuccessToast, timeRange]);
 
   if (isAuthLoading || isLoading || isLoadingBookings) {
     return (
@@ -509,11 +697,99 @@ export default function StatsPage() {
         </motion.div>
       </div>
 
-      {/* Insights et recommandations */}
+      {/* Historique des réservations */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.6 }}
+        className="bg-card border border-border rounded-xl p-6 lg:p-8"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-cera text-xl font-bold text-foreground">
+            Historique des réservations
+          </h2>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              {bookingHistory.length} réservation
+              {bookingHistory.length > 1 ? "s" : ""} sur la période
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportData}
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Export...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" />
+                  Exporter CSV
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {bookingHistory.length === 0 ? (
+          <p className="text-center text-muted-foreground py-8">
+            Aucune réservation pour la période sélectionnée.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-border">
+              <thead>
+                <tr className="text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  <th className="py-3 pr-4">Date</th>
+                  <th className="py-3 pr-4">Heure</th>
+                  <th className="py-3 pr-4">Cuisinier</th>
+                  <th className="py-3 pr-4">Invités</th>
+                  <th className="py-3 pr-4">Montant</th>
+                  <th className="py-3">Statut</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border text-sm">
+                {bookingHistory.map((booking) => {
+                  const statusMeta = statusConfig[booking.status];
+                  return (
+                    <tr key={booking.id} className="hover:bg-accent/50">
+                      <td className="py-3 pr-4 font-medium text-foreground whitespace-nowrap">
+                        {booking.dateLabel}
+                      </td>
+                      <td className="py-3 pr-4 text-muted-foreground whitespace-nowrap">
+                        {booking.timeLabel ?? "-"}
+                      </td>
+                      <td className="py-3 pr-4 text-foreground">
+                        {booking.cookName}
+                      </td>
+                      <td className="py-3 pr-4 text-foreground">
+                        {booking.guests}
+                      </td>
+                      <td className="py-3 pr-4 text-foreground whitespace-nowrap">
+                        {currencyFormatter.format(booking.total)}
+                      </td>
+                      <td className="py-3">
+                        <Badge className={statusMeta.badgeClass}>
+                          {statusMeta.label}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </motion.div>
+
+      {/* Insights et recommandations */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.7 }}
         className="bg-card border border-border rounded-xl p-6 lg:p-8"
       >
         <h2 className="font-cera text-xl font-bold text-foreground mb-6">

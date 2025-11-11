@@ -12,6 +12,7 @@ import type {
   GetBookingsParams,
   GetMyProposalsParams,
   UserRole,
+  UserStatus,
 } from "@/types";
 
 /**
@@ -944,6 +945,34 @@ class ApiClient {
     }
   }
 
+  /**
+   * Récupérer les disponibilités publiques d'un cuisinier
+   */
+  async getCookAvailabilities(cookId: string): Promise<{
+    availabilities: any[];
+    count: number;
+  }> {
+    const response = await this.client.get<{
+      availabilities: any[];
+      count: number;
+    }>(`/availabilities/cook/${cookId}`);
+    return response.data;
+  }
+
+  /**
+   * Récupérer le portfolio public d'un cuisinier
+   */
+  async getCookPortfolio(cookId: string): Promise<{
+    portfolio: any[];
+    count: number;
+  }> {
+    const response = await this.client.get<{
+      portfolio: any[];
+      count: number;
+    }>(`/portfolio/cook/${cookId}`);
+    return response.data;
+  }
+
   // ========== NOTIFICATIONS ==========
 
   /**
@@ -1337,6 +1366,96 @@ class ApiClient {
    */
   async verify2FAToken(token: string): Promise<{ message: string }> {
     const response = await this.client.post("/auth/2fa/verify-token", { token });
+    return response.data;
+  }
+
+  // ========== ADMIN ==========
+
+  async getAdminSummaryStats(): Promise<{
+    stats: {
+      totalUsers: number;
+      activeUsers: number;
+      newUsers7d: number;
+      totalCooks: number;
+      pendingCookVerifications: number;
+      totalBookings: number;
+      confirmedBookings: number;
+      bookingsLast7d: number;
+      grossMerchandiseVolume: number;
+      payoutsCompleted: number;
+      openDisputes: number;
+    };
+  }> {
+    const response = await this.client.get("/admin/stats/summary");
+    return response.data;
+  }
+
+  async getAdminTimeseries(range?: number): Promise<{
+    range: number;
+    timeseries: Array<{
+      date: string;
+      bookings: number;
+      confirmed: number;
+      revenue: number;
+      newUsers: number;
+    }>;
+  }> {
+    const response = await this.client.get("/admin/stats/timeseries", {
+      params: { range },
+    });
+    return response.data;
+  }
+
+  async getAdminDistributions(range?: number): Promise<{
+    range: number;
+    distributions: {
+      bookingsByStatus: Record<string, number>;
+      usersByRole: Record<string, number>;
+      usersByStatus: Record<string, number>;
+      cooksByStatus: Record<string, number>;
+    };
+  }> {
+    const response = await this.client.get("/admin/stats/distribution", {
+      params: { range },
+    });
+    return response.data;
+  }
+
+  async getAdminUsers(params?: {
+    role?: UserRole;
+    status?: UserStatus;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    users: Array<{
+      id: string;
+      email: string;
+      role: UserRole;
+      status: UserStatus;
+      firstName: string | null;
+      lastName: string | null;
+      createdAt: string;
+      lastLoginAt: string | null;
+      cookProfile?: {
+        id: string;
+        status: string;
+        headline: string | null;
+        averageRating: number | null;
+        totalBookings: number;
+        totalEarnings: number;
+      } | null;
+      clientProfile?: {
+        id: string;
+        totalBookings: number;
+        totalSpent: number;
+      } | null;
+    }>;
+    count: number;
+  }> {
+    const response = await this.client.get("/admin/users", {
+      params,
+    });
     return response.data;
   }
 

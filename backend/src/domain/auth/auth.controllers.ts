@@ -3,10 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
-import {
-  supabaseAdmin,
-  createSupabaseAuthClient,
-} from "@config/supabaseClient";
+import { supabaseAdmin, createSupabaseAuthClient } from "@config/supabaseClient";
 import type { AuthRequest } from "@core/middleware/authGuard";
 import { UserStore } from "@stores/user.store";
 import {

@@ -11,32 +11,30 @@ import { useAuthStore } from "@/stores/authStore";
 export function useAuthGuard() {
   const router = useRouter();
   const { isAuthenticated, checkAuth, isLoading: isAuthLoading } = useAuthStore();
-  const hasCheckedRef = useRef(false);
   const isRedirectingRef = useRef(false);
+  const isCheckingRef = useRef(false);
 
   useEffect(() => {
-    // Ne vérifier qu'une seule fois
-    if (hasCheckedRef.current || isAuthLoading || isRedirectingRef.current) {
+    if (isAuthLoading || isCheckingRef.current || isRedirectingRef.current) {
+      return;
+    }
+
+    if (isAuthenticated) {
+      // Réinitialiser le flag de redirection pour de futures vérifications
+      isRedirectingRef.current = false;
       return;
     }
 
     const verifyAuth = async () => {
-      // Si déjà authentifié, on peut continuer
-      if (isAuthenticated) {
-        hasCheckedRef.current = true;
-        return;
-      }
+      isCheckingRef.current = true;
 
       try {
-        hasCheckedRef.current = true;
-        // Vérifier l'authentification
         await checkAuth();
-        
-        // Vérifier à nouveau après checkAuth pour être sûr
         const currentState = useAuthStore.getState();
         if (!currentState.isAuthenticated) {
           throw new Error("Authentification échouée");
         }
+        isRedirectingRef.current = false;
       } catch (error) {
         // Si l'authentification échoue, rediriger immédiatement vers la page de connexion
         if (!isRedirectingRef.current) {
@@ -47,11 +45,19 @@ export function useAuthGuard() {
           const currentPath = typeof window !== "undefined" ? window.location.pathname : "/";
           router.replace(`/auth/login?returnUrl=${encodeURIComponent(currentPath)}`);
         }
+      } finally {
+        isCheckingRef.current = false;
       }
     };
 
     verifyAuth();
   }, [isAuthenticated, checkAuth, router, isAuthLoading]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      isRedirectingRef.current = false;
+    }
+  }, [isAuthenticated]);
 
   return {
     isAuthenticated,

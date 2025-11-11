@@ -78,6 +78,8 @@ export default function MarketplacePage() {
   const [minBudget, setMinBudget] = useState<number | null>(null); // Filtre par budget min
   const [maxBudget, setMaxBudget] = useState<number | null>(null); // Filtre par budget max
   const [selectedRequestForRoute, setSelectedRequestForRoute] = useState<PublicRequest | null>(null); // Demande sélectionnée pour afficher l'itinéraire
+  const [isMapAvailable, setIsMapAvailable] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   // Vérifier l'authentification au montage
   useEffect(() => {
@@ -320,6 +322,27 @@ export default function MarketplacePage() {
     loadPublicRequests();
   };
 
+  useEffect(() => {
+    const checkMapAvailability = async () => {
+      try {
+        await apiClient.getMapboxToken();
+        setIsMapAvailable(true);
+        setMapError(null);
+      } catch (error: any) {
+        console.warn("Token Mapbox indisponible (carte désactivée):", error);
+        const message =
+          error?.response?.data?.message ||
+          error?.message ||
+          "Carte indisponible pour le moment";
+        setIsMapAvailable(false);
+        setMapError(message);
+        setViewMode("list");
+      }
+    };
+
+    checkMapAvailability();
+  }, []);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -484,8 +507,10 @@ export default function MarketplacePage() {
             <Button
               variant={viewMode === "map" ? "default" : "ghost"}
               size="sm"
-              onClick={() => setViewMode("map")}
+              onClick={() => isMapAvailable && setViewMode("map")}
               className="flex items-center gap-2"
+              disabled={!isMapAvailable}
+              title={!isMapAvailable && mapError ? mapError : undefined}
             >
               <Map className="w-4 h-4" />
               Carte
@@ -591,155 +616,174 @@ export default function MarketplacePage() {
           </p>
         </div>
       ) : viewMode === "map" ? (
-        cookLocation ? (
-          <div className="space-y-4">
-            {/* Contrôles de la carte */}
-            {selectedRequestForRoute && (
-              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Navigation className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Itinéraire vers : {selectedRequestForRoute.client?.firstName} {selectedRequestForRoute.client?.lastName}
-                    </p>
-                    {distances[selectedRequestForRoute.id] && (
-                      <p className="text-xs text-muted-foreground">
-                        {distances[selectedRequestForRoute.id].distance_km} • {distances[selectedRequestForRoute.id].duration_minutes} min
+        isMapAvailable ? (
+          cookLocation ? (
+            <div className="space-y-4">
+              {/* Contrôles de la carte */}
+              {selectedRequestForRoute && (
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Navigation className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        Itinéraire vers : {selectedRequestForRoute.client?.firstName} {selectedRequestForRoute.client?.lastName}
                       </p>
-                    )}
+                      {distances[selectedRequestForRoute.id] && (
+                        <p className="text-xs text-muted-foreground">
+                          {distances[selectedRequestForRoute.id].distance_km} • {distances[selectedRequestForRoute.id].duration_minutes} min
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => {
+                        handlePropose(selectedRequestForRoute);
+                      }}
+                    >
+                      Proposer
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedRequestForRoute(null)}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => {
-                      handlePropose(selectedRequestForRoute);
-                    }}
-                  >
-                    Proposer
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedRequestForRoute(null)}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
+              )}
+              <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg" style={{ height: "600px" }}>
+                <MapboxMap
+                  center={[cookLocation.lat, cookLocation.lng]}
+                  zoom={11}
+                  markers={[
+                    {
+                      id: "cook-location",
+                      lat: cookLocation.lat,
+                      lng: cookLocation.lng,
+                      title: "Votre position",
+                      description: "Votre localisation",
+                      color: "#10b981",
+                    },
+                    ...filteredAndSortedRequests
+                      .filter((req) => req.address?.location)
+                      .map((request) => {
+                        const requestLocation = request.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
+                        if (!requestLocation) return null;
+                        
+                        const requestLat = requestLocation.lat ?? requestLocation.latitude;
+                        const requestLng = requestLocation.lng ?? requestLocation.longitude;
+                        if (!requestLat || !requestLng) return null;
+                        
+                        const distance = distances[request.id];
+                        const isInRadius = cookProfile?.service_radius && distance !== undefined
+                          ? distance.distance <= (cookProfile.service_radius * 1000)
+                          : true;
+                        
+                        return {
+                          id: request.id,
+                          lat: requestLat,
+                          lng: requestLng,
+                          title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
+                          description: `${request.number_of_guests || 0} invité(s)${distance ? ` • ${distance.distance_km} • ${distance.duration_minutes} min` : ""}`,
+                          color: isInRadius ? "#3b82f6" : "#ef4444",
+                          distance: distance?.distance_km,
+                          duration: distance?.duration_minutes,
+                        };
+                      })
+                      .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
+                  ]}
+                  height="100%"
+                  interactive={true}
+                  route={selectedRequestForRoute && cookLocation ? {
+                    origin: [cookLocation.lat, cookLocation.lng],
+                    destination: (() => {
+                      const requestLocation = selectedRequestForRoute.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
+                      if (!requestLocation) return [0, 0];
+                      const requestLat = requestLocation.lat ?? requestLocation.latitude ?? 0;
+                      const requestLng = requestLocation.lng ?? requestLocation.longitude ?? 0;
+                      return [requestLat, requestLng];
+                    })(),
+                    color: "#3b82f6",
+                  } : undefined}
+                  onMarkerClick={(marker) => {
+                    if (marker.id === "cook-location") return;
+                    const request = filteredAndSortedRequests.find((r) => r.id === marker.id);
+                    if (request) {
+                      // Afficher l'itinéraire pour cette demande
+                      setSelectedRequestForRoute(request);
+                    }
+                  }}
+                  onError={(message) => {
+                    setMapError(message);
+                    setIsMapAvailable(false);
+                    setViewMode("list");
+                  }}
+                />
               </div>
-            )}
-            <div className="bg-card border border-border rounded-xl overflow-hidden shadow-lg" style={{ height: "600px" }}>
-              <MapboxMap
-                center={[cookLocation.lat, cookLocation.lng]}
-                zoom={11}
-                markers={[
-                  {
-                    id: "cook-location",
-                    lat: cookLocation.lat,
-                    lng: cookLocation.lng,
-                    title: "Votre position",
-                    description: "Votre localisation",
-                    color: "#10b981",
-                  },
-                  ...filteredAndSortedRequests
-                    .filter((req) => req.address?.location)
-                    .map((request) => {
-                      const requestLocation = request.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
-                      if (!requestLocation) return null;
-                      
-                      const requestLat = requestLocation.lat ?? requestLocation.latitude;
-                      const requestLng = requestLocation.lng ?? requestLocation.longitude;
-                      if (!requestLat || !requestLng) return null;
-                      
-                      const distance = distances[request.id];
-                      const isInRadius = cookProfile?.service_radius && distance !== undefined
-                        ? distance.distance <= (cookProfile.service_radius * 1000)
-                        : true;
-                      
-                      return {
-                        id: request.id,
-                        lat: requestLat,
-                        lng: requestLng,
-                        title: `${request.client?.firstName || ""} ${request.client?.lastName || ""}`.trim() || "Client",
-                        description: `${request.number_of_guests || 0} invité(s)${distance ? ` • ${distance.distance_km} • ${distance.duration_minutes} min` : ""}`,
-                        color: isInRadius ? "#3b82f6" : "#ef4444",
-                        distance: distance?.distance_km,
-                        duration: distance?.duration_minutes,
-                      };
-                    })
-                    .filter((marker): marker is NonNullable<typeof marker> => marker !== null),
-                ]}
-                height="100%"
-                interactive={true}
-                route={selectedRequestForRoute && cookLocation ? {
-                  origin: [cookLocation.lat, cookLocation.lng],
-                  destination: (() => {
-                    const requestLocation = selectedRequestForRoute.address?.location as { lat?: number; lng?: number; latitude?: number; longitude?: number } | undefined;
-                    if (!requestLocation) return [0, 0];
-                    const requestLat = requestLocation.lat ?? requestLocation.latitude ?? 0;
-                    const requestLng = requestLocation.lng ?? requestLocation.longitude ?? 0;
-                    return [requestLat, requestLng];
-                  })(),
-                  color: "#3b82f6",
-                } : undefined}
-                onMarkerClick={(marker) => {
-                  if (marker.id === "cook-location") return;
-                  const request = filteredAndSortedRequests.find((r) => r.id === marker.id);
-                  if (request) {
-                    // Afficher l'itinéraire pour cette demande
-                    setSelectedRequestForRoute(request);
-                  }
-                }}
-              />
             </div>
-          </div>
+          ) : (
+            <div className="bg-card border border-border rounded-xl p-8 text-center">
+              <MapPin className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="font-semibold text-foreground mb-2">Localisation requise</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Pour afficher la carte et utiliser les filtres de distance, vous devez définir votre localisation.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button
+                  onClick={async () => {
+                    if (typeof window !== "undefined" && navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                          const lat = position.coords.latitude;
+                          const lng = position.coords.longitude;
+                          setCookLocation({ lat, lng });
+                          // Optionnel : Sauvegarder dans le profil
+                          try {
+                            await apiClient.updateMyProfile({});
+                          } catch (err) {
+                            console.warn("Impossible de sauvegarder la localisation:", err);
+                          }
+                        },
+                        (error) => {
+                          alert(`Erreur de géolocalisation : ${error.message}`);
+                        },
+                        { timeout: 10000, enableHighAccuracy: true }
+                      );
+                    } else {
+                      alert("La géolocalisation n'est pas disponible dans votre navigateur.");
+                    }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  Utiliser ma position actuelle
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push("/dashboard/cook/profile")}
+                >
+                  Définir dans mon profil
+                </Button>
+              </div>
+            </div>
+          )
         ) : (
           <div className="bg-card border border-border rounded-xl p-8 text-center">
             <MapPin className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="font-semibold text-foreground mb-2">Localisation requise</h3>
+            <h3 className="font-semibold text-foreground mb-2">Carte indisponible</h3>
             <p className="text-sm text-muted-foreground mb-4">
-              Pour afficher la carte et utiliser les filtres de distance, vous devez définir votre localisation.
+              La carte n'est pas disponible pour le moment. Veuillez réessayer plus tard.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <Button
-                onClick={async () => {
-                  if (typeof window !== "undefined" && navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                      async (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        setCookLocation({ lat, lng });
-                        // Optionnel : Sauvegarder dans le profil
-                        try {
-                          await apiClient.updateMyProfile({
-                            // Le backend devrait gérer la conversion en format PostGIS
-                          });
-                        } catch (err) {
-                          console.warn("Impossible de sauvegarder la localisation:", err);
-                        }
-                      },
-                      (error) => {
-                        alert(`Erreur de géolocalisation : ${error.message}`);
-                      },
-                      { timeout: 10000, enableHighAccuracy: true }
-                    );
-                  } else {
-                    alert("La géolocalisation n'est pas disponible dans votre navigateur.");
-                  }
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                <MapPin className="w-4 h-4 mr-2" />
-                Utiliser ma position actuelle
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => router.push("/dashboard/cook/profile")}
-              >
-                Définir dans mon profil
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              onClick={() => router.push("/dashboard/cook/profile")}
+            >
+              Définir dans mon profil
+            </Button>
           </div>
         )
       ) : (
@@ -754,6 +798,14 @@ export default function MarketplacePage() {
               cookProfile={cookProfile}
             />
           ))}
+        </div>
+      )}
+
+      {!isMapAvailable && mapError && viewMode === "map" && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            {mapError}
+          </p>
         </div>
       )}
 

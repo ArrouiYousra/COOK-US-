@@ -1,93 +1,70 @@
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
-import { Lock, Shield, KeyRound } from "lucide-react";
+"use client";
 
-const commitments = [
-  {
-    title: "Collecte raisonnée",
-    content:
-      "Nous recueillons uniquement les informations essentielles au fonctionnement de la plateforme : profil, préférences culinaires, historiques de réservations et communications avec les chefs.",
-  },
-  {
-    title: "Sécurité renforcée",
-    content:
-      "Vos données sont hébergées en Europe et protégées par des mesures de chiffrement lors du stockage et du transfert. Nos prestataires sont conformes au RGPD.",
-  },
-  {
-    title: "Contrôle utilisateur",
-    content:
-      "Vous gardez la main sur vos informations : export, modification ou suppression sur simple demande à privacy@cookus.fr.",
-  },
-];
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function PrivacyPage() {
+export default function PrivacyPolicyPage() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-background via-background/75 to-background">
-      <Header />
+    <div className="space-y-8">
+      <header className="space-y-2">
+        <h1 className="font-trebuchet text-3xl lg:text-4xl font-bold text-foreground">
+          Politique de confidentialité
+        </h1>
+        <p className="text-muted-foreground">
+          Cette page décrit la façon dont COOK‑US collecte, utilise et protège vos données personnelles.
+        </p>
+      </header>
 
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-blue-500/10 to-purple-500/10 blur-3xl" />
-        <div className="relative container mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-20">
-          <div className="max-w-4xl mx-auto space-y-6 text-center">
-            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-semibold">
-              <Shield className="w-4 h-4" />
-              Protection des données
-            </span>
-            <h1 className="text-4xl lg:text-5xl font-bold text-foreground leading-tight">
-              Politique de confidentialité COOK US
-            </h1>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              Votre confiance est notre priorité. Découvrez comment nous collectons, utilisons
-              et protégeons vos données personnelles afin de vous assurer une expérience
-              culinaire sereine.
-            </p>
-          </div>
-        </div>
-      </section>
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-lg">1. Données collectées</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Nous recueillons les informations saisies lors de l&apos;inscription, de la réservation d&apos;un chef,
+            de la gestion des paiements ainsi que les échanges via la messagerie intégrée.
+          </p>
+          <p>
+            Des données techniques (adresse IP, logs de connexion) peuvent également être collectées pour des raisons de sécurité.
+          </p>
+        </CardContent>
+      </Card>
 
-      <section className="container mx-auto px-4 sm:px-6 lg:px-8 pb-24">
-        <div className="grid lg:grid-cols-[1.4fr_1fr] gap-10">
-          <div className="space-y-6">
-            {commitments.map((item) => (
-              <div
-                key={item.title}
-                className="rounded-3xl border border-border/60 bg-card/70 backdrop-blur-md shadow-lg p-8 space-y-3"
-              >
-                <h2 className="text-2xl font-semibold text-foreground">{item.title}</h2>
-                <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">
-                  {item.content}
-                </p>
-              </div>
-            ))}
-          </div>
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-lg">2. Finalités des traitements</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>Vos données nous servent à :</p>
+          <ul className="list-disc pl-5 space-y-2">
+            <li>exécuter le service (réservations, paiements, notifications) ;</li>
+            <li>vous accompagner via le support client et la prévention des fraudes ;</li>
+            <li>améliorer la plateforme grâce à des statistiques anonymisées.</li>
+          </ul>
+        </CardContent>
+      </Card>
 
-          <aside className="space-y-6">
-            <div className="rounded-3xl border border-border bg-gradient-to-br from-emerald-500/10 via-blue-500/10 to-purple-500/10 shadow-xl p-8 space-y-4">
-              <Lock className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
-              <h3 className="text-xl font-semibold text-foreground">Conformité RGPD</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                COOK US agit en qualité de responsable de traitement. Conformément au
-                Règlement (UE) 2016/679, nous tenons un registre des traitements et limitons
-                la durée de conservation des données.
-              </p>
-            </div>
-            <div className="rounded-3xl border border-border bg-card/70 backdrop-blur-md shadow-xl p-8 space-y-4">
-              <KeyRound className="w-10 h-10 text-blue-600 dark:text-blue-400" />
-              <h3 className="text-xl font-semibold text-foreground">Exercer vos droits</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                • Droit d’accès et de rectification<br />
-                • Droit à l’effacement (« droit à l’oubli »)<br />
-                • Droit à la portabilité des données<br />
-                • Droit d’opposition et de limitation<br />
-              </p>
-              <p className="text-sm font-medium text-foreground">privacy@cookus.fr</p>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <Footer />
-    </main>
+      <Card className="border-border bg-card">
+        <CardHeader>
+          <CardTitle className="text-lg">3. Droits des utilisateurs</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Vous pouvez demander l&apos;accès, la rectification ou la suppression de vos données en écrivant à{" "}
+            <Link href="mailto:privacy@cook-us.fr" className="text-blue-600 hover:underline dark:text-blue-400">
+              privacy@cook-us.fr
+            </Link>
+            .
+          </p>
+          <p>
+            Pour des détails complets, consultez la version intégrale de notre politique sur{" "}
+            <Link href="https://docs.cook-us.fr/privacy" target="_blank" className="text-blue-600 hover:underline dark:text-blue-400">
+              docs.cook-us.fr/privacy
+            </Link>
+            .
+          </p>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
-

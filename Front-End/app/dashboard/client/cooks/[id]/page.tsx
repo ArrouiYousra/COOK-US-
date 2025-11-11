@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -16,6 +16,7 @@ import {
   Clock,
   Users,
   Loader2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CookCalendar } from "@/components/dashboard/cooks/CookCalendar";
@@ -24,6 +25,7 @@ import { MakeProposalModal } from "@/components/dashboard/cooks/MakeProposalModa
 import { ShareProfile } from "@/components/dashboard/cooks/ShareProfile";
 import { apiClient } from "@/lib/api/client";
 import { useNotificationToast } from "@/lib/hooks/useNotificationToast";
+import type { Review } from "@/types";
 
 /**
  * Page de profil détaillé d'un cuisinier
@@ -38,6 +40,19 @@ export default function CookProfilePage() {
   const [cook, setCook] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [portfolio, setPortfolio] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<
+    Array<
+      Review & {
+        userName: string;
+        userAvatar?: string;
+      }
+    >
+  >([]);
+  const [averageReviewRating, setAverageReviewRating] = useState<number | null>(
+    null,
+  );
+  const [availabilities, setAvailabilities] = useState<any[]>([]);
   const { showSuccessToast, showErrorToast } = useNotificationToast();
 
   // Charger le profil du cuisinier
@@ -59,14 +74,73 @@ export default function CookProfilePage() {
 
         setCook(cookProfile);
 
-        // Vérifier si le cuisinier est en favori
-        try {
-          const favoriteCheck = await apiClient.checkFavorite(cookId);
-          setIsFavorite(favoriteCheck.isFavorite);
-        } catch (err) {
-          // Si l'utilisateur n'est pas authentifié, on continue sans les favoris
-          console.warn("Impossible de vérifier le statut favori:", err);
+        const [
+          portfolioData,
+          availabilitiesData,
+          reviewsData,
+          favoriteCheck,
+        ] = await Promise.all([
+          apiClient
+            .getCookPortfolio(cookId)
+            .catch((portfolioError) => {
+              console.warn("Impossible de charger le portfolio:", portfolioError);
+              return { portfolio: [] };
+            }),
+          apiClient
+            .getCookAvailabilities(cookId)
+            .catch((availError) => {
+              console.warn(
+                "Impossible de charger les disponibilités:",
+                availError,
+              );
+              return { availabilities: [] };
+            }),
+          cookProfile.user?.id
+            ? apiClient.getReviewsByUser(cookProfile.user.id).catch((reviewError) => {
+                console.warn("Impossible de charger les avis:", reviewError);
+                return null;
+              })
+            : Promise.resolve(null),
+          apiClient
+            .checkFavorite(cookId)
+            .catch((favoriteError) => {
+              console.warn(
+                "Impossible de vérifier le statut favori:",
+                favoriteError,
+              );
+              return { isFavorite: false };
+            }),
+        ]);
+
+        setPortfolio(portfolioData.portfolio || []);
+        setAvailabilities(availabilitiesData.availabilities || []);
+
+        if (reviewsData) {
+          const mappedReviews =
+            (reviewsData.reviews || []).map((review: any) => ({
+              id: review.id,
+              bookingId: review.booking_id,
+              cookId: review.reviewee_id,
+              userId: review.reviewer_id,
+              rating: review.rating,
+              comment: review.comment || "",
+              createdAt: review.created_at,
+              userName: review.reviewer
+                ? `${review.reviewer.first_name ?? ""} ${
+                    review.reviewer.last_name ?? ""
+                  }`.trim() || "Client"
+                : "Client",
+              userAvatar: review.reviewer?.avatar_url ?? undefined,
+            })) || [];
+
+          setReviews(mappedReviews);
+          setAverageReviewRating(reviewsData.average_rating);
+        } else {
+          setReviews([]);
+          setAverageReviewRating(null);
         }
+
+        setIsFavorite(favoriteCheck?.isFavorite ?? false);
       } catch (err: any) {
         console.error("Erreur lors du chargement du profil:", err);
         setError(err.response?.data?.message || "Impossible de charger le profil");
@@ -133,8 +207,17 @@ export default function CookProfilePage() {
   const cookName = cook.user?.first_name && cook.user?.last_name
     ? `${cook.user.first_name} ${cook.user.last_name}`
     : cook.user?.first_name || "Cuisinier";
-  const rating = cook.average_rating || 0;
-  const reviewCount = cook.review_count || 0;
+  const rating = useMemo(() => {
+    if (
+      averageReviewRating !== null &&
+      !Number.isNaN(averageReviewRating)
+    ) {
+      return averageReviewRating;
+    }
+    return cook.average_rating || 0;
+  }, [averageReviewRating, cook.average_rating]);
+  const reviewCount =
+    reviews.length > 0 ? reviews.length : cook.review_count || 0;
   const city = cook.user?.city || "Ville non renseignée";
   const hourlyRate = cook.hourly_rate || 0;
   const specialties = cook.specialties || ["Cuisine variée"];
@@ -320,11 +403,80 @@ export default function CookProfilePage() {
         <h2 className="font-cera text-2xl font-bold text-foreground mb-6">
           Disponibilités
         </h2>
-        <CookCalendar cookId={cookId} />
+      <CookCalendar availabilities={availabilities} />
       </motion.div>
 
       {/* Avis clients */}
-      <ReviewsSection cookId={cookId} reviews={[]} />
+      <ReviewsSection cookId={cookId} reviews={reviews} />
+
+      {/* Portfolio */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="bg-card border border-border rounded-xl p-6 lg:p-8"
+      >
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-cera text-2xl font-bold text-foreground">
+            Portfolio
+          </h2>
+          <span className="text-sm text-muted-foreground">
+            {portfolio.length} réalisation{portfolio.length > 1 ? "s" : ""}
+          </span>
+        </div>
+        {portfolio.length === 0 ? (
+          <div className="flex flex-col items-center justify-center text-center text-muted-foreground py-8 gap-3">
+            <ImageIcon className="w-12 h-12" />
+            <p>Ce cuisinier n&apos;a pas encore publié de portfolio.</p>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {portfolio.map((item: any) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="border border-border rounded-xl overflow-hidden bg-card/50 hover:shadow-lg transition-shadow"
+              >
+                <div className="relative w-full h-48 bg-muted">
+                  {item.media_url ? (
+                    <Image
+                      src={item.media_url}
+                      alt={item.title || "Photo de réalisation"}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                      <ImageIcon className="w-10 h-10" />
+                    </div>
+                  )}
+                </div>
+                <div className="p-4 space-y-2">
+                  <h3 className="font-semibold text-foreground text-lg leading-tight">
+                    {item.title || "Sans titre"}
+                  </h3>
+                  {item.description && (
+                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">
+                      {item.description}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Ajouté le{" "}
+                    {new Date(item.created_at).toLocaleDateString("fr-FR", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </motion.div>
 
       {/* Modal de proposition */}
       <MakeProposalModal

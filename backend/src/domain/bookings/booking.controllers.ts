@@ -134,30 +134,50 @@ export const getReceivedProposals = async (
 
     const { status, limit, offset } = req.query;
 
-    // Récupérer les bookings avec cook_profile_id = profil du cuisinier et status PENDING (propositions directes)
+    const requestedStatus = status
+      ? String(status).toUpperCase() as BookingStatus
+      : undefined;
+
     const result = await BookingStore.getBookingsForUser(req.user.id, "COOK", {
-      status: status as BookingStatus | undefined,
-      limit: limit ? parseInt(limit as string) : undefined,
-      offset: offset ? parseInt(offset as string) : undefined,
+      status: requestedStatus,
+      limit: limit ? parseInt(limit as string, 10) : undefined,
+      offset: offset ? parseInt(offset as string, 10) : undefined,
     });
 
-    // Filtrer uniquement les propositions directes (status PENDING)
-    const receivedProposals = result.bookings.filter(
-      (b) => b.status === "PENDING",
+    const normalizeStatus = (value: string | null | undefined) =>
+      (value || "").toUpperCase();
+
+    const relevantStatuses = ["PENDING", "ACCEPTED", "CONFIRMED", "CANCELLED"];
+
+    const proposals = result.bookings.filter((booking) =>
+      relevantStatuses.includes(normalizeStatus(booking.status as string)),
     );
 
-    // Calculer les stats
+    const filteredProposals = requestedStatus
+      ? proposals.filter(
+          (booking) => normalizeStatus(booking.status as string) === requestedStatus,
+        )
+      : proposals;
+
     const stats = {
-      pending: receivedProposals.length,
-      accepted: result.bookings.filter(
-        (b) => b.status === "ACCEPTED" || b.status === "CONFIRMED",
+      pending: proposals.filter(
+        (booking) => normalizeStatus(booking.status as string) === "PENDING",
       ).length,
-      rejected: result.bookings.filter((b) => b.status === "CANCELLED").length,
+      accepted: proposals.filter((booking) =>
+        ["ACCEPTED", "CONFIRMED"].includes(
+          normalizeStatus(booking.status as string),
+        ),
+      ).length,
+      rejected: proposals.filter((booking) =>
+        ["CANCELLED", "REJECTED"].includes(
+          normalizeStatus(booking.status as string),
+        ),
+      ).length,
     };
 
     res.status(200).json({
-      bookings: receivedProposals,
-      count: receivedProposals.length,
+      bookings: filteredProposals,
+      count: filteredProposals.length,
       stats,
     });
   } catch (error) {

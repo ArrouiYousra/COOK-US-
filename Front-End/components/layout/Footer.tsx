@@ -11,10 +11,10 @@ const footerLinks = {
     { label: "Contact", href: "/contact" },
   ],
   legal: [
+    { label: "Centre d'aide", href: "/help" },
+    { label: "Support", href: "/support" },
     { label: "CGU", href: "/terms" },
-    { label: "Mentions légales", href: "/legal" },
-    { label: "Politique de confidentialité", href: "/privacy" },
-    { label: "FAQ", href: "#faq" },
+    { label: "Confidentialité", href: "/privacy" },
   ],
   social: [
     { icon: Facebook, href: "#", label: "Facebook" },

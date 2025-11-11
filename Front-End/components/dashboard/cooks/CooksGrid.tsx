@@ -8,19 +8,13 @@ import { Star, Heart, MapPin, Euro, Calendar, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api/client";
+import type { CookFilters } from "@/types/cookFilters";
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "distance" | "availability";
 
 interface CooksGridProps {
   searchQuery: string;
-  filters: {
-    location: string;
-    specialties: string[];
-    minBudget: number;
-    maxBudget: number;
-    minRating: number;
-    availability: string[];
-  };
+  filters: CookFilters;
   sortBy?: SortOption;
 }
 
@@ -52,6 +46,7 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
   const [error, setError] = useState<string | null>(null);
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(0);
+  const [userCoordinates, setUserCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const limit = 12;
 
   // Charger les cuisiniers depuis l'API
@@ -138,28 +133,101 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
   }, [filters.location, filters.minRating, filters.maxBudget, page]);
 
   // Filtrer et trier côté client (pour la recherche par nom et spécialités)
+  useEffect(() => {
+    if (filters.coordinates) {
+      setUserCoordinates(filters.coordinates);
+      return;
+    }
+    if (!navigator.geolocation) {
+      setUserCoordinates(null);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserCoordinates({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      },
+      () => {
+        setUserCoordinates(null);
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: 5000,
+        maximumAge: 0,
+      },
+    );
+  }, [filters.coordinates]);
+
   const filteredAndSortedCooks = useMemo(() => {
     let filtered = [...cooks];
 
-    // Recherche par nom
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    const query = searchQuery.trim().toLowerCase();
+    if (query.length > 0) {
+      filtered = filtered.filter((cook) => {
+        const firstName = cook.user.first_name?.toLowerCase() ?? "";
+        const lastName = cook.user.last_name?.toLowerCase() ?? "";
+        const fullName = `${firstName} ${lastName}`.trim();
+        const headline = cook.headline?.toLowerCase() ?? "";
+        const city = cook.user.city?.toLowerCase() ?? "";
+        const specialties = (cook.specialties ?? []).map((spec) =>
+          spec.toLowerCase(),
+        );
+
+        return (
+          firstName.includes(query) ||
+          lastName.includes(query) ||
+          fullName.includes(query) ||
+          headline.includes(query) ||
+          city.includes(query) ||
+          specialties.some((spec) => spec.includes(query))
+        );
+      });
+    }
+
+    if (filters.specialties.length > 0) {
+      const selectedSpecialties = filters.specialties.map((spec) =>
+        spec.toLowerCase(),
+      );
+      filtered = filtered.filter((cook) => {
+        const cookSpecialties = (cook.specialties ?? []).map((spec) =>
+          spec.toLowerCase(),
+        );
+        if (cookSpecialties.length === 0) {
+          return false;
+        }
+        return selectedSpecialties.every((selected) =>
+          cookSpecialties.some((spec) => spec.includes(selected)),
+        );
+      });
+    }
+
+    if (filters.minBudget > 0) {
       filtered = filtered.filter(
-        (cook) =>
-          cook.user.first_name.toLowerCase().includes(query) ||
-          cook.user.last_name.toLowerCase().includes(query) ||
-          `${cook.user.first_name} ${cook.user.last_name}`.toLowerCase().includes(query) ||
-          cook.headline?.toLowerCase().includes(query)
+        (cook) => cook.hourly_rate >= filters.minBudget,
       );
     }
 
-    // Filtre par spécialités (si disponible dans les données)
-    if (filters.specialties.length > 0 && filtered.length > 0) {
-      // Note: Les spécialités ne sont pas encore dans l'API, on les ignore pour l'instant
-      // TODO: Ajouter les spécialités dans l'API
+    if (filters.maxBudget < 1000) {
+      filtered = filtered.filter(
+        (cook) => cook.hourly_rate <= filters.maxBudget,
+      );
     }
 
-    // Tri des résultats
+    const getDistanceScore = (
+      cook: CookProfile,
+      userCoords: { lat: number; lng: number } | null,
+    ) => {
+      if (!userCoords) {
+        return cook.user.city ? 0 : Number.MAX_SAFE_INTEGER;
+      }
+      const homeCoords = filters.coordinates ?? userCoords;
+      const dLat = ((cook as any).latitude ?? 0) - homeCoords.lat;
+      const dLng = ((cook as any).longitude ?? 0) - homeCoords.lng;
+      return Math.sqrt(dLat * dLat + dLng * dLng);
+    };
+
     filtered.sort((a, b) => {
       switch (sortBy) {
         case "rating":
@@ -169,10 +237,11 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
         case "price_desc":
           return b.hourly_rate - a.hourly_rate;
         case "distance":
-          // TODO: Calculer la distance réelle avec Mapbox
-          return 0;
+          return (
+            getDistanceScore(a, userCoordinates) -
+            getDistanceScore(b, userCoordinates)
+          );
         case "availability":
-          // Trier par disponibilité (is_available)
           if (a.is_available && !b.is_available) return -1;
           if (!a.is_available && b.is_available) return 1;
           return 0;
@@ -182,7 +251,14 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
     });
 
     return filtered;
-  }, [cooks, searchQuery, filters.specialties, sortBy]);
+  }, [
+    cooks,
+    searchQuery,
+    filters.specialties,
+    filters.minBudget,
+    filters.maxBudget,
+    sortBy,
+  ]);
 
   const handleToggleFavorite = async (cookId: string, event: React.MouseEvent) => {
     event.preventDefault();

@@ -4,18 +4,12 @@
  */
 
 import { apiClient } from "./client";
+import type { CookFilters } from "@/types/cookFilters";
 
 export interface SavedFilter {
   id: string;
   name: string;
-  filters: {
-    location: string;
-    specialties: string[];
-    minBudget: number;
-    maxBudget: number;
-    minRating: number;
-    availability: string[];
-  };
+  filters: Omit<CookFilters, "coordinates">;
   createdAt: string;
   updatedAt: string;
 }

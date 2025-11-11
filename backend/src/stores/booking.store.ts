@@ -398,7 +398,85 @@ export class BookingStore {
 
     const bookings = (data as Booking[]) || [];
 
-    // Enrichir les bookings avec les adresses si disponibles
+    // Préparer les données clientes pour enrichissement
+    const clientProfileIds = [
+      ...new Set(
+        bookings
+          .map((booking) => booking.client_profile_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+
+    let clientsMap = new Map<string, any>();
+    if (clientProfileIds.length > 0) {
+      const { data: clientProfilesData, error: clientProfilesError } =
+        await supabaseAdmin
+          .from("client_profiles")
+          .select("id, user_id, household_size, favorite_cuisines, dietary_preferences")
+          .in("id", clientProfileIds);
+
+      if (clientProfilesError) {
+        console.warn(
+          "[BookingStore] Impossible de récupérer les client_profiles:",
+          clientProfilesError,
+        );
+      } else if (clientProfilesData && clientProfilesData.length > 0) {
+        const userIds = [
+          ...new Set(
+            clientProfilesData
+              .map((profile: any) => profile.user_id)
+              .filter((id: string) => Boolean(id)),
+          ),
+        ];
+
+        let usersMap = new Map<string, any>();
+        if (userIds.length > 0) {
+          const { data: usersData, error: usersError } = await supabaseAdmin
+            .from("users")
+            .select(
+              "id, first_name, last_name, email, avatar_url, phone",
+            )
+            .in("id", userIds);
+
+          if (usersError) {
+            console.warn(
+              "[BookingStore] Impossible de récupérer les utilisateurs associés aux client_profiles:",
+              usersError,
+            );
+          } else if (usersData) {
+            usersData.forEach((user: any) => {
+              usersMap.set(user.id, user);
+            });
+          }
+        }
+
+        clientsMap = new Map(
+          clientProfilesData.map((profile: any) => {
+            const relatedUser = profile.user_id
+              ? usersMap.get(profile.user_id)
+              : null;
+
+            return [
+              profile.id,
+              {
+                id: profile.id,
+                userId: profile.user_id,
+                firstName: relatedUser?.first_name || "",
+                lastName: relatedUser?.last_name || "",
+                email: relatedUser?.email || "",
+                avatarUrl: relatedUser?.avatar_url || null,
+                phoneNumber: relatedUser?.phone || null,
+                householdSize: profile.household_size ?? null,
+                favoriteCuisines: profile.favorite_cuisines || [],
+                dietaryPreferences: profile.dietary_preferences || [],
+              },
+            ];
+          }),
+        );
+      }
+    }
+
+    // Enrichir les bookings avec les adresses et les informations clients si disponibles
     const enrichedBookings = await Promise.allSettled(
       bookings.map(async (booking) => {
         try {
@@ -418,6 +496,9 @@ export class BookingStore {
           return {
             ...booking,
             address,
+            client: booking.client_profile_id
+              ? clientsMap.get(booking.client_profile_id) || null
+              : null,
           };
         } catch (error) {
           console.error(`Error enriching booking ${booking.id} with address:`, error);

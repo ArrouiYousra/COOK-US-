@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Search, SlidersHorizontal } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CooksGrid } from "@/components/dashboard/cooks/CooksGrid";
 import { CooksFilters } from "@/components/dashboard/cooks/CooksFilters";
+import { useSearchParams } from "next/navigation";
+import type { CookFilters } from "@/types/cookFilters";
 
 type SortOption = "rating" | "price_asc" | "price_desc" | "distance" | "availability";
 
@@ -15,20 +17,57 @@ type SortOption = "rating" | "price_asc" | "price_desc" | "distance" | "availabi
  * Recherche et filtrage des cuisiniers disponibles
  */
 export default function CooksPage() {
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("rating");
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<CookFilters>({
     location: "",
-    specialties: [] as string[],
+    specialties: [],
     minBudget: 0,
     maxBudget: 1000,
     minRating: 0,
-    availability: [] as string[],
+    availability: [],
+    coordinates: null,
   });
+  const previousParamsKeyRef = useRef<string>("");
+
+  useEffect(() => {
+    const paramsKey = searchParams.toString();
+
+    if (paramsKey === previousParamsKeyRef.current) {
+      return;
+    }
+
+    previousParamsKeyRef.current = paramsKey;
+
+    const query = searchParams.get("q") ?? "";
+    const locationParam = searchParams.get("location") ?? "";
+    const specialtyParam = searchParams.get("specialty");
+    const latParam = searchParams.get("lat");
+    const lngParam = searchParams.get("lng");
+
+    setSearchQuery(query);
+    setFilters((prev) => ({
+      ...prev,
+      location: locationParam,
+      specialties: specialtyParam ? [specialtyParam] : [],
+      coordinates:
+        latParam && lngParam
+          ? {
+              lat: Number.parseFloat(latParam),
+              lng: Number.parseFloat(lngParam),
+            }
+          : null,
+    }));
+
+    if (specialtyParam || locationParam || query) {
+      setShowFilters(false);
+    }
+  }, [searchParams]);
 
   // Filtrer les cuisiniers selon la recherche (le filtrage réel se fait dans CooksGrid)
-  const handleFiltersChange = (newFilters: typeof filters) => {
+  const handleFiltersChange = (newFilters: CookFilters) => {
     setFilters(newFilters);
   };
 

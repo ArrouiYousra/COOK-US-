@@ -11,6 +11,7 @@ import {
   deleteFilter,
   type SavedFilter,
 } from "@/lib/api/filters";
+import type { CookFilters } from "@/types/cookFilters";
 
 const specialties = [
   "Cuisine française",
@@ -24,15 +25,8 @@ const specialties = [
 ];
 
 interface CooksFiltersProps {
-  filters: {
-    location: string;
-    specialties: string[];
-    minBudget: number;
-    maxBudget: number;
-    minRating: number;
-    availability: string[];
-  };
-  onFiltersChange: (filters: any) => void;
+  filters: CookFilters;
+  onFiltersChange: (filters: CookFilters) => void;
 }
 
 /**
@@ -78,6 +72,7 @@ export function CooksFilters({ filters, onFiltersChange }: CooksFiltersProps) {
       maxBudget: 1000,
       minRating: 0,
       availability: [],
+      coordinates: null,
     });
   };
 
@@ -86,9 +81,10 @@ export function CooksFilters({ filters, onFiltersChange }: CooksFiltersProps) {
     
     setIsSaving(true);
     try {
+      const { coordinates, ...filtersToSave } = filters;
       const newSavedFilter = await saveFilter({
         name: filterName.trim(),
-        filters: { ...filters },
+        filters: { ...filtersToSave },
       });
       
       setSavedFilters([...savedFilters, newSavedFilter]);
@@ -103,7 +99,10 @@ export function CooksFilters({ filters, onFiltersChange }: CooksFiltersProps) {
   };
 
   const loadSavedFilter = (savedFilter: SavedFilter) => {
-    onFiltersChange(savedFilter.filters);
+    onFiltersChange({
+      ...savedFilter.filters,
+      coordinates: null,
+    });
   };
 
   const deleteSavedFilter = async (filterId: string) => {
@@ -126,7 +125,11 @@ export function CooksFilters({ filters, onFiltersChange }: CooksFiltersProps) {
           placeholder="Ville ou code postal"
           value={filters.location}
           onChange={(e) =>
-            onFiltersChange({ ...filters, location: e.target.value })
+            onFiltersChange({
+              ...filters,
+              location: e.target.value,
+              coordinates: null,
+            })
           }
         />
       </div>

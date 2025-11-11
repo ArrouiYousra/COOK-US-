@@ -32,6 +32,7 @@ interface MapboxMapProps {
   className?: string;
   onMarkerClick?: (marker: Marker) => void;
   interactive?: boolean;
+  onError?: (message: string) => void;
 }
 
 /**
@@ -47,6 +48,7 @@ export function MapboxMap({
   className = "",
   onMarkerClick,
   interactive = true,
+  onError,
 }: MapboxMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -77,6 +79,7 @@ export function MapboxMap({
           console.error("Erreur lors de la récupération du token Mapbox:", tokenError);
           const tokenErrorMessage = tokenError?.response?.data?.message || tokenError?.message || "Impossible de récupérer le token Mapbox";
           setError(tokenErrorMessage);
+          onError?.(tokenErrorMessage);
           setIsLoading(false);
           return;
         }
@@ -84,7 +87,9 @@ export function MapboxMap({
         // Vérifier que le token est valide (commence par pk.)
         if (!token.startsWith("pk.")) {
           console.error("Token Mapbox invalide. Le token doit commencer par 'pk.'");
-          setError("Token Mapbox invalide. Veuillez vérifier la configuration dans le backend.");
+          const invalidTokenMessage = "Token Mapbox invalide. Veuillez vérifier la configuration dans le backend.";
+          setError(invalidTokenMessage);
+          onError?.(invalidTokenMessage);
           setIsLoading(false);
           return;
         }
@@ -135,6 +140,7 @@ export function MapboxMap({
           }
           
           setError(errorMessage);
+          onError?.(errorMessage);
           setIsLoading(false);
         });
       } catch (err: any) {
@@ -146,6 +152,7 @@ export function MapboxMap({
         });
         const errorMessage = err?.response?.data?.message || err?.message || "Impossible de charger la carte";
         setError(errorMessage);
+        onError?.(errorMessage);
         setIsLoading(false);
       }
     };
