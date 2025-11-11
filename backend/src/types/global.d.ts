@@ -1,6 +1,7 @@
 /// <reference types="node" />
+/// <reference types="bcryptjs" />
 
-// Ce fichier force TypeScript à charger les types Node.js
+// Ce fichier force TypeScript à charger les types Node.js et autres types nécessaires
 // Nécessaire pour que les types soient disponibles sur Render
 
 declare global {
