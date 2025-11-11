@@ -22,25 +22,61 @@ export function formatPrice(price: number): string {
 /**
  * Formate une date en français
  */
-export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(date));
+export function formatDate(date: string | Date | null | undefined): string {
+  // Gérer les valeurs nulles ou undefined
+  if (!date) {
+    return "Date non définie";
+  }
+
+  try {
+    const dateObj = date instanceof Date ? date : new Date(date);
+    
+    // Vérifier si la date est valide
+    if (isNaN(dateObj.getTime())) {
+      console.warn("Date invalide:", date);
+      return "Date invalide";
+    }
+
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    }).format(dateObj);
+  } catch (error) {
+    console.error("Erreur lors du formatage de la date:", error, date);
+    return "Date invalide";
+  }
 }
 
 /**
  * Formate une date avec l'heure
  */
-export function formatDateTime(date: string | Date): string {
-  return new Intl.DateTimeFormat("fr-FR", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(date));
+export function formatDateTime(date: string | Date | null | undefined): string {
+  // Gérer les valeurs nulles ou undefined
+  if (!date) {
+    return "Date non définie";
+  }
+
+  try {
+    const dateObj = date instanceof Date ? date : new Date(date);
+    
+    // Vérifier si la date est valide
+    if (isNaN(dateObj.getTime())) {
+      console.warn("Date invalide:", date);
+      return "Date invalide";
+    }
+
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(dateObj);
+  } catch (error) {
+    console.error("Erreur lors du formatage de la date:", error, date);
+    return "Date invalide";
+  }
 }
 
 /**
@@ -74,5 +110,3 @@ export function getImageUrl(bucket: string, path: string): string {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${path}`;
 }
-
-

@@ -116,11 +116,14 @@ export default function ProposalsPage() {
                   : `${proposal.time}h`
                 : "Non spécifié";
 
+              // Utiliser booking_date si date n'est pas disponible
+              const proposalDate = proposal.date || proposal.booking_date || (proposal as any).booking_date || null;
+
               return {
                 id: proposal.id,
                 cookId: cookId || (proposal as any).cook?.id,
                 clientId: proposal.userId,
-                date: proposal.date,
+                date: proposalDate,
                 timeSlot,
                 numberOfGuests: proposal.numberOfGuests,
                 budget: proposal.totalPrice,

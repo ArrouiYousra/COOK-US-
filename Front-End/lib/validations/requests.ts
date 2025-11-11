@@ -12,7 +12,21 @@ export const createRequestSchema = z.object({
     .string()
     .min(20, "La description doit contenir au moins 20 caractères")
     .max(1000, "La description ne peut pas dépasser 1000 caractères"),
-  date: z.string().min(1, "La date est requise"),
+  date: z
+    .string()
+    .min(1, "La date est requise")
+    .refine(
+      (date) => {
+        const selectedDate = new Date(date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        selectedDate.setHours(0, 0, 0, 0);
+        return selectedDate >= today;
+      },
+      {
+        message: "La date doit être aujourd'hui ou dans le futur",
+      }
+    ),
   timeSlot: z.string().min(1, "Le créneau horaire est requis"),
   guestCount: z
     .number()

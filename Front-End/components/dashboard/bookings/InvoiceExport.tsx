@@ -40,7 +40,7 @@ export function InvoiceExport({ booking, cookAddress }: InvoiceExportProps) {
         clientName: user
           ? `${user.firstName || ""} ${user.lastName || ""}`.trim() || "Client"
           : "Client",
-        clientAddress: user?.address || "Adresse non disponible",
+        clientAddress: (user as any)?.address || "Adresse non disponible",
         serviceDate: booking.date,
         serviceTime: booking.time,
         numberOfGuests: booking.numberOfGuests,

@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { MessageSquare, CheckCircle, Clock, ChefHat, Loader2 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
+import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api/client";
 
@@ -122,14 +123,29 @@ export function RecentActivities() {
             // Vérifier si déjà dans les activités
             if (!activitiesList.some((a) => a.id === proposal.id)) {
               // Utiliser booking_date ou date selon la structure
-              const proposalDate = proposal.booking_date || proposal.date || "date non définie";
+              const proposalDateRaw = proposal.booking_date || proposal.date;
+              let proposalDateFormatted = "date non définie";
+              
+              if (proposalDateRaw) {
+                try {
+                  const date = new Date(proposalDateRaw);
+                  if (!isNaN(date.getTime())) {
+                    proposalDateFormatted = format(date, "d MMMM yyyy", { locale: fr });
+                  } else {
+                    proposalDateFormatted = proposalDateRaw;
+                  }
+                } catch (e) {
+                  proposalDateFormatted = proposalDateRaw;
+                }
+              }
+              
               const proposalCreatedAt = proposal.created_at || proposal.createdAt || Date.now();
               
               activitiesList.push({
                 id: `proposal-${proposal.id}`,
                 type: "proposition",
                 title: "Nouvelle proposition reçue",
-                description: `Proposition pour le ${proposalDate}`,
+                description: `Proposition pour le ${proposalDateFormatted}`,
                 time: new Date(proposalCreatedAt),
                 icon: ChefHat,
                 color: "text-purple-600 dark:text-purple-400",
@@ -147,7 +163,22 @@ export function RecentActivities() {
             // Vérifier si déjà dans les activités
             if (!activitiesList.some((a) => a.id === booking.id)) {
               // Utiliser booking_date ou date selon la structure
-              const bookingDate = booking.booking_date || booking.date || "date non définie";
+              const bookingDateRaw = booking.booking_date || booking.date;
+              let bookingDateFormatted = "date non définie";
+              
+              if (bookingDateRaw) {
+                try {
+                  const date = new Date(bookingDateRaw);
+                  if (!isNaN(date.getTime())) {
+                    bookingDateFormatted = format(date, "d MMMM yyyy", { locale: fr });
+                  } else {
+                    bookingDateFormatted = bookingDateRaw;
+                  }
+                } catch (e) {
+                  bookingDateFormatted = bookingDateRaw;
+                }
+              }
+              
               const bookingCreatedAt = booking.created_at || booking.createdAt || Date.now();
               const isPending = booking.status === "payment_pending" || booking.payment_status === "PENDING";
               
@@ -155,7 +186,7 @@ export function RecentActivities() {
                 id: `booking-${booking.id}`,
                 type: isPending ? "pending" : "confirmation",
                 title: isPending ? "Réservation en attente de paiement" : "Réservation confirmée",
-                description: `Réservation du ${bookingDate}`,
+                description: `Réservation du ${bookingDateFormatted}`,
                 time: new Date(bookingCreatedAt),
                 icon: isPending ? Clock : CheckCircle,
                 color: isPending
@@ -168,7 +199,18 @@ export function RecentActivities() {
 
         // Trier par date (plus récent en premier) et limiter à 4
         activitiesList.sort((a, b) => b.time.getTime() - a.time.getTime());
-        setActivities(activitiesList.slice(0, 4));
+        const finalActivities = activitiesList.slice(0, 4);
+        
+        // Log pour déboguer
+        console.log("Activités chargées:", {
+          notifications: notificationsList.length,
+          proposals: proposalsList.length,
+          bookings: bookingsList.length,
+          finalActivities: finalActivities.length,
+          activities: finalActivities.map(a => ({ title: a.title, description: a.description, time: a.time })),
+        });
+        
+        setActivities(finalActivities);
       } catch (error) {
         console.error("Erreur lors du chargement des activités:", error);
         setActivities([]);

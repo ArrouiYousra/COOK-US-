@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useRouter, useSearchParams, type ReadonlyURLSearchParams } from "next/navigation";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
@@ -20,7 +20,7 @@ const parseOAuthParams = (hash: string, search: URLSearchParams | ReadonlyURLSea
   };
 };
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const applyAuthResponse = useAuthStore((state) => state.applyAuthResponse);
@@ -136,6 +136,20 @@ export default function OAuthCallbackPage() {
         </p>
       </motion.div>
     </div>
+  );
+}
+
+export default function OAuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+        </div>
+      }
+    >
+      <OAuthCallbackContent />
+    </Suspense>
   );
 }
 

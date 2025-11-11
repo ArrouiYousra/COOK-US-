@@ -47,7 +47,9 @@ export function BookingsCalendar() {
   // Grouper les réservations par jour
   const bookingsByDay = useMemo(() => {
     return monthBookings.reduce((acc, booking) => {
-      const day = new Date(booking.date || booking.booking_date).getDate();
+      const dateStr = booking.date || booking.booking_date;
+      if (!dateStr) return acc;
+      const day = new Date(dateStr).getDate();
       if (!acc[day]) {
         acc[day] = [];
       }

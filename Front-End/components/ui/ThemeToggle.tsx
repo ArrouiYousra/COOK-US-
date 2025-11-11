@@ -14,7 +14,10 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    // Utiliser un callback pour éviter setState synchrone
+    setTimeout(() => {
+      setMounted(true);
+    }, 0);
   }, []);
 
   if (!mounted) {

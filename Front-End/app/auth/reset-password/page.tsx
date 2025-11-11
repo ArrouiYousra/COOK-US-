@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -17,10 +17,10 @@ import {
 } from "@/lib/validations/auth";
 
 /**
- * Page de réinitialisation du mot de passe
- * Récupère le token depuis l'URL (envoyé par Supabase via email)
+ * Composant interne qui utilise useSearchParams
+ * Doit être enveloppé dans Suspense pour éviter les erreurs de build
  */
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
@@ -361,4 +361,31 @@ export default function ResetPasswordPage() {
   );
 }
 
+/**
+ * Page de réinitialisation du mot de passe
+ * Récupère le token depuis l'URL (envoyé par Supabase via email)
+ */
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background px-4 sm:px-6 lg:px-8 py-12 relative">
+          <div className="absolute top-4 right-4 z-10">
+            <ThemeToggle />
+          </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md text-center"
+          >
+            <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+            <p className="text-muted-foreground">Chargement...</p>
+          </motion.div>
+        </div>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
+  );
+}
 

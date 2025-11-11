@@ -51,7 +51,7 @@ export default function ReviewPage() {
         setBooking(foundBooking);
 
         // Charger les infos du cuisinier
-        const cookId = foundBooking.cookId || foundBooking.cook?.id;
+        const cookId = foundBooking.cookId;
         if (cookId) {
           try {
             const cookProfiles = await apiClient.getCookProfiles({ limit: 1000 });

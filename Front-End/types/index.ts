@@ -51,7 +51,11 @@ export type BookingStatus =
   | "confirmed"               // Paiement effectué, réservation confirmée
   | "pending"                 // Ancien flux : demande publique, en attente de propositions
   | "done"                    // Réservation terminée
-  | "cancelled";              // Réservation annulée
+  | "cancelled"               // Réservation annulée
+  | "PENDING"                  // Variante majuscule
+  | "CONFIRMED"                // Variante majuscule
+  | "ACCEPTED"                 // Variante majuscule
+  | "COMPLETED";               // Variante majuscule
 
 export interface Booking {
   id: string;
@@ -71,6 +75,19 @@ export interface Booking {
   paymentStatus?: "pending" | "completed" | "failed";
   paymentIntentId?: string;
   conversationId?: string;    // ID de la conversation débloquée après acceptation
+  // Propriétés alternatives utilisées par l'API (snake_case)
+  booking_date?: string;
+  cook_profile_id?: string;
+  start_time?: string;
+  end_time?: string;
+  number_of_guests?: number;
+  total_price?: number;
+  special_requests?: string;
+  budget?: number;
+  // Propriétés pour les rappels
+  reminder24hSent?: boolean;
+  reminder1hSent?: boolean;
+  cookName?: string;
 }
 
 // Proposition directe du client au cuisinier (Flux 2)
@@ -93,6 +110,64 @@ export interface ClientProposal {
   // Après acceptation
   bookingId?: string;
   conversationId?: string;
+}
+
+// Réservation (Proposition d'un cuisinier sur une demande publique)
+export type ReservationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+
+export interface Reservation {
+  id: string;
+  booking_id: string; // ID de la demande publique
+  cook_profile_id: string; // ID du profil cuisinier
+  status: ReservationStatus;
+  proposed_price: number; // Prix total proposé
+  proposed_hours?: number | null; // Nombre d'heures proposées
+  proposed_hourly_rate?: number | null; // Tarif horaire proposé
+  message?: string | null; // Message personnalisé du cuisinier
+  can_do_groceries: boolean;
+  can_set_table: boolean;
+  can_do_dishes: boolean;
+  expires_at?: string | null; // Date d'expiration (72h)
+  accepted_at?: string | null;
+  rejected_at?: string | null;
+  cancelled_at?: string | null;
+  rejection_reason?: string | null;
+  cancellation_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Données enrichies (optionnel)
+  cook?: {
+    id: string;
+    headline: string;
+    bio?: string;
+    hourly_rate: number;
+    average_rating?: number;
+    user?: {
+      first_name: string;
+      last_name: string;
+      avatar_url?: string;
+    };
+  };
+}
+
+export interface CreateReservationDTO {
+  booking_id: string;
+  proposed_price: number;
+  proposed_hours?: number;
+  proposed_hourly_rate?: number;
+  message?: string;
+  can_do_groceries?: boolean;
+  can_set_table?: boolean;
+  can_do_dishes?: boolean;
+}
+
+export interface ReservationStats {
+  total: number;
+  pending: number;
+  accepted: number;
+  rejected: number;
+  cancelled: number;
+  expired: number;
 }
 
 export interface Review {
@@ -188,7 +263,24 @@ export interface CookProfile {
   status: string;
   headline: string;
   bio: string | null;
+  experience: string | null;
+  video_intro_url: string | null;
+  service_radius: number;
   hourly_rate: number;
+  minimum_booking_hours: number;
+  can_do_groceries: boolean;
+  can_set_table: boolean;
+  can_do_dishes: boolean;
+  max_guests: number;
+  employment_status: string;
+  siret_number: string | null;
+  insurance_number: string | null;
+  insurance_expiry_date: string | null;
+  id_card_url: string | null;
+  insurance_cert_url: string | null;
+  kbis_url: string | null;
+  is_available: boolean;
+  availability_note: string | null;
   average_rating: number | null;
   total_bookings: number;
   is_verified: boolean;
@@ -267,5 +359,4 @@ export interface FilterState {
   filters: SearchFilters;
   activeFilters: Partial<SearchFilters>;
 }
-
 

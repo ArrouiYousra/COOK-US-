@@ -106,17 +106,36 @@ export const useAuthStore = create<AuthStore>()(
           set({ isLoading: true });
           const response = await apiClient.getCurrentUser();
           get().applyAuthResponse(response);
-        } catch (error) {
+        } catch (error: any) {
+          // Si l'erreur est 401 (Unauthorized), essayer de rafraîchir la session
+          if (error?.response?.status === 401) {
             try {
               const refreshResponse = await apiClient.refreshSession();
               get().applyAuthResponse(refreshResponse);
               return;
             } catch (refreshError) {
-          set({
-            user: null,
-            isAuthenticated: false,
-            error: null,
-          });
+              // Si le refresh échoue aussi, l'utilisateur n'est plus authentifié
+              // C'est un comportement normal après déconnexion, ne pas logger d'erreur
+              set({
+                user: null,
+                isAuthenticated: false,
+                error: null,
+              });
+              // Ne pas logger cette erreur car c'est attendu après déconnexion
+              return;
+            }
+          } else {
+            // Pour les autres erreurs, seulement logger si ce n'est pas une erreur réseau normale
+            // (comme ECONNABORTED ou ERR_NETWORK qui sont gérées par le client API)
+            if (error?.code !== 'ECONNABORTED' && error?.code !== 'ERR_NETWORK') {
+              // Ne logger que les erreurs inattendues, pas les erreurs normales de déconnexion
+              console.warn('Erreur lors de la vérification de l\'authentification:', error?.message || 'Erreur inconnue');
+            }
+            set({
+              user: null,
+              isAuthenticated: false,
+              error: null,
+            });
           }
         } finally {
           set({ isLoading: false });

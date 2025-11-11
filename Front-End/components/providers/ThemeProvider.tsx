@@ -12,7 +12,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    // Utiliser un callback pour éviter setState synchrone
+    setTimeout(() => {
+      setMounted(true);
+    }, 0);
     // Initialiser le thème au montage du composant (une seule fois)
     if (!initialized && typeof window !== "undefined") {
       const stored = localStorage.getItem("cook-us-theme") as "light" | "dark" | null;

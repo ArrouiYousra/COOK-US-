@@ -52,6 +52,10 @@ interface BookingStore {
   // Actions - Utilitaires
   clearAll: () => void;
   refreshAll: () => Promise<void>;
+  
+  // Actions - Mise à jour temps réel
+  addBooking: (booking: Booking) => void;
+  updateBooking: (id: string, updates: Partial<Booking>) => void;
 }
 
 /**
@@ -90,9 +94,23 @@ export const useBookingStore = create<BookingStore>()(
         set({ isLoadingBookings: true, bookingsError: null });
         try {
           const currentFilter = get().bookingsFilter;
-          const mergedParams = { ...currentFilter, ...params };
+          // Si status est explicitement undefined, ne pas utiliser le filtre persistant
+          const mergedParams = params?.status === undefined 
+            ? { ...currentFilter, ...params, status: undefined }
+            : { ...currentFilter, ...params };
           
+          console.log("[BookingStore] fetchBookings appelé avec params:", mergedParams);
           const response = await apiClient.getBookings(mergedParams);
+          console.log("[BookingStore] Réponse de l'API:", {
+            bookingsCount: response.bookings?.length || 0,
+            totalCount: response.count,
+            bookings: response.bookings?.map((b: any) => ({
+              id: b.id,
+              status: b.status,
+              cook_profile_id: b.cook_profile_id,
+              booking_date: b.booking_date || b.date
+            }))
+          });
           
           set({
             bookings: response.bookings,
@@ -105,7 +123,10 @@ export const useBookingStore = create<BookingStore>()(
             isLoadingBookings: false,
             bookingsError: null,
           });
+          
+          console.log("[BookingStore] Store mis à jour avec", response.bookings?.length || 0, "bookings");
         } catch (error) {
+          console.error("[BookingStore] Erreur lors du fetchBookings:", error);
           const message = error instanceof Error ? error.message : "Erreur lors du chargement des réservations";
           set({
             isLoadingBookings: false,
@@ -189,6 +210,22 @@ export const useBookingStore = create<BookingStore>()(
           fetchBookings(),
           fetchProposals(),
         ]);
+      },
+
+      // Actions - Mise à jour temps réel
+      addBooking: (booking) => {
+        set((state) => ({
+          bookings: [booking, ...state.bookings],
+          bookingsCount: state.bookingsCount + 1,
+        }));
+      },
+
+      updateBooking: (id, updates) => {
+        set((state) => ({
+          bookings: state.bookings.map((b) =>
+            b.id === id ? { ...b, ...updates } : b
+          ),
+        }));
       },
     }),
     {

@@ -99,7 +99,7 @@ export default function ClientReviewsPage() {
               photos: [], // TODO: Les photos ne sont pas encore dans le schéma de la DB
               isRecommended: review.rating >= 4, // Considérer comme recommandé si note >= 4
               createdAt: review.created_at,
-              bookingDate: bookingData?.booking_date || bookingData?.date || review.created_at,
+              bookingDate: bookingData?.date || review.created_at,
             };
           })
         );
@@ -134,7 +134,7 @@ export default function ClientReviewsPage() {
               rating: review.rating,
               comment: review.comment || "",
               createdAt: review.created_at,
-              bookingDate: bookingData?.booking_date || bookingData?.date || review.created_at,
+              bookingDate: bookingData?.date || review.created_at,
             };
           })
         );

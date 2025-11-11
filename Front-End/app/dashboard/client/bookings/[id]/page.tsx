@@ -59,7 +59,7 @@ export default function BookingDetailsPage() {
         setBooking(foundBooking);
 
         // Charger les infos du cuisinier
-        const cookId = foundBooking.cookId || foundBooking.cook?.id;
+        const cookId = foundBooking.cookId;
         if (cookId) {
           try {
             const cookProfiles = await apiClient.getCookProfiles({ limit: 1000 });
@@ -130,7 +130,7 @@ export default function BookingDetailsPage() {
     mappedStatus = "pending";
   } else if (booking.status === "confirmed" || booking.status === "proposition_accepted") {
     mappedStatus = "confirmed";
-  } else if (booking.status === "completed" || booking.status === "done") {
+  } else if (booking.status === "done") {
     mappedStatus = "done";
   } else if (booking.status === "cancelled") {
     mappedStatus = "cancelled";
@@ -339,7 +339,7 @@ export default function BookingDetailsPage() {
       }} />
 
       {/* Bouton Laisser un avis (si terminée) */}
-      {(mappedStatus === "done" || booking.status === "completed") && (
+      {mappedStatus === "done" && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

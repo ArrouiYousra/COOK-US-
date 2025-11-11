@@ -86,12 +86,17 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
           apiParams.max_hourly_rate = filters.maxBudget;
         }
 
+        console.log("Chargement des cuisiniers avec les paramètres:", apiParams);
         const response = await apiClient.getCookProfiles(apiParams);
+        console.log("Réponse de l'API getCookProfiles:", response);
 
         // Vérifier que la réponse contient bien des profils
         if (!response || !Array.isArray(response.profiles)) {
+          console.error("Réponse invalide de l'API:", response);
           throw new Error("Réponse invalide de l'API");
         }
+
+        console.log(`Nombre de cuisiniers reçus: ${response.profiles.length}, Total: ${response.count}`);
 
         // Charger les favoris pour tous les cuisiniers (seulement si l'utilisateur est authentifié)
         const favoritesSet = new Set<string>();
@@ -115,7 +120,12 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
         setCount(response.count || 0);
       } catch (err: any) {
         console.error("Erreur lors du chargement des cuisiniers:", err);
-        const errorMessage = err?.message || "Impossible de charger les cuisiniers. Veuillez réessayer.";
+        console.error("Détails de l'erreur:", {
+          message: err?.message,
+          response: err?.response?.data,
+          status: err?.response?.status,
+        });
+        const errorMessage = err?.response?.data?.message || err?.message || "Impossible de charger les cuisiniers. Veuillez réessayer.";
         setError(errorMessage);
         setCooks([]);
         setCount(0);
@@ -234,8 +244,20 @@ export function CooksGrid({ searchQuery, filters, sortBy = "rating" }: CooksGrid
         <p className="text-muted-foreground mb-4">
           {searchQuery || filters.location || filters.minRating > 0 || filters.maxBudget < 1000
             ? "Aucun cuisinier ne correspond à vos critères."
-            : "Aucun cuisinier disponible pour le moment."}
+            : cooks.length === 0
+            ? "Aucun cuisinier disponible pour le moment. Vérifiez que des cuisiniers avec le statut ACTIVE existent dans la base de données."
+            : "Aucun cuisinier ne correspond à votre recherche."}
         </p>
+        {cooks.length === 0 && (
+          <div className="mt-4 space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Total de cuisiniers chargés: {count}
+            </p>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Actualiser
+            </Button>
+          </div>
+        )}
         {(searchQuery || filters.location || filters.minRating > 0 || filters.maxBudget < 1000) && (
           <Button variant="outline" onClick={() => window.location.reload()}>
             Réinitialiser les filtres

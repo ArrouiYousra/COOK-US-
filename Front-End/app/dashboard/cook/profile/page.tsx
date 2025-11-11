@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
@@ -20,6 +20,7 @@ import {
   XCircle,
   Upload,
   X,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/stores/authStore";
 import { Checkbox } from "@/components/ui/checkbox";
+import { apiClient } from "@/lib/api/client";
 
 // Schéma de validation
 const cookProfileSchema = z.object({
@@ -63,7 +65,8 @@ type CookProfileFormData = z.infer<typeof cookProfileSchema>;
  * Page de gestion du profil professionnel du cuisinier
  */
 export default function CookProfilePage() {
-  const { user } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
@@ -79,6 +82,7 @@ export default function CookProfilePage() {
     formState: { errors },
     watch,
     setValue,
+    reset,
   } = useForm<CookProfileFormData>({
     resolver: zodResolver(cookProfileSchema),
     defaultValues: {
@@ -96,6 +100,70 @@ export default function CookProfilePage() {
       isAvailable: true,
     },
   });
+
+  // Charger le profil depuis l'API
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!isAuthenticated || !user) {
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const profile = await apiClient.getMyProfile();
+        
+        if (profile.user) {
+          // Charger l'avatar
+          if (profile.user.avatarUrl) {
+            setAvatarPreview(profile.user.avatarUrl);
+          }
+        }
+
+        if (profile.cookProfile) {
+          const cookProfile = profile.cookProfile;
+          
+          // Pré-remplir le formulaire avec les données du profil
+          reset({
+            headline: cookProfile.headline || "",
+            bio: cookProfile.bio || "",
+            experience: cookProfile.experience || "",
+            hourlyRate: cookProfile.hourly_rate || 0,
+            minimumBookingHours: cookProfile.minimum_booking_hours || 2,
+            maxGuests: cookProfile.max_guests || 10,
+            serviceRadius: cookProfile.service_radius || 20,
+            canDoGroceries: cookProfile.can_do_groceries || false,
+            canSetTable: cookProfile.can_set_table || false,
+            canDoDishes: cookProfile.can_do_dishes || false,
+            employmentStatus: (cookProfile.employment_status as any) || "SELF_EMPLOYED",
+            siretNumber: cookProfile.siret_number || "",
+            insuranceNumber: cookProfile.insurance_number || "",
+            insuranceExpiryDate: cookProfile.insurance_expiry_date || "",
+            isAvailable: cookProfile.is_available ?? true,
+            availabilityNote: cookProfile.availability_note || "",
+          });
+
+          // Charger la vidéo si elle existe
+          if (cookProfile.video_intro_url) {
+            setVideoPreview(cookProfile.video_intro_url);
+          }
+
+          // Charger les documents
+          setUploadedDocuments({
+            idCard: cookProfile.id_card_url || undefined,
+            insuranceCert: cookProfile.insurance_cert_url || undefined,
+            kbis: cookProfile.kbis_url || undefined,
+          });
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement du profil:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, [isAuthenticated, user, reset]);
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -123,17 +191,63 @@ export default function CookProfilePage() {
   const onSubmit = async (data: CookProfileFormData) => {
     setIsSaving(true);
     try {
-      // TODO: Appel API pour sauvegarder le profil
-      // await apiClient.updateCookProfile(data);
-      console.log("Profil sauvegardé:", data);
-      setTimeout(() => setIsSaving(false), 1000);
-    } catch (error) {
+      // Préparer les données pour l'API
+      const updateData: any = {
+        headline: data.headline,
+        bio: data.bio,
+        experience: data.experience,
+        hourly_rate: data.hourlyRate,
+        minimum_booking_hours: data.minimumBookingHours,
+        max_guests: data.maxGuests,
+        service_radius: data.serviceRadius,
+        can_do_groceries: data.canDoGroceries,
+        can_set_table: data.canSetTable,
+        can_do_dishes: data.canDoDishes,
+        employment_status: data.employmentStatus,
+        is_available: data.isAvailable,
+      };
+
+      // Ajouter les champs optionnels s'ils sont remplis
+      if (data.siretNumber?.trim()) {
+        updateData.siret_number = data.siretNumber.trim();
+      }
+      if (data.insuranceNumber?.trim()) {
+        updateData.insurance_number = data.insuranceNumber.trim();
+      }
+      if (data.insuranceExpiryDate?.trim()) {
+        updateData.insurance_expiry_date = data.insuranceExpiryDate.trim();
+      }
+      if (data.availabilityNote?.trim()) {
+        updateData.availability_note = data.availabilityNote.trim();
+      }
+
+      // Ajouter l'avatar si une nouvelle image a été sélectionnée
+      if (avatarPreview && avatarPreview.startsWith('data:')) {
+        updateData.avatar_url = avatarPreview;
+      }
+
+      // Appel API pour sauvegarder le profil
+      await apiClient.updateMyProfile(updateData);
+      
+      alert("Profil mis à jour avec succès !");
+    } catch (error: any) {
       console.error("Erreur lors de la sauvegarde:", error);
+      const errorMessage = error.response?.data?.message || error.message || "Erreur lors de la sauvegarde du profil";
+      alert(errorMessage);
+    } finally {
       setIsSaving(false);
     }
   };
 
   const isAvailable = watch("isAvailable");
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -167,6 +281,7 @@ export default function CookProfilePage() {
                         alt="Photo de profil"
                         fill
                         className="object-cover"
+                        unoptimized
                       />
                     ) : (
                       <div className="w-full h-full bg-muted flex items-center justify-center">

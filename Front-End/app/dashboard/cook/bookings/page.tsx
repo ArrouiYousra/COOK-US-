@@ -68,10 +68,10 @@ export default function CookBookingsPage() {
         // Calculer les compteurs par statut
         const counts = {
           all: allBookings.length,
-          pending: allBookings.filter((b) => b.status === "PENDING").length,
-          confirmed: allBookings.filter((b) => ["ACCEPTED", "CONFIRMED"].includes(b.status)).length,
-          completed: allBookings.filter((b) => b.status === "COMPLETED").length,
-          cancelled: allBookings.filter((b) => b.status === "CANCELLED").length,
+          pending: allBookings.filter((b) => b.status === "pending" || b.status === "proposition_pending" || b.status === "payment_pending").length,
+          confirmed: allBookings.filter((b) => b.status === "confirmed" || b.status === "proposition_accepted").length,
+          completed: allBookings.filter((b) => b.status === "done").length,
+          cancelled: allBookings.filter((b) => b.status === "cancelled").length,
         };
         setStatusCounts(counts);
       } catch (err: any) {

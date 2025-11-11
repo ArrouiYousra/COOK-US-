@@ -170,7 +170,7 @@ export default function CookDashboardPage() {
     return hour >= 18 ? "Bonsoir" : "Bonjour";
   };
 
-  const firstName = user?.firstName || user?.first_name || "chef";
+  const firstName = user?.firstName || "chef";
 
   return (
     <div className="space-y-8">

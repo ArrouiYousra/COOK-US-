@@ -41,12 +41,6 @@ export default function NotificationsPage() {
         return { icon: X, color: "text-red-600 dark:text-red-400" };
       case "REVIEW_RECEIVED":
         return { icon: BookOpen, color: "text-orange-600 dark:text-orange-400" };
-      case "PROFILE_APPROVED":
-        return { icon: UserCheck, color: "text-green-600 dark:text-green-400" };
-      case "PROFILE_REJECTED":
-        return { icon: UserX, color: "text-red-600 dark:text-red-400" };
-      case "SYSTEM":
-        return { icon: Info, color: "text-gray-600 dark:text-gray-400" };
       default:
         return { icon: Bell, color: "text-muted-foreground" };
     }
@@ -66,12 +60,6 @@ export default function NotificationsPage() {
         return "bg-red-500/10 dark:bg-red-500/20";
       case "REVIEW_RECEIVED":
         return "bg-orange-500/10 dark:bg-orange-500/20";
-      case "PROFILE_APPROVED":
-        return "bg-green-500/10 dark:bg-green-500/20";
-      case "PROFILE_REJECTED":
-        return "bg-red-500/10 dark:bg-red-500/20";
-      case "SYSTEM":
-        return "bg-gray-500/10 dark:bg-gray-500/20";
       default:
         return "bg-muted";
     }

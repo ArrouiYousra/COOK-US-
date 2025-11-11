@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,31 +11,80 @@ import { useBookingStore } from "@/stores/bookingStore";
 
 type RequestTab = "pending" | "confirmed" | "completed";
 
-/**
- * Page "Mes Demandes"
- * Gestion de toutes les demandes de repas du client
- */
-export default function RequestsPage() {
+function RequestsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<RequestTab>("pending");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { bookings, fetchBookings } = useBookingStore();
   const [counts, setCounts] = useState({ pending: 0, confirmed: 0, completed: 0 });
 
+  // Recharger les données au montage et quand le paramètre refresh est présent
   useEffect(() => {
-    const loadCounts = async () => {
-      await fetchBookings({ limit: 1000 });
+    const loadData = async () => {
+      console.log("[RequestsPage] Chargement des bookings...");
+      // IMPORTANT: Réinitialiser le filtre de statut pour obtenir TOUS les bookings
+      // Sinon le filtre persistant (ex: status: 'CONFIRMED') exclut les demandes PENDING
+      await fetchBookings({ limit: 1000, status: undefined });
+      console.log("[RequestsPage] Bookings chargés:", bookings.length);
+      
+      // Si on vient d'une redirection avec refresh, retirer le paramètre
+      if (searchParams.get("refresh") === "true") {
+        router.replace("/dashboard/client/requests", { scroll: false });
+      }
     };
-    loadCounts();
-  }, [fetchBookings]);
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, fetchBookings]);
 
   useEffect(() => {
+    console.log("[RequestsPage] Calcul des compteurs, bookings:", bookings.length);
     // Calculer les compteurs à partir des bookings
+    // IMPORTANT: Pour "Mes demandes", on veut UNIQUEMENT les demandes publiques (sans cuisinier assigné)
     const pendingCount = bookings.filter(
-      (b) => b.status === "proposition_pending" || b.status === "payment_pending" || b.status === "pending"
+      (b) => {
+        const statusValue = b.status || "";
+        const statusLower = statusValue.toLowerCase();
+        
+        // Vérifier si c'est une demande publique (sans cuisinier assigné)
+        // Essayer plusieurs façons de récupérer cook_profile_id
+        const cookProfileId = 
+          (b as any).cook_profile_id !== undefined ? (b as any).cook_profile_id :
+          b.cookId !== undefined ? b.cookId :
+          null;
+        const hasNoCook = 
+          cookProfileId === null || 
+          cookProfileId === undefined || 
+          cookProfileId === "" ||
+          String(cookProfileId).trim() === "";
+        
+        // Inclure uniquement les demandes publiques avec statut pending
+        const isPending = (
+          (statusLower === "proposition_pending" || 
+          statusLower === "payment_pending" || 
+          statusLower === "pending") &&
+          hasNoCook
+        );
+        
+        if (isPending) {
+          console.log("[RequestsPage] Demande publique pending trouvée:", { id: b.id, status: b.status, cook_profile_id: cookProfileId });
+        }
+        
+        return isPending;
+      }
     ).length;
-    const confirmedCount = bookings.filter((b) => b.status === "confirmed").length;
-    const completedCount = bookings.filter((b) => b.status === "done" || b.status === "completed").length;
+    
+    const confirmedCount = bookings.filter((b) => {
+      const statusLower = (b.status || "").toLowerCase();
+      return statusLower === "confirmed" || b.status === "proposition_accepted";
+    }).length;
+    
+    const completedCount = bookings.filter((b) => {
+      const statusLower = (b.status || "").toLowerCase();
+      return statusLower === "done";
+    }).length;
 
+    console.log("[RequestsPage] Compteurs calculés - pending:", pendingCount, "confirmed:", confirmedCount, "completed:", completedCount);
     setCounts({ pending: pendingCount, confirmed: confirmedCount, completed: completedCount });
   }, [bookings]);
 
@@ -108,8 +158,28 @@ export default function RequestsPage() {
       {/* Modal de création */}
       <CreateRequestModal
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        onClose={async () => {
+          setIsCreateModalOpen(false);
+          // Recharger les bookings après création
+          await fetchBookings({ limit: 1000 });
+        }}
       />
     </div>
+  );
+}
+
+/**
+ * Page "Mes Demandes"
+ * Gestion de toutes les demandes de repas du client
+ */
+export default function RequestsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted-foreground">Chargement...</p>
+      </div>
+    }>
+      <RequestsPageContent />
+    </Suspense>
   );
 }

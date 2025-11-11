@@ -3,7 +3,11 @@
 import { create } from "zustand";
 import type { Notification, NotificationType } from "@/types/notifications";
 
-interface NotificationStore extends NotificationState {
+interface NotificationStore {
+  notifications: Notification[];
+  unreadCount: number;
+  isLoading: boolean;
+  error: string | null;
   addNotification: (notification: Notification) => void;
   markAsRead: (notificationId: string) => Promise<void>;
   markAllAsRead: () => Promise<void>;

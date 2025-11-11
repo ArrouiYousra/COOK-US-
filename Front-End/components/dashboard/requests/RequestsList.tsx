@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Calendar, Clock, Users, Euro, MapPin, Eye, Edit, Trash2, Copy, Loader2 } from "lucide-react";
+import { Calendar, Clock, Users, Euro, MapPin, Eye, Edit, Trash2, Copy, Loader2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { PropositionsModal } from "./PropositionsModal";
@@ -10,6 +10,7 @@ import { EditRequestModal } from "./EditRequestModal";
 import { DeleteRequestDialog } from "./DeleteRequestDialog";
 import { useBookingStore } from "@/stores/bookingStore";
 import { apiClient } from "@/lib/api/client";
+import Link from "next/link";
 
 interface RequestsListProps {
   status: "pending" | "confirmed" | "completed";
@@ -32,127 +33,286 @@ export function RequestsList({ status }: RequestsListProps) {
     ]);
   };
 
+  // Charger les données au montage et quand le statut change
   useEffect(() => {
-    const loadRequests = async () => {
+    const loadInitialData = async () => {
       setIsLoading(true);
       try {
+        console.log("🔄 [RequestsList] Chargement des données, statut:", status);
         // Charger les bookings et propositions en parallèle
+        // IMPORTANT: Réinitialiser le filtre de statut pour obtenir TOUS les bookings
         await Promise.all([
-          fetchBookings({ limit: 100 }),
+          fetchBookings({ limit: 1000, status: undefined }),
           fetchProposals({ filter: "pending", limit: 100 }),
         ]);
-
-        // Transformer les données selon le statut demandé
-        let filteredRequests: any[] = [];
-
-        if (status === "pending") {
-          // Bookings en attente (proposition_pending, payment_pending) + propositions en attente
-          const pendingBookings = bookings.filter(
-            (b) => b.status === "proposition_pending" || b.status === "payment_pending" || b.status === "pending"
-          );
-          
-          // Transformer les bookings en format request
-          filteredRequests = pendingBookings.map((booking) => {
-            // Compter les propositions pour ce booking
-            const proposalCount = proposals.filter((p) => p.id === booking.id || p.requestId === booking.id).length;
-            
-            // Formater l'heure si disponible
-            const timeSlot = booking.time 
-              ? booking.time.includes(":") 
-                ? booking.time 
-                : `${booking.time}h`
-              : "Non spécifié";
-            
-            return {
-              id: booking.id,
-              title: (booking as any).title || booking.specialRequests || "Demande de repas",
-              description: booking.specialRequests || (booking as any).description || "Aucune description",
-              date: booking.date,
-              timeSlot,
-              guestCount: booking.numberOfGuests,
-              budget: booking.totalPrice,
-              address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
-              status: "pending",
-              proposalCount,
-            };
-          });
-        } else if (status === "confirmed") {
-          // Bookings confirmés
-          const confirmedBookings = bookings.filter((b) => b.status === "confirmed");
-          
-          filteredRequests = confirmedBookings.map((booking) => {
-            // Récupérer les infos du cuisinier si disponibles
-            const cook = (booking as any).cook || {};
-            const cookName = cook.first_name && cook.last_name 
-              ? `${cook.first_name} ${cook.last_name}` 
-              : cook.name || (booking as any).cookName || "Cuisinier";
-            const cookRating = cook.average_rating || cook.rating || (booking as any).cookRating;
-            
-            const timeSlot = booking.time 
-              ? booking.time.includes(":") 
-                ? booking.time 
-                : `${booking.time}h`
-              : "Non spécifié";
-            
-            return {
-              id: booking.id,
-              title: (booking as any).title || booking.specialRequests || "Repas confirmé",
-              description: booking.specialRequests || (booking as any).description || "Aucune description",
-              date: booking.date,
-              timeSlot,
-              guestCount: booking.numberOfGuests,
-              budget: booking.totalPrice,
-              address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
-              status: "confirmed",
-              cookName,
-              cookRating,
-            };
-          });
-        } else if (status === "completed") {
-          // Bookings terminés
-          const completedBookings = bookings.filter((b) => b.status === "done" || b.status === "completed");
-          
-          filteredRequests = completedBookings.map((booking) => {
-            const cook = (booking as any).cook || {};
-            const cookName = cook.first_name && cook.last_name 
-              ? `${cook.first_name} ${cook.last_name}` 
-              : cook.name || (booking as any).cookName || "Cuisinier";
-            const cookRating = cook.average_rating || cook.rating || (booking as any).cookRating;
-            
-            const timeSlot = booking.time 
-              ? booking.time.includes(":") 
-                ? booking.time 
-                : `${booking.time}h`
-              : "Non spécifié";
-            
-            return {
-              id: booking.id,
-              title: (booking as any).title || booking.specialRequests || "Repas terminé",
-              description: booking.specialRequests || (booking as any).description || "Aucune description",
-              date: booking.date,
-              timeSlot,
-              guestCount: booking.numberOfGuests,
-              budget: booking.totalPrice,
-              address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
-              status: "completed",
-              cookName,
-              cookRating,
-            };
-          });
-        }
-
-        setRequests(filteredRequests);
+        // Attendre un peu pour que le store se mette à jour
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const currentBookings = useBookingStore.getState().bookings;
+        console.log("✅ [RequestsList] Données chargées:", {
+          bookings: currentBookings.length,
+          proposals: proposals.length,
+          bookingsDetails: currentBookings.map(b => ({
+            id: b.id?.slice(0, 8),
+            status: b.status,
+            cook_profile_id: b.cook_profile_id ?? (b as any).cook_profile_id
+          }))
+        });
       } catch (error) {
-        console.error("Erreur lors du chargement des demandes:", error);
-        setRequests([]);
+        console.error("❌ [RequestsList] Erreur lors du chargement initial:", error);
       } finally {
         setIsLoading(false);
       }
     };
 
-    loadRequests();
+    loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]); // Recharger uniquement quand le statut change
+  }, [status, fetchBookings, fetchProposals]); // Recharger quand le statut change
+  
+  // Recharger aussi quand les bookings changent dans le store
+  useEffect(() => {
+    console.log("📊 [RequestsList] Bookings dans le store ont changé:", bookings.length);
+  }, [bookings.length]);
+
+  // Filtrer et transformer les données avec useMemo pour éviter les re-renders inutiles
+  const filteredRequests = useMemo(() => {
+    // Attendre que le chargement soit terminé
+    if (isLoadingBookings || isLoadingProposals) {
+      return [];
+    }
+
+    // Debug: Afficher les bookings reçus
+    console.log(`[RequestsList] ========== DÉBUT FILTRAGE ==========`);
+    console.log(`[RequestsList] Statut demandé: "${status}", ${bookings.length} bookings reçus du store`);
+    
+    if (bookings.length === 0) {
+      console.warn("[RequestsList] ⚠️ AUCUN BOOKING REÇU DU STORE!");
+    } else {
+      console.log("[RequestsList] Tous les bookings reçus:", bookings.map(b => {
+        const cookId = b.cook_profile_id ?? (b as any).cook_profile_id ?? (b as any).cookId ?? "NON_DÉFINI";
+        return {
+          id: b.id?.slice(0, 8) || "NO_ID",
+          status: b.status || "NO_STATUS",
+          cook_profile_id: cookId,
+          cook_profile_id_type: typeof cookId,
+          cook_profile_id_is_null: cookId === null,
+          cook_profile_id_is_undefined: cookId === undefined,
+          booking_date: b.booking_date || (b as any).date || "NO_DATE",
+        };
+      }));
+    }
+
+    // Transformer les données selon le statut demandé
+    let requests: any[] = [];
+
+    if (status === "pending") {
+      // Bookings en attente (proposition_pending, payment_pending, pending, PENDING)
+      // IMPORTANT: Pour "Mes demandes", on veut UNIQUEMENT les demandes publiques (sans cuisinier assigné)
+      const pendingBookings = bookings.filter(
+        (b) => {
+          const statusValue = b.status || "";
+          const statusLower = statusValue.toLowerCase();
+          
+          // Vérifier si c'est une demande publique (sans cuisinier assigné)
+          // Essayer plusieurs façons de récupérer cook_profile_id car Supabase peut le retourner différemment
+          const cookProfileId = 
+            b.cook_profile_id !== undefined ? b.cook_profile_id :
+            (b as any).cook_profile_id !== undefined ? (b as any).cook_profile_id :
+            (b as any).cookId !== undefined ? (b as any).cookId :
+            null;
+          
+          // Vérifier si pas de cuisinier (null, undefined, ou chaîne vide)
+          const hasNoCook = 
+            cookProfileId === null || 
+            cookProfileId === undefined || 
+            cookProfileId === "" ||
+            String(cookProfileId).trim() === "";
+          
+          // Vérifier si le statut est en attente
+          const isPendingStatus = 
+            statusLower === "proposition_pending" || 
+            statusLower === "payment_pending" || 
+            statusLower === "pending" ||
+            statusValue === "PENDING";
+          
+          const shouldInclude = hasNoCook && isPendingStatus;
+          
+          // Log détaillé pour déboguer
+          if (isPendingStatus) {
+            console.log(`[RequestsList] Booking ${b.id}: status=${statusValue}, cook_profile_id=${cookProfileId}, hasNoCook=${hasNoCook}, shouldInclude=${shouldInclude}`);
+          }
+          
+          // Pour "Mes demandes", on veut UNIQUEMENT les demandes publiques (sans cuisinier) avec statut PENDING
+          // Les bookings avec un cuisinier assigné vont dans "Mes propositions" ou "Mes réservations"
+          return shouldInclude;
+        }
+      );
+      
+      // Debug: Afficher les bookings filtrés
+      console.log(`[RequestsList] ========== RÉSULTAT FILTRAGE ==========`);
+      console.log(`[RequestsList] Bookings filtrés (pending): ${pendingBookings.length} sur ${bookings.length}`);
+      
+      if (pendingBookings.length === 0 && bookings.length > 0) {
+        console.error("[RequestsList] ❌ AUCUN BOOKING N'A PASSÉ LE FILTRE!");
+        console.log("[RequestsList] Analyse détaillée de chaque booking:");
+        bookings.forEach((b, index) => {
+          const statusValue = b.status || "";
+          const statusLower = statusValue.toLowerCase();
+          const cookProfileId = 
+            b.cook_profile_id !== undefined ? b.cook_profile_id :
+            (b as any).cook_profile_id !== undefined ? (b as any).cook_profile_id :
+            (b as any).cookId !== undefined ? (b as any).cookId :
+            null;
+          const hasNoCook = 
+            cookProfileId === null || 
+            cookProfileId === undefined || 
+            cookProfileId === "" ||
+            String(cookProfileId).trim() === "";
+          const isPendingStatus = 
+            statusLower === "proposition_pending" || 
+            statusLower === "payment_pending" || 
+            statusLower === "pending" ||
+            statusValue === "PENDING";
+          
+          console.log(`[RequestsList] Booking #${index + 1} (${b.id?.slice(0, 8)}):`, {
+            status: statusValue,
+            isPendingStatus,
+            cook_profile_id: cookProfileId,
+            hasNoCook,
+            shouldInclude: hasNoCook && isPendingStatus,
+            reason: !isPendingStatus ? "Statut ne correspond pas" : !hasNoCook ? "A un cuisinier assigné" : "DEVRAIT ÊTRE INCLUS"
+          });
+        });
+      } else if (pendingBookings.length > 0) {
+        console.log("[RequestsList] ✅ Bookings qui passent le filtre:", 
+          pendingBookings.map(b => ({ 
+            id: b.id?.slice(0, 8), 
+            status: b.status, 
+            cook_profile_id: b.cook_profile_id ?? (b as any).cook_profile_id,
+            booking_date: b.booking_date || (b as any).date
+          }))
+        );
+      }
+      
+      // Transformer les bookings en format request
+      requests = pendingBookings.map((booking) => {
+        // Compter les propositions pour ce booking
+        const proposalCount = proposals.filter((p) => p.id === booking.id || p.requestId === booking.id).length;
+        
+        // Formater l'heure si disponible
+        const timeSlot = booking.time 
+          ? booking.time.includes(":") 
+            ? booking.time 
+            : `${booking.time}h`
+          : booking.start_time && booking.end_time
+          ? `${booking.start_time} - ${booking.end_time}`
+          : "Non spécifié";
+        
+        // Extraire le titre et la description depuis special_requests
+        const specialRequests = booking.specialRequests || booking.special_requests || "";
+        const lines = specialRequests.split("\n\n");
+        const title = lines[0] || (booking as any).title || "Demande de repas";
+        const description = lines.slice(1).join("\n\n") || (booking as any).description || "Aucune description";
+        
+        return {
+          id: booking.id,
+          title,
+          description,
+          date: booking.date || booking.booking_date,
+          timeSlot,
+          guestCount: booking.numberOfGuests || booking.number_of_guests,
+          budget: booking.totalPrice || booking.total_price || booking.budget || 0,
+          address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+          status: "pending",
+          proposalCount,
+        };
+      });
+    } else if (status === "confirmed") {
+      // Bookings confirmés - mais pour "Mes demandes", on veut seulement ceux qui étaient des demandes publiques
+      // qui ont été acceptées (maintenant avec un cuisinier assigné)
+      const confirmedBookings = bookings.filter((b) => {
+        const statusLower = (b.status || "").toLowerCase();
+        const isConfirmed = statusLower === "confirmed" || b.status === "CONFIRMED" || b.status === "ACCEPTED";
+        // Pour "Mes demandes confirmées", on veut les demandes publiques qui ont été acceptées
+        // On peut les identifier par le fait qu'elles ont maintenant un cuisinier mais étaient initialement publiques
+        // Pour l'instant, on affiche tous les bookings confirmés du client
+        return isConfirmed;
+      });
+      
+      requests = confirmedBookings.map((booking) => {
+        // Récupérer les infos du cuisinier si disponibles
+        const cook = (booking as any).cook || {};
+        const cookName = cook.first_name && cook.last_name 
+          ? `${cook.first_name} ${cook.last_name}` 
+          : cook.name || (booking as any).cookName || "Cuisinier";
+        const cookRating = cook.average_rating || cook.rating || (booking as any).cookRating;
+        
+        const timeSlot = booking.time 
+          ? booking.time.includes(":") 
+            ? booking.time 
+            : `${booking.time}h`
+          : booking.start_time && booking.end_time
+          ? `${booking.start_time} - ${booking.end_time}`
+          : "Non spécifié";
+        
+        return {
+          id: booking.id,
+          title: (booking as any).title || booking.specialRequests || "Repas confirmé",
+          description: booking.specialRequests || (booking as any).description || "Aucune description",
+          date: booking.date || booking.booking_date,
+          timeSlot,
+          guestCount: booking.numberOfGuests || booking.number_of_guests,
+          budget: booking.totalPrice || booking.total_price || booking.budget || 0,
+          address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+          status: "confirmed",
+          cookName,
+          cookRating,
+        };
+      });
+    } else if (status === "completed") {
+      // Bookings terminés - pour "Mes demandes", on veut les demandes publiques qui ont été complétées
+      const completedBookings = bookings.filter((b) => {
+        const statusLower = (b.status || "").toLowerCase();
+        return statusLower === "done" || statusLower === "completed" || b.status === "COMPLETED";
+      });
+      
+      requests = completedBookings.map((booking) => {
+        const cook = (booking as any).cook || {};
+        const cookName = cook.first_name && cook.last_name 
+          ? `${cook.first_name} ${cook.last_name}` 
+          : cook.name || (booking as any).cookName || "Cuisinier";
+        const cookRating = cook.average_rating || cook.rating || (booking as any).cookRating;
+        
+        const timeSlot = booking.time 
+          ? booking.time.includes(":") 
+            ? booking.time 
+            : `${booking.time}h`
+          : booking.start_time && booking.end_time
+          ? `${booking.start_time} - ${booking.end_time}`
+          : "Non spécifié";
+        
+        return {
+          id: booking.id,
+          title: (booking as any).title || booking.specialRequests || "Repas terminé",
+          description: booking.specialRequests || (booking as any).description || "Aucune description",
+          date: booking.date || booking.booking_date,
+          timeSlot,
+          guestCount: booking.numberOfGuests || booking.number_of_guests,
+          budget: booking.totalPrice || booking.total_price || booking.budget || 0,
+          address: (booking as any).address || (booking as any).location?.address || "Adresse non spécifiée",
+          status: "completed",
+          cookName,
+          cookRating,
+        };
+      });
+    }
+
+    return requests;
+  }, [bookings, proposals, status, isLoadingBookings, isLoadingProposals]);
+
+  // Mettre à jour requests quand filteredRequests change
+  useEffect(() => {
+    setRequests(filteredRequests);
+  }, [filteredRequests]);
 
   if (isLoading || isLoadingBookings || isLoadingProposals) {
     return (
@@ -175,7 +335,7 @@ export function RequestsList({ status }: RequestsListProps) {
   return (
     <div className="grid gap-4">
       {requests.map((request, index) => (
-        <RequestCard key={request.id} request={request} index={index} />
+        <RequestCard key={request.id} request={request} index={index} reloadData={reloadData} />
       ))}
     </div>
   );
@@ -184,9 +344,10 @@ export function RequestsList({ status }: RequestsListProps) {
 interface RequestCardProps {
   request: any;
   index: number;
+  reloadData: () => Promise<void>;
 }
 
-function RequestCard({ request, index }: RequestCardProps) {
+function RequestCard({ request, index, reloadData }: RequestCardProps) {
   const [showPropositions, setShowPropositions] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -272,14 +433,16 @@ function RequestCard({ request, index }: RequestCardProps) {
         {/* Actions */}
         <div className="flex items-center justify-between pt-4 border-t border-border">
           <div className="flex items-center gap-2">
-            {request.status === "pending" && request.proposalCount > 0 && (
+            {request.status === "pending" && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowPropositions(true)}
+                asChild
               >
-                <Eye className="w-4 h-4 mr-2" />
-                Voir les propositions ({request.proposalCount})
+                <Link href={`/dashboard/client/requests/${request.id}/proposals`}>
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Voir les propositions {request.proposalCount > 0 && `(${request.proposalCount})`}
+                </Link>
               </Button>
             )}
             {request.status === "confirmed" && request.cookName && (

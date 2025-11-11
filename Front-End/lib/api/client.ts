@@ -21,14 +21,16 @@ class ApiClient {
   public client: AxiosInstance;
 
   constructor() {
-    this.client = axios.create({
-      baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api",
-      timeout: 30000, // Augmenté à 30 secondes
-      withCredentials: true,
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+          this.client = axios.create({
+            baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api",
+            timeout: 60000, // Augmenté à 60 secondes pour les uploads d'avatar
+            withCredentials: true,
+            headers: {
+              "Content-Type": "application/json",
+            },
+            maxContentLength: 5242880, // 5MB max content length
+            maxBodyLength: 5242880, // 5MB max body length
+          });
 
     // Intercepteur pour gérer les erreurs globalement
     this.client.interceptors.response.use(
@@ -56,8 +58,24 @@ class ApiClient {
 
         // Gestion des erreurs réseau
         if (error.code === 'ERR_NETWORK' || !error.response) {
-          console.error(`Erreur réseau pour ${url}. Vérifiez que le backend est démarré sur le port 5000.`);
-          // Retourner des valeurs par défaut pour éviter les crashes
+          const baseURL = error.config?.baseURL || 'http://localhost:5000/api';
+          console.error(`Erreur réseau pour ${url}. Vérifiez que le backend est démarré sur ${baseURL}`);
+          console.error('Détails de l\'erreur:', {
+            code: error.code,
+            message: error.message,
+            config: {
+              baseURL: error.config?.baseURL,
+              url: error.config?.url,
+              method: error.config?.method,
+            },
+          });
+          
+          // Ne pas retourner de valeurs par défaut pour les endpoints critiques (auth, mapbox token)
+          if (url.includes('/auth/login') || url.includes('/auth/register') || url.includes('/mapbox/token')) {
+            throw error; // Propager l'erreur pour ces endpoints critiques
+          }
+          
+          // Retourner des valeurs par défaut pour éviter les crashes (endpoints non critiques)
           if (url.includes('/notifications')) {
             return Promise.resolve({ data: { notifications: [], count: 0, unread_count: 0, limit: 10, offset: 0 } } as any);
           }
@@ -94,18 +112,57 @@ class ApiClient {
         }
         
         // Log l'erreur complète pour le debugging (seulement si ce n'est pas un timeout/network)
-        if (error.code !== 'ECONNABORTED' && error.code !== 'ERR_NETWORK') {
+        // Ne pas logger les erreurs 401 dans checkAuth car c'est normal après déconnexion
+        const is401Error = error.response?.status === 401;
+        const isCheckAuthCall = error.config?.url?.includes('/auth/me') || error.config?.url?.includes('/users/me');
+        
+        if (error.code !== 'ECONNABORTED' && error.code !== 'ERR_NETWORK' && !(is401Error && isCheckAuthCall)) {
           // Construire l'objet d'erreur de manière simple et directe
-          const errorDetails: any = {
-            message: message || 'Erreur inconnue',
-            timestamp: new Date().toISOString(),
+          // Toujours s'assurer d'avoir au moins message et timestamp
+          let errorMessage: string;
+          try {
+            errorMessage = message || error.message || String(error) || 'Erreur inconnue';
+          } catch (e) {
+            errorMessage = 'Erreur inconnue';
+          }
+          
+          let errorTimestamp: string;
+          try {
+            errorTimestamp = new Date().toISOString();
+          } catch (e) {
+            errorTimestamp = new Date().toString();
+          }
+          
+          // Créer l'objet avec les propriétés de base directement - garanties d'exister
+          const errorDetails: Record<string, any> = {
+            message: errorMessage || 'Erreur inconnue',
+            timestamp: errorTimestamp || new Date().toISOString(),
           };
+          
+          // Vérifier immédiatement que l'objet a bien les propriétés
+          const initialKeys = Object.keys(errorDetails);
+          if (initialKeys.length === 0 || !errorDetails.message || !errorDetails.timestamp) {
+            console.error('⚠️ ERREUR CRITIQUE: errorDetails n\'a pas été créé correctement!', {
+              errorMessage,
+              errorTimestamp,
+              errorDetails,
+              initialKeys,
+              errorDetailsType: typeof errorDetails,
+            });
+            // Forcer la création avec des valeurs par défaut
+            errorDetails.message = errorMessage || 'Erreur inconnue';
+            errorDetails.timestamp = errorTimestamp || new Date().toISOString();
+          }
+          
+          console.log('errorDetails créé avec', Object.keys(errorDetails).length, 'clés:', Object.keys(errorDetails));
           
           // Ajouter le type d'erreur
           try {
-            errorDetails.errorType = error.constructor?.name || typeof error || "unknown";
+            const errorType = error?.constructor?.name || typeof error || "unknown";
+            if (errorType) errorDetails.errorType = String(errorType);
           } catch (e) {
             errorDetails.errorType = "unknown";
+            errorDetails.errorTypeError = e instanceof Error ? e.message : String(e);
           }
           
           // Ajouter le code d'erreur s'il existe
@@ -152,10 +209,17 @@ class ApiClient {
                 } catch (e) {
                   errorDetails.data = String(error.response.data);
                 }
+              } else {
+                errorDetails.data = null;
               }
+            } else {
+              // Pas de réponse (erreur réseau, timeout, etc.)
+              errorDetails.status = null;
+              errorDetails.statusText = 'No response';
             }
           } catch (e) {
             errorDetails.responseError = 'error_parsing_response';
+            errorDetails.parseError = e instanceof Error ? e.message : String(e);
           }
           
           // Ajouter le message d'erreur original s'il diffère
@@ -167,33 +231,115 @@ class ApiClient {
             // Ignorer
           }
           
-          // Vérifier que errorDetails n'est pas vide avant de logger
-          if (Object.keys(errorDetails).length > 0) {
-            console.error('API Error Details:', errorDetails);
-          } else {
-            // Si errorDetails est vide, logger au moins l'erreur de base
-            console.error('API Error (no details available):', {
-              message,
-              error: String(error),
-              type: typeof error,
+          // Toujours logger errorDetails - il devrait toujours contenir au moins message et timestamp
+          // Vérifier que errorDetails existe et n'est pas vide avant de le logger
+          try {
+            const errorDetailsKeys = errorDetails ? Object.keys(errorDetails) : [];
+            
+            // Debug: vérifier pourquoi errorDetails pourrait être vide
+            if (!errorDetails || errorDetailsKeys.length === 0) {
+              console.error('⚠️ ERREUR CRITIQUE: errorDetails est vide ou undefined!', {
+                errorMessage,
+                errorTimestamp,
+                errorDetailsObject: errorDetails,
+                errorDetailsType: typeof errorDetails,
+                errorDetailsConstructor: errorDetails?.constructor?.name,
+              });
+              
+              // Recréer errorDetails de manière simple
+              const fallbackErrorDetails = {
+                message: errorMessage || 'Erreur inconnue',
+                timestamp: errorTimestamp || new Date().toISOString(),
+                error: 'errorDetails was empty or undefined',
+              };
+              console.error('API Error Details (fallback):', fallbackErrorDetails);
+            } else {
+              // S'assurer que errorDetails a au moins message et timestamp
+              if (!errorDetails.message || !errorDetails.timestamp) {
+                errorDetails.message = errorDetails.message || errorMessage || 'Erreur inconnue';
+                errorDetails.timestamp = errorDetails.timestamp || errorTimestamp || new Date().toISOString();
+              }
+              console.error('API Error Details:', errorDetails);
+            }
+          } catch (logError) {
+            // Si même le logging échoue, utiliser un fallback minimal
+            console.error('Erreur lors du logging des détails:', logError);
+            console.error('Erreur API (fallback minimal):', {
+              message: errorMessage || 'Erreur inconnue',
+              timestamp: errorTimestamp || new Date().toISOString(),
+              originalError: error instanceof Error ? error.message : String(error),
+              errorCode: error.code,
+              errorResponse: error.response ? {
+                status: error.response.status,
+                statusText: error.response.statusText,
+                data: error.response.data,
+              } : null,
             });
           }
           
           // Logger aussi l'erreur brute pour debugging
           try {
-            console.error('API Error Raw:', {
+            console.error('Erreur brute complète:', {
+              error,
               errorType: typeof error,
-              errorConstructor: error.constructor?.name || 'unknown',
-              hasCode: 'code' in error,
-              codeValue: error.code,
-              hasMessage: 'message' in error,
-              messageValue: error.message,
-              hasResponse: 'response' in error,
-              hasRequest: 'request' in error,
-              hasConfig: 'config' in error,
-              allKeys: Object.keys(error),
-              stack: error.stack,
+              errorKeys: error ? Object.keys(error) : [],
+              errorString: String(error),
+              errorJSON: JSON.stringify(error, Object.getOwnPropertyNames(error), 2),
             });
+          } catch (jsonError) {
+            console.error('Impossible de sérialiser l\'erreur:', jsonError);
+          }
+          
+          try {
+            const rawErrorInfo: Record<string, any> = {
+              errorType: typeof error,
+            };
+            
+            try {
+              rawErrorInfo.errorConstructor = error?.constructor?.name || 'unknown';
+            } catch (e) {
+              rawErrorInfo.errorConstructorError = String(e);
+            }
+            
+            if (error && typeof error === 'object') {
+              try {
+                rawErrorInfo.hasCode = 'code' in error;
+                if ('code' in error) rawErrorInfo.codeValue = (error as any).code;
+              } catch (e) {
+                // Ignorer
+              }
+              
+              try {
+                rawErrorInfo.hasMessage = 'message' in error;
+                if ('message' in error) rawErrorInfo.messageValue = (error as any).message;
+              } catch (e) {
+                // Ignorer
+              }
+              
+              try {
+                rawErrorInfo.hasResponse = 'response' in error;
+                rawErrorInfo.hasRequest = 'request' in error;
+                rawErrorInfo.hasConfig = 'config' in error;
+              } catch (e) {
+                // Ignorer
+              }
+              
+              try {
+                rawErrorInfo.allKeys = Object.keys(error);
+              } catch (e) {
+                rawErrorInfo.allKeysError = 'Cannot get keys';
+              }
+              
+              try {
+                if (error instanceof Error) {
+                  rawErrorInfo.stack = error.stack;
+                }
+              } catch (e) {
+                // Ignorer
+              }
+            }
+            
+            console.error('API Error Raw:', rawErrorInfo);
           } catch (e) {
             console.error('Error logging raw error:', e);
           }
@@ -226,8 +372,28 @@ class ApiClient {
    * Connexion
    */
   async login(data: LoginInput): Promise<AuthResponse> {
-    const response = await this.client.post<AuthResponse>("/auth/login", data);
-    return response.data;
+    // Log pour déboguer
+    console.log("[API Client] Tentative de connexion avec:", {
+      email: data.email,
+      passwordLength: data.password?.length,
+      hasPassword: !!data.password,
+    });
+    
+    try {
+      const response = await this.client.post<AuthResponse>("/auth/login", data);
+      console.log("[API Client] Connexion réussie");
+      return response.data;
+    } catch (error: any) {
+      console.error("[API Client] Erreur de connexion:", {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        url: error.config?.url,
+        baseURL: error.config?.baseURL,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -337,6 +503,45 @@ class ApiClient {
   }
 
   /**
+   * Récupérer les demandes publiques (pour les cuisiniers)
+   * @param params - Paramètres de filtrage (city, limit, offset)
+   */
+  async getPublicRequests(params?: { city?: string; limit?: number; offset?: number }): Promise<{ bookings: any[]; count: number; limit: number; offset: number }> {
+    const queryParams = new URLSearchParams();
+    if (params?.city) queryParams.append("city", params.city);
+    if (params?.limit) queryParams.append("limit", params.limit.toString());
+    if (params?.offset) queryParams.append("offset", params.offset.toString());
+
+    const queryString = queryParams.toString();
+    const url = `/bookings/public${queryString ? `?${queryString}` : ""}`;
+    const response = await this.client.get<{ bookings: any[]; count: number; limit: number; offset: number }>(url);
+    return response.data;
+  }
+
+  /**
+   * Créer une demande publique (pour les clients)
+   * @param data - Données de la demande
+   */
+  async createPublicRequest(data: {
+    booking_date: string;
+    meal_type?: string;
+    start_time?: string;
+    end_time?: string;
+    number_of_guests?: number;
+    need_groceries?: boolean;
+    need_table_setting?: boolean;
+    need_dishes?: boolean;
+    dietary_restrictions?: string[];
+    allergies?: string[];
+    special_requests?: string;
+    ingredients_available?: string;
+    address_id?: string;
+  }): Promise<{ message: string; booking: any }> {
+    const response = await this.client.post<{ message: string; booking: any }>('/bookings/public', data);
+    return response.data;
+  }
+
+  /**
    * Récupérer une réservation par son ID
    */
   async getBookingById(bookingId: string): Promise<{ booking: any }> {
@@ -349,6 +554,116 @@ class ApiClient {
    */
   async acceptBooking(bookingId: string): Promise<{ message: string; booking: any }> {
     const response = await this.client.put<{ message: string; booking: any }>(`/bookings/${bookingId}/accept`);
+    return response.data;
+  }
+
+  // ========== RESERVATIONS (Propositions des cuisiniers) ==========
+
+  /**
+   * Créer une proposition (réservation) sur une demande publique
+   * @param data - Données de la proposition
+   */
+  async createReservation(data: {
+    booking_id: string;
+    proposed_price: number;
+    proposed_hours?: number;
+    proposed_hourly_rate?: number;
+    message?: string;
+    can_do_groceries?: boolean;
+    can_set_table?: boolean;
+    can_do_dishes?: boolean;
+  }): Promise<{ message: string; reservation: any }> {
+    const response = await this.client.post<{ message: string; reservation: any }>('/reservations', data);
+    return response.data;
+  }
+
+  /**
+   * Récupérer les propositions pour une demande publique
+   * @param bookingId - ID de la demande publique
+   * @param includeExpired - Inclure les propositions expirées
+   */
+  async getReservationsByBookingId(
+    bookingId: string,
+    includeExpired?: boolean
+  ): Promise<{ reservations: any[]; stats: any; count: number }> {
+    const queryParams = new URLSearchParams();
+    if (includeExpired) queryParams.append('includeExpired', 'true');
+    const queryString = queryParams.toString();
+    const url = `/reservations/booking/${bookingId}${queryString ? `?${queryString}` : ''}`;
+    const response = await this.client.get<{ reservations: any[]; stats: any; count: number }>(url);
+    return response.data;
+  }
+
+  /**
+   * Récupérer mes propositions (cuisinier)
+   * @param status - Filtrer par statut (optionnel)
+   */
+  async getMyReservations(status?: string): Promise<{ reservations: any[]; count: number }> {
+    const queryParams = new URLSearchParams();
+    if (status) queryParams.append('status', status);
+    const queryString = queryParams.toString();
+    const url = `/reservations/my-proposals${queryString ? `?${queryString}` : ''}`;
+    const response = await this.client.get<{ reservations: any[]; count: number }>(url);
+    return response.data;
+  }
+
+  /**
+   * Récupérer une proposition par son ID
+   * @param reservationId - ID de la proposition
+   */
+  async getReservationById(reservationId: string): Promise<{ reservation: any }> {
+    const response = await this.client.get<{ reservation: any }>(`/reservations/${reservationId}`);
+    return response.data;
+  }
+
+  /**
+   * Accepter une proposition (client)
+   * @param reservationId - ID de la proposition
+   */
+  async acceptReservation(reservationId: string): Promise<{
+    message: string;
+    reservation: any;
+    depositAmount: number;
+    remainingAmount: number;
+  }> {
+    const response = await this.client.put<{
+      message: string;
+      reservation: any;
+      depositAmount: number;
+      remainingAmount: number;
+    }>(`/reservations/${reservationId}/accept`);
+    return response.data;
+  }
+
+  /**
+   * Refuser une proposition (client)
+   * @param reservationId - ID de la proposition
+   * @param rejectionReason - Raison du refus (optionnel)
+   */
+  async rejectReservation(
+    reservationId: string,
+    rejectionReason?: string
+  ): Promise<{ message: string; reservation: any }> {
+    const response = await this.client.put<{ message: string; reservation: any }>(
+      `/reservations/${reservationId}/reject`,
+      { rejection_reason: rejectionReason }
+    );
+    return response.data;
+  }
+
+  /**
+   * Annuler une proposition (cuisinier)
+   * @param reservationId - ID de la proposition
+   * @param cancellationReason - Raison de l'annulation (optionnel)
+   */
+  async cancelReservation(
+    reservationId: string,
+    cancellationReason?: string
+  ): Promise<{ message: string; reservation: any }> {
+    const response = await this.client.put<{ message: string; reservation: any }>(
+      `/reservations/${reservationId}/cancel`,
+      { cancellation_reason: cancellationReason }
+    );
     return response.data;
   }
 
@@ -509,23 +824,27 @@ class ApiClient {
     
     try {
       const response = await this.client.get<{ profiles: any[]; count: number; limit: number; offset: number }>(url);
+      console.log("Réponse brute de l'API getCookProfiles:", response.data);
       // S'assurer que la réponse a toujours la structure attendue
-      return {
+      const result = {
         profiles: response.data?.profiles || [],
         count: response.data?.count || 0,
         limit: response.data?.limit || params?.limit || 10,
         offset: response.data?.offset || params?.offset || 0,
       };
+      console.log("Résultat formaté getCookProfiles:", result);
+      return result;
     } catch (error: any) {
-      // En cas d'erreur, retourner une structure vide plutôt que de faire planter
-      // L'erreur sera déjà loggée par l'intercepteur axios
-      // On ne log pas ici pour éviter les doublons
-      return {
-        profiles: [],
-        count: 0,
-        limit: params?.limit || 10,
-        offset: params?.offset || 0,
-      };
+      // Logger l'erreur pour le débogage
+      console.error("Erreur dans getCookProfiles:", {
+        url,
+        params,
+        error: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status,
+      });
+      // Propager l'erreur pour que le composant puisse la gérer
+      throw error;
     }
   }
 
@@ -767,6 +1086,7 @@ class ApiClient {
    * @param data - Données du profil à mettre à jour
    */
   async updateMyProfile(data: {
+    // User fields
     first_name?: string;
     last_name?: string;
     phone?: string;
@@ -780,17 +1100,47 @@ class ApiClient {
     notifications_enabled?: boolean;
     email_notifications?: boolean;
     sms_notifications?: boolean;
+    // Client profile fields
     household_size?: number;
     pet_friendly?: boolean;
     smoking_allowed?: boolean;
+    // Cook profile fields
+    headline?: string;
+    bio?: string;
+    experience?: string;
+    video_intro_url?: string;
+    service_radius?: number;
+    hourly_rate?: number;
+    minimum_booking_hours?: number;
+    can_do_groceries?: boolean;
+    can_set_table?: boolean;
+    can_do_dishes?: boolean;
+    max_guests?: number;
+    employment_status?: "AUTO_ENTREPRENEUR" | "PORTAGE_SALARIAL" | "MICRO_ENTREPRISE" | "ASSOCIATION";
+    siret_number?: string;
+    insurance_number?: string;
+    insurance_expiry_date?: string;
+    id_card_url?: string;
+    insurance_cert_url?: string;
+    kbis_url?: string;
+    is_available?: boolean;
+    availability_note?: string;
   }): Promise<{
     message: string;
     user: any;
     cookProfile?: any;
     clientProfile?: any;
   }> {
-    const response = await this.client.put("/profiles/me", data);
-    return response.data;
+    try {
+      const response = await this.client.put("/profiles/me", data);
+      console.log("updateMyProfile response:", response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error("Erreur dans updateMyProfile:", error);
+      console.error("Response data:", error?.response?.data);
+      console.error("Response status:", error?.response?.status);
+      throw error;
+    }
   }
 
   // ========== AUTHENTICATION & SECURITY ==========
@@ -1133,7 +1483,185 @@ class ApiClient {
     const response = await this.client.delete<{ message: string }>(`/availabilities/blocked-dates/${blockedDateId}`);
     return response.data;
   }
+
+  // ========== MAPBOX ==========
+
+  /**
+   * Rechercher des adresses (autocomplete)
+   * @param query - Texte de recherche
+   * @param country - Code pays (optionnel, ex: "FR")
+   * @param proximity - Coordonnées pour biais de proximité [lng, lat] (optionnel)
+   */
+  async searchAddresses(
+    query: string,
+    country?: string,
+    proximity?: [number, number]
+  ): Promise<{ suggestions: any[] }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("query", query);
+    if (country) queryParams.append("country", country);
+    if (proximity) {
+      queryParams.append("proximity_lng", proximity[0].toString());
+      queryParams.append("proximity_lat", proximity[1].toString());
+    }
+
+    const response = await this.client.get<{ suggestions: any[] }>(
+      `/mapbox/search?${queryParams.toString()}`
+    );
+    return response.data;
+  }
+
+  /**
+   * Geocoder une adresse (adresse -> coordonnées)
+   * @param address - Adresse à geocoder
+   * @param country - Code pays (optionnel)
+   */
+  async geocodeAddress(
+    address: string,
+    country?: string
+  ): Promise<{
+    result: {
+      latitude: number;
+      longitude: number;
+      placeName: string;
+      address: string;
+      city?: string;
+      postalCode?: string;
+      country?: string;
+    };
+  }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("address", address);
+    if (country) queryParams.append("country", country);
+
+    const response = await this.client.get<{
+      result: {
+        latitude: number;
+        longitude: number;
+        placeName: string;
+        address: string;
+        city?: string;
+        postalCode?: string;
+        country?: string;
+      };
+    }>(`/mapbox/geocode?${queryParams.toString()}`);
+    return response.data;
+  }
+
+  /**
+   * Reverse geocoder (coordonnées -> adresse)
+   * @param latitude - Latitude
+   * @param longitude - Longitude
+   */
+  async reverseGeocode(
+    latitude: number,
+    longitude: number
+  ): Promise<{
+    result: {
+      placeName: string;
+      address: string;
+      city?: string;
+      postalCode?: string;
+      country?: string;
+    };
+  }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("latitude", latitude.toString());
+    queryParams.append("longitude", longitude.toString());
+
+    const response = await this.client.get<{
+      result: {
+        placeName: string;
+        address: string;
+        city?: string;
+        postalCode?: string;
+        country?: string;
+      };
+    }>(`/mapbox/reverse-geocode?${queryParams.toString()}`);
+    return response.data;
+  }
+
+  /**
+   * Calculer la distance et la durée entre deux points
+   * @param origin - Point d'origine [lat, lng]
+   * @param destination - Point de destination [lat, lng]
+   * @param profile - Profil de routage (driving, walking, cycling)
+   */
+  async calculateDistance(
+    origin: [number, number],
+    destination: [number, number],
+    profile: "driving" | "walking" | "cycling" = "driving"
+  ): Promise<{
+    result: {
+      distance: number; // en mètres
+      distance_km: string; // en kilomètres formaté
+      duration: number; // en secondes
+      duration_minutes: number; // en minutes
+    };
+  }> {
+    const queryParams = new URLSearchParams();
+    queryParams.append("origin_lat", origin[0].toString());
+    queryParams.append("origin_lng", origin[1].toString());
+    queryParams.append("dest_lat", destination[0].toString());
+    queryParams.append("dest_lng", destination[1].toString());
+    queryParams.append("profile", profile);
+
+    const response = await this.client.get<{
+      result: {
+        distance: number;
+        distance_km: string;
+        duration: number;
+        duration_minutes: number;
+      };
+    }>(`/mapbox/distance?${queryParams.toString()}`);
+    return response.data;
+  }
+
+  /**
+   * Récupérer le token Mapbox pour le frontend (sécurisé)
+   */
+  async getMapboxToken(): Promise<{ token: string }> {
+    try {
+      console.log("🔑 Tentative de récupération du token Mapbox...");
+      const response = await this.client.get<{ token: string }>("/mapbox/token");
+      console.log("✅ Token Mapbox récupéré avec succès");
+      return response.data;
+    } catch (error: any) {
+      console.error("❌ Erreur lors de la récupération du token Mapbox:", {
+        error,
+        message: error?.message,
+        code: error?.code,
+        response: {
+          status: error?.response?.status,
+          statusText: error?.response?.statusText,
+          data: error?.response?.data,
+        },
+        config: {
+          url: error?.config?.url,
+          baseURL: error?.config?.baseURL,
+          method: error?.config?.method,
+        },
+      });
+      
+      // Messages d'erreur spécifiques selon le type d'erreur
+      if (error.code === 'ERR_NETWORK' || !error.response) {
+        throw new Error("Impossible de se connecter au backend. Vérifiez que le serveur est démarré sur le port 5000.");
+      }
+      
+      if (error.response?.status === 401) {
+        throw new Error("Vous devez être connecté pour accéder aux cartes. Veuillez vous connecter.");
+      }
+      
+      if (error.response?.status === 500) {
+        const backendMessage = error.response?.data?.message || "Erreur serveur";
+        throw new Error(`Erreur serveur: ${backendMessage}`);
+      }
+      
+      throw error;
+    }
+  }
 }
 
 // Instance singleton
 export const apiClient = new ApiClient();
+

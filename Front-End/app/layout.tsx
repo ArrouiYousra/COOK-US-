@@ -16,6 +16,10 @@ export default function RootLayout({
   return (
     <html lang="fr" suppressHydrationWarning>
       <head>
+        <link
+          href="https://api.mapbox.com/mapbox-gl-js/v3.16.0/mapbox-gl.css"
+          rel="stylesheet"
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `

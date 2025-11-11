@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -18,6 +18,17 @@ export function HeroSection() {
 
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  // Générer les valeurs aléatoires une seule fois avec useMemo
+  const particles = useMemo(() => {
+    return [...Array(20)].map((_, i) => ({
+      id: i,
+      randomX: Math.random() * 100,
+      randomY: Math.random() * 100,
+      randomDelay: Math.random() * 2,
+      randomDuration: Math.random() * 3 + 2,
+    }));
   }, []);
 
   const containerVariants = {
@@ -55,33 +66,26 @@ export function HeroSection() {
       {/* Particules animées en arrière-plan */}
       {isMounted && (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {[...Array(20)].map((_, i) => {
-            const randomX = Math.random() * 100;
-            const randomY = Math.random() * 100;
-            const randomDelay = Math.random() * 2;
-            const randomDuration = Math.random() * 3 + 2;
-            
-            return (
-              <motion.div
-                key={i}
-                className="absolute w-2 h-2 bg-blue-400/20 rounded-full"
-                initial={{
-                  x: `${randomX}%`,
-                  y: `${randomY}%`,
-                  opacity: 0.2,
-                }}
-                animate={{
-                  y: [`${randomY}%`, `${(randomY + 20) % 100}%`],
-                  opacity: [0.2, 0.5, 0.2],
-                }}
-                transition={{
-                  duration: randomDuration,
-                  repeat: Infinity,
-                  delay: randomDelay,
-                }}
-              />
-            );
-          })}
+          {particles.map((particle) => (
+            <motion.div
+              key={particle.id}
+              className="absolute w-2 h-2 bg-blue-400/20 rounded-full"
+              initial={{
+                x: `${particle.randomX}%`,
+                y: `${particle.randomY}%`,
+                opacity: 0.2,
+              }}
+              animate={{
+                y: [`${particle.randomY}%`, `${(particle.randomY + 20) % 100}%`],
+                opacity: [0.2, 0.5, 0.2],
+              }}
+              transition={{
+                duration: particle.randomDuration,
+                repeat: Infinity,
+                delay: particle.randomDelay,
+              }}
+            />
+          ))}
         </div>
       )}
 

@@ -30,7 +30,8 @@ export function BookingsList({ statusFilter }: BookingsListProps) {
     const loadBookings = async () => {
       setIsLoading(true);
       try {
-        await fetchBookings({ limit: 1000 });
+        // IMPORTANT: Réinitialiser le filtre de statut pour obtenir TOUS les bookings
+        await fetchBookings({ limit: 1000, status: undefined });
       } catch (error) {
         console.error("Erreur lors du chargement des réservations:", error);
       } finally {
@@ -41,10 +42,19 @@ export function BookingsList({ statusFilter }: BookingsListProps) {
     loadBookings();
   }, [fetchBookings]);
 
+  // Filtrer les bookings pour exclure les demandes publiques (cook_profile_id = null)
+  // Cette page est pour les "Réservations & Paiements", donc uniquement les réservations confirmées
+  const confirmedBookings = useMemo(() => {
+    return bookings.filter((b) => {
+      const cookProfileId = b.cook_profile_id ?? (b as any).cook_profile_id ?? (b as any).cookId;
+      return cookProfileId !== null && cookProfileId !== undefined && cookProfileId !== "";
+    });
+  }, [bookings]);
+
   // Enrichir les bookings avec les données des cuisiniers
   useEffect(() => {
     const enrichBookings = async () => {
-      if (bookings.length === 0) {
+      if (confirmedBookings.length === 0) {
         setEnrichedBookings([]);
         return;
       }
@@ -52,8 +62,8 @@ export function BookingsList({ statusFilter }: BookingsListProps) {
       try {
         // Enrichir avec les données des cuisiniers
         const cookIds = new Set<string>();
-        bookings.forEach((booking: any) => {
-          const cookId = booking.cookId || booking.cook?.id;
+        confirmedBookings.forEach((booking: any) => {
+          const cookId = booking.cook_profile_id ?? booking.cookId ?? booking.cook?.id;
           if (cookId) cookIds.add(cookId);
         });
 
@@ -72,8 +82,8 @@ export function BookingsList({ statusFilter }: BookingsListProps) {
         }
 
         // Enrichir les bookings
-        const enriched = bookings.map((booking: any) => {
-          const cookId = booking.cookId || booking.cook?.id;
+        const enriched = confirmedBookings.map((booking: any) => {
+          const cookId = booking.cook_profile_id ?? booking.cookId ?? booking.cook?.id;
           const cookData = cookId ? cooksMap.get(cookId) : null;
 
           // Mapper le statut
@@ -117,7 +127,7 @@ export function BookingsList({ statusFilter }: BookingsListProps) {
     };
 
     enrichBookings();
-  }, [bookings]);
+  }, [confirmedBookings]);
 
   // Filtrer les réservations selon le statut
   const filteredBookings = useMemo(() => {

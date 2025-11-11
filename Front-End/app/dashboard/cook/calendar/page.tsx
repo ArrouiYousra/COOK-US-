@@ -52,6 +52,15 @@ import { useAuthStore } from "@/stores/authStore";
 type DayOfWeek = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
 type MealType = "BREAKFAST" | "LUNCH" | "DINNER" | "BRUNCH";
 
+interface Availability {
+  id: string;
+  day_of_week: DayOfWeek;
+  meal_type: MealType;
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+}
+
 const DAY_OF_WEEK_MAP: Record<number, DayOfWeek> = {
   1: "MONDAY",
   2: "TUESDAY",
@@ -90,7 +99,7 @@ export default function CookCalendarPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [availabilities, setAvailabilities] = useState<any[]>([]);
+  const [availabilities, setAvailabilities] = useState<Availability[]>([]);
   const [blockedDates, setBlockedDates] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -494,7 +503,7 @@ export default function CookCalendarPage() {
                   <CalendarIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   <div>
                     <p className="font-semibold text-foreground">
-                      {DAY_OF_WEEK_LABELS[avail.day_of_week]} - {MEAL_TYPE_LABELS[avail.meal_type]}
+                      {DAY_OF_WEEK_LABELS[avail.day_of_week as DayOfWeek]} - {MEAL_TYPE_LABELS[avail.meal_type as MealType]}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {avail.start_time.slice(0, 5)} - {avail.end_time.slice(0, 5)}

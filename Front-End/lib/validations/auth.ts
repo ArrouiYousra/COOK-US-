@@ -17,12 +17,11 @@ type FixZodType<T, Fixes extends Partial<Record<keyof T, any>>> = Omit<T, keyof 
  * Helper pour créer un resolver Zod avec le type correct
  * Résout les problèmes d'inférence avec z.coerce, z.preprocess, etc.
  * @param schema - Le schéma Zod
- * @param formType - Le type TypeScript attendu pour le formulaire
  */
 export function createTypedResolver<TFormData>(
   schema: z.ZodTypeAny
-): ReturnType<typeof zodResolver<z.ZodType<TFormData>>> {
-  return zodResolver(schema) as unknown as ReturnType<typeof zodResolver<z.ZodType<TFormData>>>;
+) {
+  return zodResolver(schema as any);
 }
 
 // Validation du mot de passe : min 8 caractères, majuscule, chiffre
@@ -143,8 +142,7 @@ export const registerCookSchema = z
       .max(160, "L'accroche ne peut pas dépasser 160 caractères"),
     hourlyRate: z.coerce
       .number({
-        invalid_type_error: "Veuillez saisir un tarif horaire valide",
-        required_error: "Le tarif horaire est requis",
+        message: "Veuillez saisir un tarif horaire valide",
       })
       .min(10, "Le tarif horaire doit être d'au moins 10€")
       .max(500, "Le tarif horaire ne peut pas dépasser 500€"),

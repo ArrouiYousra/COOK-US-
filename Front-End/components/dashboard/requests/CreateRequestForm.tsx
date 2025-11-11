@@ -12,6 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { createRequestSchema, type CreateRequestFormData } from "@/lib/validations/requests";
+import { apiClient } from "@/lib/api/client";
+import { useBookingStore } from "@/stores/bookingStore";
+import { MapboxAutocomplete } from "@/components/mapbox/MapboxAutocomplete";
+import { MapboxMap } from "@/components/mapbox/MapboxMap";
 
 interface CreateRequestFormProps {
   onSuccess?: () => void;
@@ -32,7 +36,10 @@ interface CreateRequestFormProps {
  */
 export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormProps) {
   const router = useRouter();
+  const { fetchBookings } = useBookingStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedAddress, setSelectedAddress] = useState<string>(initialData?.address || "");
+  const [addressCoordinates, setAddressCoordinates] = useState<{ lat: number; lng: number } | undefined>();
 
   const {
     register,
@@ -59,19 +66,90 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
   const onSubmit = async (data: CreateRequestFormData) => {
     try {
       setIsSubmitting(true);
-      // TODO: Appel API pour créer la demande
-      // await apiClient.createRequest(data);
       
-      // Simulation
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Parser le créneau horaire pour extraire start_time et end_time
+      let start_time: string | undefined;
+      let end_time: string | undefined;
+      let meal_type: string | undefined;
+      
+      if (data.timeSlot) {
+        if (data.timeSlot.includes("Midi")) {
+          start_time = "12:00:00";
+          end_time = "14:00:00";
+          meal_type = "LUNCH";
+        } else if (data.timeSlot.includes("Dîner")) {
+          start_time = "19:00:00";
+          end_time = "21:00:00";
+          meal_type = "DINNER";
+        }
+      }
+      
+      // Créer la demande publique via l'API
+      const response = await apiClient.createPublicRequest({
+        booking_date: data.date,
+        meal_type,
+        start_time,
+        end_time,
+        number_of_guests: data.guestCount,
+        need_groceries: false, // TODO: Ajouter ce champ au formulaire si nécessaire
+        need_table_setting: data.setTable || false,
+        need_dishes: data.includeDishes || false,
+        special_requests: `${data.title}\n\n${data.description}`,
+        // TODO: Gérer address_id si vous avez une table addresses
+        // address_id: addressId,
+      });
+      
+      console.log("✅ Demande créée avec succès:", response);
+      console.log("📋 Détails de la demande créée:", {
+        id: response.booking?.id,
+        status: response.booking?.status,
+        cook_profile_id: response.booking?.cook_profile_id,
+        client_profile_id: response.booking?.client_profile_id,
+        booking_date: response.booking?.booking_date,
+      });
+      
+      // Recharger les bookings pour afficher la nouvelle demande
+      // Attendre un peu pour que la base de données soit à jour
+      console.log("⏳ Attente de 1.5s pour que la base de données soit à jour...");
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Recharger les bookings - forcer le rechargement sans cache
+      // IMPORTANT: Réinitialiser le filtre de statut pour obtenir TOUS les bookings
+      console.log("🔄 Rechargement des bookings...");
+      await fetchBookings({ limit: 1000, status: undefined });
+      
+      // Attendre un peu et recharger à nouveau
+      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log("🔄 Second rechargement des bookings...");
+      await fetchBookings({ limit: 1000, status: undefined });
+      
+      // Vérifier que la demande est bien dans le store après rechargement
+      // Utiliser le store directement pour vérifier
+      const storeState = useBookingStore.getState();
+      const newBooking = storeState.bookings.find(b => b.id === response.booking?.id);
+      console.log("🔍 Vérification dans le store après rechargement:", {
+        totalBookings: storeState.bookings.length,
+        newBookingFound: !!newBooking,
+        newBookingDetails: newBooking ? {
+          id: newBooking.id,
+          status: newBooking.status,
+          cook_profile_id: newBooking.cook_profile_id ?? (newBooking as any).cook_profile_id,
+          booking_date: newBooking.booking_date || (newBooking as any).date,
+        } : null,
+        allBookingsIds: storeState.bookings.map(b => b.id?.slice(0, 8))
+      });
       
       if (onSuccess) {
         onSuccess();
       } else {
-        router.push("/dashboard/client/requests");
+        // Rediriger avec un paramètre pour forcer le rechargement
+        router.push("/dashboard/client/requests?refresh=true");
+        // Forcer un refresh de la page Next.js
+        router.refresh();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erreur lors de la création de la demande:", error);
+      alert(error.response?.data?.message || "Erreur lors de la création de la demande. Veuillez réessayer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -128,6 +206,7 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
             <Input
               id="date"
               type="date"
+              min={new Date().toISOString().split('T')[0]}
               {...register("date")}
               className={errors.date ? "border-destructive pl-10" : "pl-10"}
             />
@@ -209,22 +288,50 @@ export function CreateRequestForm({ onSuccess, initialData }: CreateRequestFormP
         </div>
       </div>
 
-      {/* Adresse */}
+      {/* Adresse avec autocomplete Mapbox */}
       <div>
         <Label htmlFor="address" className="text-foreground">
           Adresse complète *
         </Label>
-        <div className="relative">
-          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-          <Input
-            id="address"
-            placeholder="123 Rue de la Paix, 75001 Paris"
-            {...register("address")}
-            className={errors.address ? "border-destructive pl-10" : "pl-10"}
-          />
-        </div>
+        <MapboxAutocomplete
+          value={selectedAddress}
+          onChange={(address, coordinates) => {
+            setSelectedAddress(address);
+            setAddressCoordinates(coordinates);
+            setValue("address", address, { shouldValidate: true });
+          }}
+          placeholder="Rechercher une adresse..."
+          country="FR"
+          onSelect={(suggestion) => {
+            setAddressCoordinates({
+              lat: suggestion.latitude,
+              lng: suggestion.longitude,
+            });
+          }}
+        />
         {errors.address && (
           <p className="mt-1 text-sm text-destructive">{errors.address.message}</p>
+        )}
+        
+        {/* Aperçu de la carte si une adresse est sélectionnée */}
+        {addressCoordinates && (
+          <div className="mt-4 rounded-lg overflow-hidden border border-border">
+            <MapboxMap
+              center={[addressCoordinates.lat, addressCoordinates.lng]}
+              zoom={15}
+              markers={[
+                {
+                  id: "selected-address",
+                  lat: addressCoordinates.lat,
+                  lng: addressCoordinates.lng,
+                  title: selectedAddress,
+                  color: "#3b82f6",
+                },
+              ]}
+              height="250px"
+              interactive={true}
+            />
+          </div>
         )}
       </div>
 

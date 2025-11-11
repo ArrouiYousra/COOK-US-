@@ -20,12 +20,15 @@ export function useGeolocation(): GeolocationState {
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      setState({
-        latitude: null,
-        longitude: null,
-        error: "La géolocalisation n'est pas supportée par votre navigateur",
-        isLoading: false,
-      });
+      // Utiliser un callback pour éviter setState synchrone
+      setTimeout(() => {
+        setState({
+          latitude: null,
+          longitude: null,
+          error: "La géolocalisation n'est pas supportée par votre navigateur",
+          isLoading: false,
+        });
+      }, 0);
       return;
     }
 

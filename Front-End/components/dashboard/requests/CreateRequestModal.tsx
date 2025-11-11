@@ -53,7 +53,15 @@ export function CreateRequestModal({ isOpen, onClose }: CreateRequestModalProps)
 
               {/* Formulaire */}
               <div className="p-6">
-                <CreateRequestForm onSuccess={onClose} />
+                <CreateRequestForm 
+                  onSuccess={async () => {
+                    // Attendre un peu pour que la base de données soit à jour
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    onClose();
+                    // Forcer un rechargement de la page pour afficher la nouvelle demande
+                    window.location.reload();
+                  }} 
+                />
               </div>
             </div>
           </motion.div>

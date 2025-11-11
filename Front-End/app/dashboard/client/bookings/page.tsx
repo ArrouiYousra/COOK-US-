@@ -28,21 +28,30 @@ export default function BookingsPage() {
   });
 
   // Charger les bookings au montage
+  // IMPORTANT: Cette page affiche uniquement les réservations confirmées (avec cuisinier assigné)
+  // Exclure les demandes publiques (cook_profile_id = null)
   useEffect(() => {
-    fetchBookings({ limit: 1000 });
+    fetchBookings({ limit: 1000, status: undefined });
   }, [fetchBookings]);
 
-  // Calculer les compteurs dynamiquement
+  // Filtrer les bookings pour exclure les demandes publiques (cookId = null)
+  // Cette page est pour les "Réservations & Paiements", donc uniquement les réservations confirmées
+  const confirmedBookings = bookings.filter((b) => {
+    const cookProfileId = b.cookId || (b as any).cook_profile_id;
+    return cookProfileId !== null && cookProfileId !== undefined && cookProfileId !== "";
+  });
+
+  // Calculer les compteurs dynamiquement (uniquement sur les réservations confirmées)
   useEffect(() => {
-    const allCount = bookings.length;
-    const pendingCount = bookings.filter(
+    const allCount = confirmedBookings.length;
+    const pendingCount = confirmedBookings.filter(
       (b) => b.status === "proposition_pending" || b.status === "payment_pending" || b.status === "pending"
     ).length;
-    const confirmedCount = bookings.filter(
+    const confirmedCount = confirmedBookings.filter(
       (b) => b.status === "confirmed" || b.status === "proposition_accepted"
     ).length;
-    const completedCount = bookings.filter((b) => b.status === "completed" || b.status === "done").length;
-    const cancelledCount = bookings.filter((b) => b.status === "cancelled").length;
+    const completedCount = confirmedBookings.filter((b) => b.status === "done").length;
+    const cancelledCount = confirmedBookings.filter((b) => b.status === "cancelled").length;
 
     setCounts({
       all: allCount,
@@ -51,7 +60,7 @@ export default function BookingsPage() {
       completed: completedCount,
       cancelled: cancelledCount,
     });
-  }, [bookings]);
+  }, [confirmedBookings]);
 
   const statusFilters = [
     { id: "all" as BookingStatusFilter, label: "Toutes", count: counts.all },

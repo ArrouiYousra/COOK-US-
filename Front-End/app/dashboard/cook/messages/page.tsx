@@ -16,7 +16,10 @@ function MessagesContent() {
   // Synchroniser avec le paramètre d'URL
   useEffect(() => {
     if (conversationParam) {
-      setSelectedConversationId(conversationParam);
+      // Utiliser un callback pour éviter setState synchrone
+      setTimeout(() => {
+        setSelectedConversationId(conversationParam);
+      }, 0);
     }
   }, [conversationParam]);
 

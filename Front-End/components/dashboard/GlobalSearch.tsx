@@ -52,8 +52,11 @@ export function GlobalSearch() {
   // Recherche en temps réel
   useEffect(() => {
     if (!searchQuery.trim()) {
-      setResults([]);
-      setIsOpen(false);
+      // Utiliser un callback pour éviter setState synchrone
+      setTimeout(() => {
+        setResults([]);
+        setIsOpen(false);
+      }, 0);
       return;
     }
 

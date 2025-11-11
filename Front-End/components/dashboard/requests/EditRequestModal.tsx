@@ -115,7 +115,7 @@ export function EditRequestModal({
                 </h2>
                 <p className="text-muted-foreground mb-6">
                   Cette demande ne peut pas être modifiée car elle a déjà reçu{" "}
-                  {request.proposalCount} proposition{request.proposalCount > 1 ? "s" : ""}.
+                  {request.proposalCount ?? 0} proposition{(request.proposalCount ?? 0) > 1 ? "s" : ""}.
                   Vous pouvez la supprimer et en créer une nouvelle.
                 </p>
                 <Button onClick={onClose} className="w-full">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -18,7 +18,7 @@ import { loginSchema, type LoginFormData } from "@/lib/validations/auth";
  * Page de connexion
  * Formulaire avec validation et gestion d'erreurs
  */
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, isLoading, error, clearError } = useAuthStore();
@@ -309,6 +309,20 @@ export default function LoginPage() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }
 

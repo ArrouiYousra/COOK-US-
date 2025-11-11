@@ -111,7 +111,7 @@ export default function StatsPage() {
     }
     
     return bookings.filter((booking) => {
-      const bookingDate = new Date(booking.booking_date || booking.date || booking.created_at);
+      const bookingDate = new Date(booking.date || booking.createdAt);
       return bookingDate >= startDate;
     });
   }, [bookings, timeRange]);
@@ -120,7 +120,7 @@ export default function StatsPage() {
   const stats = useMemo(() => {
     // Total dépensé
     const totalSpent = filteredBookings.reduce((sum, b) => {
-      return sum + (b.total_price || b.totalPrice || 0);
+      return sum + (b.totalPrice || 0);
     }, 0);
 
     // Total des réservations
@@ -147,12 +147,12 @@ export default function StatsPage() {
       const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
       
       const monthBookings = filteredBookings.filter((b) => {
-        const bookingDate = new Date(b.booking_date || b.date || b.created_at);
+        const bookingDate = new Date(b.date || b.createdAt);
         return bookingDate >= monthStart && bookingDate <= monthEnd;
       });
       
       const monthSpent = monthBookings.reduce((sum, b) => {
-        return sum + (b.total_price || b.totalPrice || 0);
+        return sum + (b.totalPrice || 0);
       }, 0);
       
       monthlySpending.push(monthSpent);

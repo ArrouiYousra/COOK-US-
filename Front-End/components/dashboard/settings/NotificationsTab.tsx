@@ -98,7 +98,19 @@ export function NotificationsTab() {
       try {
         // Charger les préférences détaillées depuis l'API
         const detailedPrefs = await apiClient.getNotificationPreferences();
-        const prefs = detailedPrefs.preferences;
+        const prefs = detailedPrefs?.preferences || {
+          booking_request: { email: true, sms: false, push: true },
+          booking_accepted: { email: true, sms: false, push: true },
+          booking_confirmed: { email: true, sms: true, push: true },
+          booking_cancelled: { email: true, sms: false, push: true },
+          booking_reminder: { email: true, sms: true, push: true },
+          review_received: { email: true, sms: false, push: true },
+          message_received: { email: false, sms: false, push: true },
+          payment_received: { email: true, sms: false, push: true },
+          dispute_opened: { email: true, sms: false, push: true },
+          profile_approved: { email: true, sms: false, push: true },
+          profile_rejected: { email: true, sms: false, push: true },
+        };
 
         // Mapper les préférences détaillées vers l'interface locale
         setPreferences((prev) => ({
@@ -128,6 +140,42 @@ export function NotificationsTab() {
           router.push("/auth/login");
           return;
         }
+        
+        // En cas d'erreur, utiliser les valeurs par défaut pour ne pas casser l'UI
+        console.warn("Utilisation des préférences par défaut en cas d'erreur");
+        const defaultPrefs = {
+          booking_request: { email: true, sms: false, push: true },
+          booking_accepted: { email: true, sms: false, push: true },
+          booking_confirmed: { email: true, sms: true, push: true },
+          booking_cancelled: { email: true, sms: false, push: true },
+          booking_reminder: { email: true, sms: true, push: true },
+          review_received: { email: true, sms: false, push: true },
+          message_received: { email: false, sms: false, push: true },
+          payment_received: { email: true, sms: false, push: true },
+          dispute_opened: { email: true, sms: false, push: true },
+          profile_approved: { email: true, sms: false, push: true },
+          profile_rejected: { email: true, sms: false, push: true },
+        };
+        
+        setPreferences((prev) => ({
+          ...prev,
+          email: {
+            bookings: defaultPrefs.booking_request?.email || defaultPrefs.booking_confirmed?.email || false,
+            messages: defaultPrefs.message_received?.email || false,
+            reviews: defaultPrefs.review_received?.email || false,
+            promotions: false,
+          },
+          app: {
+            bookings: defaultPrefs.booking_request?.push || defaultPrefs.booking_confirmed?.push || false,
+            messages: defaultPrefs.message_received?.push || false,
+            reviews: defaultPrefs.review_received?.push || false,
+            promotions: false,
+          },
+          sms: {
+            bookings: defaultPrefs.booking_confirmed?.sms || false,
+            urgent: defaultPrefs.booking_reminder?.sms || false,
+          },
+        }));
       } finally {
         setIsLoading(false);
       }
