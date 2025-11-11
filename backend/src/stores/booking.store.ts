@@ -192,13 +192,13 @@ export class BookingStore {
       .not("cook_profile_id", "is", null); // Exclure les demandes publiques
 
     const stats = {
-      pending: allBookings?.filter((b) => b.status === "PENDING").length || 0,
+      pending: allBookings?.filter((b: { status: string }) => b.status === "PENDING").length || 0,
       accepted:
         allBookings?.filter(
-          (b) => b.status === "ACCEPTED" || b.status === "CONFIRMED",
+          (b: { status: string }) => b.status === "ACCEPTED" || b.status === "CONFIRMED",
         ).length || 0,
       rejected:
-        allBookings?.filter((b) => b.status === "CANCELLED").length || 0,
+        allBookings?.filter((b: { status: string }) => b.status === "CANCELLED").length || 0,
     };
 
     // Apply pagination

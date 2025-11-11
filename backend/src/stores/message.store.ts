@@ -24,7 +24,7 @@ export class MessageStore {
     if (participants && participants.length > 0) {
       // Group by conversation_id to find conversations with both users
       const conversationIds = [
-        ...new Set(participants.map((p) => p.conversation_id)),
+        ...new Set(participants.map((p: { conversation_id: string }) => p.conversation_id)),
       ];
 
       for (const convId of conversationIds) {
@@ -33,7 +33,7 @@ export class MessageStore {
           .select("user_id")
           .eq("conversation_id", convId);
 
-        const participantIds = (convParticipants || []).map((p) => p.user_id);
+        const participantIds = (convParticipants || []).map((p: { user_id: string }) => p.user_id);
         if (
           participantIds.includes(userId1) &&
           participantIds.includes(userId2)
@@ -142,7 +142,7 @@ export class MessageStore {
       return { conversations: [], count: 0 };
     }
 
-    const conversationIds = participants.map((p) => p.conversation_id);
+    const conversationIds = participants.map((p: { conversation_id: string }) => p.conversation_id);
 
     let query = supabaseAdmin
       .from("conversations")
